@@ -1,4 +1,8 @@
 <Project>
+    <Import
+        Condition="'$(IncludeUserSecrets)' == 'true'"
+        Project="build\UserSecrets.props" />
+
     <ItemGroup>
         <None Include="$(ProjectDir)data\**\*.*" CopyToOutputDirectory="Always" />
     </ItemGroup>
@@ -7,5 +11,17 @@
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>$(AssemblyName).Tests</_Parameter1>
         </AssemblyAttribute>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <ExtensionsVersion>9.0.1</ExtensionsVersion>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(IncludeUserSecrets)' == 'true'">
+        <DotNetCliToolReference Include="Microsoft.Extensions.SecretManager.Tools" Version="2.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="$(ExtensionsVersion)" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="$(ExtensionsVersion)" />
+        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="$(ExtensionsVersion)" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="$(ExtensionsVersion)" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(ExtensionsVersion)" />
     </ItemGroup>
 </Project>
