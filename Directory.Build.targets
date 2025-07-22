@@ -14,7 +14,7 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <ExtensionsVersion>9.0.1</ExtensionsVersion>
+        <ExtensionsVersion>9.0.7</ExtensionsVersion>
     </PropertyGroup>
     <ItemGroup Condition="'$(IncludeUserSecrets)' == 'true'">
         <DotNetCliToolReference Include="Microsoft.Extensions.SecretManager.Tools" Version="2.0.0" />

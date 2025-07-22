@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Models;
+using TheirStack;
 
 internal static class AppConfiguration
 {
@@ -50,6 +51,29 @@ internal static class AppConfiguration
                 opts.WriteIndented = true;
             });
 
+        services
+            .AddOptions<TheirStackOptions>()
+            .Bind(config.GetRequiredSection(TheirStackOptions.SectionName))
+            .ValidateDataAnnotations();
+        services.AddHttpClient(nameof(TheirStackClient), (sp, client) =>
+        {
+            var opts = sp.GetRequiredService<IOptions<TheirStackOptions>>().Value;
+            var headerValue = $"{opts.SecretKey}";
+            client.DefaultRequestHeaders.Authorization = new(scheme: "Bearer", headerValue);
+            _ = client;
+        })
+        .ConfigureAdditionalHttpMessageHandlers((list, sp) =>
+        {
+            list.Add(new LoggingHandler());
+            _ = sp;
+        });
+        services.AddSingleton<TheirStackClient>(s =>
+        {
+            var httpClient = s.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(TheirStackClient));
+            var ret = new TheirStackClient(httpClient);
+            return ret;
+        });
+
         var ret = services.BuildServiceProvider();
         return ValueTask.FromResult(ret);
     }
@@ -67,5 +91,44 @@ public sealed class JsonWriterOptionsClass
     public ref JsonWriterOptions Options
     {
         get => ref _options;
+    }
+}
+
+file class LoggingHandler : DelegatingHandler
+{
+    public LoggingHandler() : base()
+    {
+    }
+
+    public LoggingHandler(HttpMessageHandler innerHandler)
+        : base(innerHandler)
+    {
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine("Request:");
+        Console.WriteLine(request.ToString());
+        if (request.Content != null)
+        {
+            var r = await request.Content.ReadAsStringAsync(cancellationToken);
+            Console.WriteLine(r);
+        }
+        Console.WriteLine();
+
+        var response = await base.SendAsync(request, cancellationToken);
+
+        Console.WriteLine("Response:");
+        Console.WriteLine(response.ToString());
+        if (response.Content != null)
+        {
+            var r = await response.Content.ReadAsStringAsync(cancellationToken);
+            Console.WriteLine(r);
+        }
+        Console.WriteLine();
+
+        return response;
     }
 }
