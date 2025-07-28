@@ -9,8 +9,9 @@ using TheirStack;
 
 internal static class AppConfiguration
 {
-    public static ValueTask<ServiceProvider> CreateApp()
+    public static ValueTask<ServiceProvider> CreateApp(CancellationToken cancellationToken)
     {
+        _ = cancellationToken;
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddUserSecrets(typeof(Program).Assembly);
 
@@ -55,24 +56,26 @@ internal static class AppConfiguration
             .AddOptions<TheirStackOptions>()
             .Bind(config.GetRequiredSection(TheirStackOptions.SectionName))
             .ValidateDataAnnotations();
-        services.AddHttpClient(nameof(TheirStackClient), (sp, client) =>
-        {
-            var opts = sp.GetRequiredService<IOptions<TheirStackOptions>>().Value;
-            var headerValue = $"{opts.SecretKey}";
-            client.DefaultRequestHeaders.Authorization = new(scheme: "Bearer", headerValue);
-            _ = client;
-        })
-        .ConfigureAdditionalHttpMessageHandlers((list, sp) =>
-        {
-            list.Add(new LoggingHandler());
-            _ = sp;
-        });
-        services.AddSingleton<TheirStackClient>(s =>
-        {
-            var httpClient = s.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(TheirStackClient));
-            var ret = new TheirStackClient(httpClient);
-            return ret;
-        });
+        services
+            .AddHttpClient(nameof(TheirStackClient), (sp, client) =>
+            {
+                var opts = sp.GetRequiredService<IOptions<TheirStackOptions>>().Value;
+                var headerValue = $"{opts.SecretKey}";
+                client.DefaultRequestHeaders.Authorization = new(scheme: "Bearer", headerValue);
+                _ = client;
+            })
+            .ConfigureAdditionalHttpMessageHandlers((list, sp) =>
+            {
+                list.Add(new LoggingHandler());
+                _ = sp;
+            });
+        services
+            .AddSingleton<TheirStackClient>(s =>
+            {
+                var httpClient = s.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(TheirStackClient));
+                var ret = new TheirStackClient(httpClient);
+                return ret;
+            });
 
         var ret = services.BuildServiceProvider();
         return ValueTask.FromResult(ret);
