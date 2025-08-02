@@ -1,23 +1,33 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using CliWrap;
 using CodegenCS;
 using CodegenCS.IO;
+using ReaderApp.Helper;
 
 namespace MainCli;
 
+public record struct GenerateParams()
+{
+    public required string ConfigFilePath;
+    public required CvDataModel Model;
+    public required CancellationToken CancellationToken;
+    public bool OpenInOs = false;
+}
+
 public static class CvTemplate
 {
-    public static ValueTask Generate(
-        string configFilePath,
-        CvDataModel model,
-        CancellationToken cancellationToken)
+    public static async Task Generate(GenerateParams p)
     {
-        var tempDir = Directory.CreateTempSubdirectory(prefix: "cv_gen_");
-        var codegenContext = new CodegenContext();
-        var writer = codegenContext["main.tex"];
+        var guid = Guid.NewGuid();
+        var tempDir = new DirectoryInfo($"cv_gen_{guid}");
 
-        writer.Write($$"""
-        \input{{{ configFilePath }}}
+        var codegenContext = new CodegenContext();
+        const string latexFileName = "main.tex";
+        var writer = codegenContext[latexFileName];
+
+        writer.Write($$$"""
+        \input{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}
 
         \begin{document}
 
@@ -26,36 +36,69 @@ public static class CvTemplate
         % Title Headline
         \vspace{-8pt}
         \begin{center}
-            \HUGE \textsc{{{ model.Name.Last }} {{ model.Name.First }}} \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
-            \small {{model.Profession.Value}}
+            \HUGE \textsc{{{{ p.Model.Name.Last }}} {{{ p.Model.Name.First }}}} \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
+            \small {{{ p.Model.Profession.Value }}}
         \end{center}
 
         \vspace{6pt}
 
-        {{ MetaLists(model) }}
+        {{{ MetaLists(p.Model) }}}
 
-        {{ Symbols.IF(!model.Summary.IsNull) }}
+        {{{ Symbols.IF(!p.Model.Summary.IsNull) }}}
         % Summary
         \vspace{-6pt}
         \cvsection{Summary}
 
-        {{ model.Summary }}\\
+        {{{ p.Model.Summary }}}\\
 
-        {{ Symbols.ENDIF }}
+        {{{ Symbols.ENDIF }}}
 
         % Main Content
 
-        {{ Events(model.WorkExperiences, sectionName: "Experience") }}
+        {{{ Events(p.Model.WorkExperiences, sectionName: "Experience") }}}
 
-        {{ Events(model.Educations, "Education") }}
+        {{{ Events(p.Model.Educations, "Education") }}}
 
-        {{ Footer(model) }}
+        {{{ Footer(p.Model) }}}
 
         \end{document}
         """);
 
-        codegenContext.SaveToFolder(tempDir.Name);
-        return ValueTask.CompletedTask;
+        codegenContext.SaveToFolder(tempDir.FullName);
+
+        // run latex
+        var latexmk = Cli.Wrap("latexmk");
+        latexmk = latexmk.WithArguments(["-xelatex", latexFileName]);
+
+        {
+            var logFile = Path.Join(tempDir.FullName, "log-stdout.txt");
+            latexmk = latexmk.WithStandardOutputPipe(PipeTarget.ToFile(logFile));
+        }
+        {
+            var logFile = Path.Join(tempDir.FullName, "log-stderr.txt");
+            latexmk = latexmk.WithStandardErrorPipe(PipeTarget.ToFile(logFile));
+        }
+
+        latexmk = latexmk.WithWorkingDirectory(tempDir.FullName);
+        var result = await latexmk.ExecuteAsync(p.CancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            if (p.OpenInOs)
+            {
+                var outputPath = Path.Join(tempDir.FullName, latexFileName);
+                ExplorerHelper.OpenFolderAndSelectFile(outputPath);
+            }
+
+            throw new InvalidOperationException("Latex execution failure");
+        }
+
+        if (p.OpenInOs)
+        {
+            var pdfOutputName = ReplaceExtension(latexFileName, ".pdf");
+            var pdfOutputPath = Path.Join(tempDir.FullName, pdfOutputName);
+            ExplorerHelper.OpenFolderAndSelectFile(pdfOutputPath);
+        }
     }
 
     private static readonly RenderEnumerableOptions ListItemSeparator =
@@ -96,6 +139,20 @@ public static class CvTemplate
 
             \normalsize
         """;
+    }
+
+    private static string ReplaceExtension(
+        string filePath,
+        string newExtension)
+    {
+        int extensionStart = filePath.LastIndexOf('.');
+        if (extensionStart <= 0)
+        {
+            return $"{filePath}{newExtension}";
+        }
+
+        var s = filePath.AsSpan()[.. extensionStart];
+        return $"{s}{newExtension}";
     }
 
     private static FormattableString Events(ImmutableArray<Event> events, string sectionName)

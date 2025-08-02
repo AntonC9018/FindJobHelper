@@ -10,23 +10,29 @@ var cancellationToken = CancellationToken.None;
 await using var serviceProvider = await AppConfiguration.CreateApp(cancellationToken);
 _ = serviceProvider;
 
-const string templatePath = "data/cv_template.tex";
-await CvTemplate.Generate(templatePath, new()
+var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
+await CvTemplate.Generate(new()
 {
-    Name = new()
+    Model = new()
     {
-        First = "Anton",
-        Last = "Curmanschii",
+        Name = new()
+        {
+            First = "Anton",
+            Last = "Curmanschii",
+        },
+        CategorizedInfoLists = [],
+        CategorizedInfos = [],
+        Profession = new("Backend Software Developer"),
+        Educations = [],
+        Languages = [],
+        Location = new(City: "Chisinau", Country: "Moldova"),
+        Summary = NullableLatexString.Null,
+        WorkExperiences = [],
     },
-    CategorizedInfoLists = [],
-    CategorizedInfos = [],
-    Profession = new("Backend Software Developer"),
-    Educations = [],
-    Languages = [],
-    Location = new(City: "Chisinau", Country: "Moldova"),
-    Summary = NullableLatexString.Null,
-    WorkExperiences = [],
-}, cancellationToken);
+    CancellationToken = cancellationToken,
+    ConfigFilePath = configFullPath,
+    OpenInOs = true,
+});
 
 return;
 
