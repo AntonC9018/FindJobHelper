@@ -68,7 +68,7 @@ public static class CvTemplate
 
         // run latex
         var latexmk = Cli.Wrap("latexmk");
-        latexmk = latexmk.WithArguments(["-xelatex", latexFileName]);
+        latexmk = latexmk.WithArguments(["-pdflatex", latexFileName]);
 
         {
             var logFile = Path.Join(tempDir.FullName, "log-stdout.txt");
@@ -80,6 +80,8 @@ public static class CvTemplate
         }
 
         latexmk = latexmk.WithWorkingDirectory(tempDir.FullName);
+        latexmk = latexmk.WithValidation(CommandResultValidation.None);
+
         var result = await latexmk.ExecuteAsync(p.CancellationToken);
 
         if (!result.IsSuccess)
@@ -106,23 +108,35 @@ public static class CvTemplate
 
     private static FormattableString MetaLists(CvDataModel p)
     {
-        if (p.CategorizedInfoLists.Length == 0)
-        {
-            return $"";
-        }
-
-        if (p.CategorizedInfoLists.Length < p.CategorizedInfos.Length)
-        {
-            throw new InvalidOperationException("Regular values count must not exceed longer count");
-        }
-
-        var counter = Enumerable.Range(0, p.CategorizedInfoLists.Length);
+        int count = Math.Max(p.CategorizedInfos.Length, p.CategorizedInfoLists.Length);
+        var counter = Enumerable.Range(0, count);
         var strings = counter.Select(i =>
         {
-            var list = p.CategorizedInfoLists[i];
-            var info = p.CategorizedInfos[i];
-            var items = list.Values.Render(ListItemSeparator);
-            var ret = (FormattableString) $$"""\metasection{{{ info.Value.Value }}}{\textbf{{{ list.Category }}:} {{ items }}}""";
+            T? Item<T>(ImmutableArray<T> items)
+            {
+                if (items.Length > i)
+                {
+                    return items[i];
+                }
+                return default;
+            }
+
+            var list = Item(p.CategorizedInfoLists);
+            var info = (string?) Item(p.CategorizedInfos).Value.Value;
+
+            var listValues = list.Values;
+            if (listValues == default)
+            {
+                listValues = [];
+            }
+            var items = listValues.Select(x => x.Value).Render(ListItemSeparator);
+
+            var ret = (FormattableString) $$"""\metasection{{{ info }}}{{{
+                Symbols.IF(list != default)
+            }}\textbf{{{ list.Category.DisplayName }}:} {{ items }}{{
+                Symbols.ENDIF
+            }}}""";
+
             return ret;
         });
 
@@ -131,7 +145,7 @@ public static class CvTemplate
             %---------------------------------------------------------------------------------------
             %	META SECTION
             %----------------------------------------------------------------------------------------
-            {{allMeta}}
+            {{ allMeta }}
 
             \vspace{-2pt}
             \textcolor{softcol}{\hrule}
@@ -184,15 +198,15 @@ public static class CvTemplate
 
     private static FormattableString Footer(CvDataModel model)
     {
-        var website = FindInfo(model, Category.Website);
-        var github = FindInfo(model, Category.GitHub);
+        var website = model.Website;
+        var github = model.GitHub;
 
         int itemCount = 0;
-        if (website != null)
+        if (!website.IsNull)
         {
             itemCount += 1;
         }
-        if (github != null)
+        if (!github.IsNull)
         {
             itemCount += 1;
         }
@@ -205,14 +219,14 @@ public static class CvTemplate
         var arr = new FormattableString[itemCount];
         int i = 0;
         {
-            if (website is { } w)
+            if (!website.IsNull)
             {
-                arr[i] = $$"""\textnormal{\textcolor{sectcol}{{{ w.Value }}}""";
+                arr[i] = $$"""\textnormal{\textcolor{sectcol}{{{ website.Value }}}""";
                 i++;
             }
-            if (github is { } g)
+            if (!github.IsNull)
             {
-                arr[i] = $$"""\textcolor{sectcol}{{{ g.Value }}}""";
+                arr[i] = $$"""\textcolor{sectcol}{{{ github.Value }}}""";
                 i++;
             }
             _ = i;
@@ -225,18 +239,6 @@ public static class CvTemplate
             \vspace*{\fill}
             \hspace{-0.25\linewidth}\colorbox{white}{\makebox[1.5\linewidth][c]{\mystrut  {{ list }}}
         """;
-
-        static InfoString? FindInfo(CvDataModel model, Category cat)
-        {
-            foreach (var i in model.CategorizedInfos)
-            {
-                if (i.Category == cat)
-                {
-                    return i.Value;
-                }
-            }
-            return null;
-        }
     }
 }
 
@@ -251,6 +253,8 @@ public sealed class CvDataModel
     public ImmutableArray<LanguageProficiencyInfo> Languages = ImmutableArray<LanguageProficiencyInfo>.Empty;
     public ImmutableArray<Event> WorkExperiences = ImmutableArray<Event>.Empty;
     public ImmutableArray<Event> Educations = ImmutableArray<Event>.Empty;
+    public MaybeInfoString Website;
+    public MaybeInfoString GitHub;
 }
 
 public record struct Event()
@@ -512,55 +516,28 @@ public readonly record struct NullableLatexString(string? Value) : ISpanFormatta
     }
 }
 
-internal ref struct WriteHelper
+public readonly record struct InfoString(string Value);
+public readonly record struct MaybeInfoString
 {
-    public readonly Span<char> UnderlyingOutput;
-    public readonly ref int CountWritten;
+    public readonly string? Value;
 
-    public WriteHelper(Span<char> output, ref int countWritten)
+    public MaybeInfoString(string? value)
     {
-        UnderlyingOutput = output;
-        CountWritten = ref countWritten;
+        Value = value;
     }
 
-    public readonly Span<char> RemainingOutput
+    public MaybeInfoString(InfoString s) : this(s.Value)
     {
-        get
-        {
-            Debug.Assert(CountWritten <= UnderlyingOutput.Length);
-            return UnderlyingOutput[CountWritten ..];
-        }
     }
 
-    public bool Append(int num, IFormatProvider? provider)
+    public static MaybeInfoString Null => default;
+    public bool IsNull => Value is null;
+    public InfoString ToInfoString()
     {
-        int t;
-        bool ret = num.TryFormat(
-            RemainingOutput,
-            out t,
-            format: default,
-            provider: provider);
-        Debug.Assert(t <= RemainingOutput.Length);
-        CountWritten += t;
-        return ret;
-    }
-
-    public bool Append(string str) => str.TryCopyTo(RemainingOutput);
-
-    public bool Append(char ch)
-    {
-        if (CountWritten >= UnderlyingOutput.Length)
-        {
-            return false;
-        }
-
-        UnderlyingOutput[CountWritten] = ch;
-        CountWritten++;
-        return true;
+        Debug.Assert(Value is not null);
+        return new InfoString(Value);
     }
 }
-
-public readonly record struct InfoString(string Value);
 
 public readonly record struct CategorizedInfo(
     Category Category,
@@ -575,7 +552,9 @@ public readonly record struct Category(string DisplayName)
     public static Category Unspecified = new("");
     public static Category Website => new("Website");
     public static Category GitHub => new("GitHub");
+    public static Category LinkedIn => new("LinkedIn");
     public static Category Email => new("Email");
+    public static Category Location => new("Location");
     public static Category Phone => new("Phone");
     public static Category Technologies => new("Technologies");
 }
@@ -587,6 +566,21 @@ public readonly record struct Name(
 }
 
 public readonly record struct Profession(string Value);
+
+public readonly record struct Location(
+    string City,
+    string Country)
+{
+    public static implicit operator NullableLocation(Location location)
+    {
+        return new NullableLocation(location.City, location.Country);
+    }
+
+    public InfoString FormatInfo()
+    {
+        return new($"{City}, {Country}");
+    }
+}
 
 public readonly record struct NullableLocation(
     string? City,

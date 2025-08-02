@@ -1,4 +1,6 @@
 using System.ClientModel;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,7 +24,8 @@ internal static class AppConfiguration
         services
             .AddOptions<OpenApiOptions>()
             .Bind(config.GetRequiredSection(OpenApiOptions.SectionName))
-            .ValidateDataAnnotations();
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services
             .AddTransient<ApiKeyCredential>(static services =>
             {
@@ -55,7 +58,8 @@ internal static class AppConfiguration
         services
             .AddOptions<TheirStackOptions>()
             .Bind(config.GetRequiredSection(TheirStackOptions.SectionName))
-            .ValidateDataAnnotations();
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services
             .AddHttpClient(nameof(TheirStackClient), (sp, client) =>
             {
@@ -76,6 +80,12 @@ internal static class AppConfiguration
                 var ret = new TheirStackClient(httpClient);
                 return ret;
             });
+
+        services
+            .AddOptions<PersonalInfoOptions>()
+            .Bind(config.GetRequiredSection(PersonalInfoOptions.DefaultKey))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         var ret = services.BuildServiceProvider();
         return ValueTask.FromResult(ret);
@@ -134,4 +144,19 @@ file class LoggingHandler : DelegatingHandler
 
         return response;
     }
+}
+
+public sealed class PersonalInfoOptions
+{
+    public const string DefaultKey = "PersonalInfo";
+
+    [Phone]
+    [Required]
+    [DebuggerBrowsable(DebuggerBrowsableState.Never)]
+    public required string Phone { get; set; }
+
+    [EmailAddress]
+    [Required]
+    [DebuggerBrowsable(DebuggerBrowsableState.Never)]
+    public required string Email { get; set; }
 }
