@@ -1,14 +1,20 @@
 namespace MainCli.Helper;
 
+public record struct BlurParams()
+{
+    public required string String;
+    public int MaxVisibleLen = 5;
+    public int MinVisibleLen = 5;
+}
 public static class Miscellanious
 {
-    public static string BlurPhone(string phone)
+    public static string BlurPhone(BlurParams p)
     {
-        const int len = 3;
-        int minLenBlured = Math.Min(phone.Length, 5);
-        int lenToBlur = Math.Max(phone.Length - len, minLenBlured);
-        int lenToKeep = phone.Length - lenToBlur;
-        var start = phone.AsSpan()[.. lenToKeep];
+        var s = p.String;
+        int minLenBlurred = Math.Min(s.Length, p.MinVisibleLen);
+        int lenToBlur = Math.Max(s.Length - p.MinVisibleLen, minLenBlurred);
+        int lenToKeep = s.Length - lenToBlur;
+        var start = s.AsSpan()[.. lenToKeep];
         var end = new Repeat("*", lenToBlur);
         return $"{start}{end}";
     }

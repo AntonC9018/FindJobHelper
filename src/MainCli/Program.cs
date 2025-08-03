@@ -17,7 +17,7 @@ _ = serviceProvider;
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
 
 var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
-var location = new Location(City: "Chisinau", Country: "Moldova");
+var location = new Location(City: "Chișinău", Country: "Moldova");
 await CvTemplate.Generate(new()
 {
     Model = new()
@@ -44,12 +44,15 @@ await CvTemplate.Generate(new()
         CategorizedInfos = [
             new(Category.Location, location.FormatInfo()),
             new(Category.Email, new(personalInfo.Email)),
-            new(Category.Phone, new(Miscellanious.BlurPhone(personalInfo.Phone))),
+            new(Category.Phone, new(Miscellanious.BlurPhone(new()
+            {
+                String = personalInfo.Phone,
+            }))),
         ],
         Profession = new("Backend Software Developer"),
         Educations = [],
         Languages = [],
-        Location = new(City: "Chisinau", Country: "Moldova"),
+        Location = location,
         Summary = NullableLatexString.Null,
         WorkExperiences = [],
     },

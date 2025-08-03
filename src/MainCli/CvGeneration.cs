@@ -68,7 +68,7 @@ public static class CvTemplate
 
         // run latex
         var latexmk = Cli.Wrap("latexmk");
-        latexmk = latexmk.WithArguments(["-pdflatex", latexFileName]);
+        latexmk = latexmk.WithArguments(["-xelatex", latexFileName]);
 
         {
             var logFile = Path.Join(tempDir.FullName, "log-stdout.txt");
@@ -129,11 +129,11 @@ public static class CvTemplate
             {
                 listValues = [];
             }
-            var items = listValues.Select(x => x.Value).Render(ListItemSeparator);
+            var formattedList = listValues.Select(x => x.Value).Render(ListItemSeparator);
 
             var ret = (FormattableString) $$"""\metasection{{{ info }}}{{{
                 Symbols.IF(list != default)
-            }}\textbf{{{ list.Category.DisplayName }}:} {{ items }}{{
+            }}\textbf{{{ list.Category.DisplayName }}:} {{ formattedList }}{{
                 Symbols.ENDIF
             }}}""";
 
