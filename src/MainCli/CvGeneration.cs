@@ -221,7 +221,7 @@ public static class CvTemplate
 
             return (FormattableString) $$"""
             \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ e.Place.Name }}}{
-                {{ subItems }}}{{{ e.Text.Value }}}
+                {{ subItems }}}{ {{ e.Text.Value }} }
             """;
         });
         var eventsRendered = items.Render(RenderEnumerableOptions.LineBreaksWithSpacer);

@@ -58,6 +58,7 @@ await CvTemplate.Generate(new()
                 DateRange = DateRange.Completed(
                     start: new(Year: 2022),
                     end: new(Year: 2024)),
+                Text = new("""Thesis: \href{https://github.com/AntonC9018/thesis-png}{\textit{PNG File Format}}"""),
             },
             new()
             {
@@ -66,6 +67,7 @@ await CvTemplate.Generate(new()
                 DateRange = DateRange.Completed(
                     start: new(Year: 2019),
                     end: new(Year: 2022)),
+                Text = new("""Thesis: \href{https://github.com/AntonC9018/uni_thesis}{\textit{Roslyn Code Generators}}"""),
             }],
         Languages = [],
         Location = location,
