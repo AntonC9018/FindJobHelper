@@ -28,13 +28,13 @@ internal readonly ref struct WriteHelper
         return x <= RemainingOutput.Length;
     }
 
-    public bool Append(int num, IFormatProvider? provider)
+    public bool Append(int num, string? format, IFormatProvider? provider)
     {
         int t;
         bool ret = num.TryFormat(
             RemainingOutput,
             out t,
-            format: default,
+            format: format,
             provider: provider);
         Debug.Assert(t <= RemainingOutput.Length);
         CountWritten += t;

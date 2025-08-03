@@ -168,6 +168,35 @@
 %----------------------------------------------------------------------------------------
 %	 CV EVENT
 %----------------------------------------------------------------------------------------
+\usepackage{hyperref}
+\hypersetup{%
+  colorlinks=true,
+  urlcolor=blue!50!black,
+}
+
+\usepackage{enumitem}
+
+\newcommand{\maybeitemize}[1]{%
+  \def\temp{#1}%
+  \ifx\temp\empty
+    % do nothing, no items
+  \else
+    \begin{itemize}[topsep=3pt, partopsep=0pt, itemsep=3pt, parsep=0pt]
+      #1
+    \end{itemize}
+  \fi
+}
+
+\newcommand{\maybeindent}[1]{%
+  \def\temp{#1}%
+  \ifx\temp\empty
+  \else
+    \noindent
+    \begin{minipage}{\dimexpr\linewidth-1em}
+      \hspace{1.5em}#1
+    \end{minipage}
+  \fi
+}
 
 % creates a stretched box as cv entry headline followed by some paragraphs about
 % the work you did
@@ -175,8 +204,9 @@
 % param 2:	event name (what did you do?)
 % param 3:	institution (where did you work / study)
 % param 4:	list of paragraphs
+% param 5:	just text before the bullet points
 %
-\newcommand{\cvevent}[4]
+\newcommand{\cvevent}[5]
 {
 
 \begin{tabular*}{1\textwidth}{p{13.6cm}  x{3.9cm}}
@@ -187,11 +217,11 @@
 \textcolor{softcol}{\hrule}
 \vspace{6pt}
 
-	\foreach \desc in {#4}{
-		$\cdot$ \desc\\[3pt]
-	}
+\maybeindent{#5}
 
-\vspace{3pt}
+\maybeitemize{#4}
+
+\vspace{6pt}
 }
 
 % creates a stretched box as

@@ -50,11 +50,91 @@ await CvTemplate.Generate(new()
             }))),
         ],
         Profession = new("Backend Software Developer"),
-        Educations = [],
+        Educations = [
+            new()
+            {
+                Place = new("Example University"),
+                Title = new("Master of Applied Informatics"),
+                DateRange = DateRange.Completed(
+                    start: new(Year: 2022),
+                    end: new(Year: 2024)),
+            },
+            new()
+            {
+                Place = new("Example University"),
+                Title = new("Bachelor of Applied Informatics"),
+                DateRange = DateRange.Completed(
+                    start: new(Year: 2019),
+                    end: new(Year: 2022)),
+            }],
         Languages = [],
         Location = location,
         Summary = NullableLatexString.Null,
-        WorkExperiences = [],
+        WorkExperiences = [
+            new()
+            {
+                Place = new("Example University"),
+                Title = new("University Tutor"),
+                DateRange = DateRange.Current(
+                    start: new(Year: 2023)),
+                Text = new("I teach algorithms, data structures, and C++ programming to students. My lessons are public on YouTube."),
+                SubItems = [
+                ],
+                Urls = [
+                    "https://www.youtube.com/@antonofka9018/playlists",
+                    "https://github.com/AntonC9018/uniCourse_dataStructuresAndAlgorithms",
+                ],
+            },
+            new()
+            {
+                Title = ".NET Backend Developer",
+                Place = new("ExampleCo Beta"),
+                DateRange = DateRange.Completed(
+                    start: new(Year: 2024, Month: 7),
+                    end: new(Year: 2024, Month: 9, Day: 14)),
+                SubItems = [
+                    new(@"Made REST API's that handle the app's logic"),
+                    new(@"Configured its \textbf{\textit{build process}} (\textit{MSBuild, Docker}, custom CLI tool)."),
+                    new(@"Integrated \textbf{AWS} services (\textit{Cognito, Secrets Manager})."),
+                    new(@"Made a module that wraps all API responses automatically."),
+                    new(@"Made a module that propagates metadata all the way from the database model to the DTO validation and Swagger."),
+                    new(@"Practiced errors-as-values everywhere."),
+                ],
+            },
+            new()
+            {
+                Title = ".NET Developer",
+                Place = new("Example Foundation"),
+                DateRange = DateRange.Completed(
+                    start: new(Year: 2023, Month: 12),
+                    end: new(Year: 2024, Month: 2)),
+                SubItems = [
+                    new(@"Worked on \textbf{HotChocolate}. Fixed a couple of old issues, worked on \textbf{Apollo} integration."),
+                    new(@"Started developing an internal microservice."),
+                ],
+            },
+            new()
+            {
+                Title = ".NET Backend Developer",
+                Place = new("ExampleCo Alpha"),
+                DateRange = DateRange.Completed(
+                    start: new(Year: 2023, Month: 4),
+                    end: new(Year: 2023, Month: 11)),
+                SubItems = [
+                    new(@"Worked on the backend of \href{https://ExampleCo Alpha.com/}{ExampleCo Alpha}, a project management application with an ASP.NET Core backend."),
+                    new(@"Moved the project back to \textbf{EF Core migrations}, designed a test that checks if the models actually correspond to database tables."),
+                    new(@"Received a fair bit of \textbf{SQL experience} by writing complex queries in code and for migrations."),
+                    new(@"Implemented \textbf{bulk updates} using \textit{Linq2db}."),
+                    new(@"Added \textbf{GraphQL support using HotChocolate}. Used the Code-First approach heavily to generalize configuration across types. Wrote a \href{https://dev.azure.com/ExampleCo Alpha-inc/ExampleCo Alpha.Public/_git/ExampleCo Alpha.HotChocolate.GlobalFilters}{library that automatically adds ownership filters} to all queries."),
+                    new(@"Implemented multiple \textbf{source generators} for easier project maintenance."),
+                    new(@"Designed and implemented \textbf{multiple application features from scratch}."),
+                    new(@"Undertook numerous \textbf{refactorings of the legacy code base}."),
+                    new(@"Implemented a \textbf{User Hierarchy module} that automatically updates references to users in hierarchies."),
+                    new(@"Implemented an \textbf{Excel Micro-ORM} with a complex column format configurable through a builder."),
+                    new(@"Implemented a \textbf{Metel parser} using \textit{System.IO.Pipelines}."),
+                ],
+            },
+        ],
     },
     CancellationToken = cancellationToken,
     ConfigFilePath = configFullPath,

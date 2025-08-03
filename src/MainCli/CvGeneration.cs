@@ -25,6 +25,9 @@ public static class CvTemplate
         var codegenContext = new CodegenContext();
         const string latexFileName = "main.tex";
         var writer = codegenContext[latexFileName];
+        writer.AutoTrimEnd = false;
+        writer.CurlyBracesStyle = CodegenTextWriter.CurlyBracesStyleType.C;
+        writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
         writer.Write($$$"""
         \input{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}
@@ -106,6 +109,9 @@ public static class CvTemplate
     private static readonly RenderEnumerableOptions ListItemSeparator =
         RenderEnumerableOptions.CreateWithCustomSeparator(", ", enforceLineBreakAfterLastItem: false);
 
+    private static readonly RenderEnumerableOptions BarSeparator =
+        RenderEnumerableOptions.CreateWithCustomSeparator(" | ", enforceLineBreakAfterLastItem: false);
+
     private static FormattableString MetaLists(CvDataModel p)
     {
         int count = Math.Max(p.CategorizedInfos.Length, p.CategorizedInfoLists.Length);
@@ -121,17 +127,34 @@ public static class CvTemplate
                 return default;
             }
 
+            static FormattableString Wrap(Category cat, InfoString str)
+            {
+                if (str == default)
+                {
+                    return $"";
+                }
+                if (cat.IsUrl)
+                {
+                    return $$"""\url{{{ str.Value }}}""";
+                }
+                return $"{str.Value}";
+            }
+
             var list = Item(p.CategorizedInfoLists);
-            var info = (string?) Item(p.CategorizedInfos).Value.Value;
+            var infoItem = Item(p.CategorizedInfos);
+
+            var infoString = Wrap(infoItem.Category, infoItem.Value);
 
             var listValues = list.Values;
             if (listValues == default)
             {
                 listValues = [];
             }
-            var formattedList = listValues.Select(x => x.Value).Render(ListItemSeparator);
+            var formattedList = listValues
+                .Select(x => Wrap(list.Category, x))
+                .Render(ListItemSeparator);
 
-            var ret = (FormattableString) $$"""\metasection{{{ info }}}{{{
+            var ret = (FormattableString) $$"""\metasection{{{ infoString }}}{{{
                 Symbols.IF(list != default)
             }}\textbf{{{ list.Category.DisplayName }}:} {{ formattedList }}{{
                 Symbols.ENDIF
@@ -169,6 +192,8 @@ public static class CvTemplate
         return $"{s}{newExtension}";
     }
 
+    private static LatexEscapedString LatexEscape(MaybeInfoString s) => new(s.Value ?? "");
+
     private static FormattableString Events(ImmutableArray<Event> events, string sectionName)
     {
         if (events.Length == 0)
@@ -178,13 +203,25 @@ public static class CvTemplate
 
         var items = events.Select(e =>
         {
-            var subItems = e.SubItems
-                .Select(x => (FormattableString) $$"""{{{ x }}}""")
+            var subItemsE = e.SubItems
+                .Select(x => (FormattableString) $$"""{{ x }}""");
+
+            if (!e.Urls.IsEmpty)
+            {
+                var urls = e.Urls
+                    .Select(x => (FormattableString) $$"""\url{{{ x }}}""")
+                    .Render(BarSeparator);
+
+                subItemsE = subItemsE.Append((FormattableString) $$"""\textbf{Links:} {{ urls }}""");
+            }
+
+            var subItems = subItemsE
+                .Select(x => (FormattableString) $"""\item {x}""")
                 .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer);
+
             return (FormattableString) $$"""
-                \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ e.Place.Name }}}{
-                    {{{ subItems }}}
-                }
+            \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ e.Place.Name }}}{
+                {{ subItems }}}{{{ e.Text.Value }}}
             """;
         });
         var eventsRendered = items.Render(RenderEnumerableOptions.LineBreaksWithSpacer);
@@ -221,12 +258,12 @@ public static class CvTemplate
         {
             if (!website.IsNull)
             {
-                arr[i] = $$"""\textnormal{\textcolor{sectcol}{{{ website.Value }}}""";
+                arr[i] = $$"""\textnormal{\textcolor{sectcol}{ \url{{{ LatexEscape(website) }}} }""";
                 i++;
             }
             if (!github.IsNull)
             {
-                arr[i] = $$"""\textcolor{sectcol}{{{ github.Value }}}""";
+                arr[i] = $$"""\textcolor{sectcol}{ \url{{{ LatexEscape(github) }}} }""";
                 i++;
             }
             _ = i;
@@ -263,7 +300,8 @@ public record struct Event()
     public required Place Place;
     public required DateRange DateRange;
     public NullableLatexString Text = NullableLatexString.Null;
-    public required ImmutableArray<LatexString> SubItems;
+    public ImmutableArray<LatexString> SubItems = [];
+    public ImmutableArray<string> Urls = [];
 }
 
 // public record struct EducationItem()
@@ -381,9 +419,12 @@ public readonly record struct DateRange(
             OptionalDateParts d,
             IFormatProvider? provider)
         {
+            // pad with zeros
+            const string formatPadLeft = "00";
+
             if (d.Day != 0)
             {
-                if (!helper.Append(d.Day, provider))
+                if (!helper.Append(d.Day, format: formatPadLeft, provider))
                 {
                     return false;
                 }
@@ -394,7 +435,7 @@ public readonly record struct DateRange(
             }
             if (d.Month != 0)
             {
-                if (!helper.Append(d.Month, provider))
+                if (!helper.Append(d.Month, format: formatPadLeft, provider))
                 {
                     return false;
                 }
@@ -404,7 +445,7 @@ public readonly record struct DateRange(
                 }
             }
             Debug.Assert(d.Year != 0);
-            if (!helper.Append(d.Year, provider))
+            if (!helper.Append(d.Year, format: null, provider))
             {
                 return false;
             }
@@ -429,7 +470,7 @@ public readonly record struct LanguageProficiencyInfo(
     Language Language,
     LanguageProficiencyLevel GeneralProficiencyLevel);
 
-public readonly record struct LatexString(string Value) : ISpanFormattable
+public readonly record struct LatexEscapedString(string Value) : ISpanFormattable
 {
     public override string ToString() => $"{this}";
 
@@ -476,6 +517,33 @@ public readonly record struct LatexString(string Value) : ISpanFormattable
             {
                 return false;
             }
+        }
+        return true;
+    }
+}
+
+public readonly record struct LatexString(string Value) : ISpanFormattable
+{
+    public override string ToString() => $"{this}";
+
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        _ = format;
+        _ = formatProvider;
+        return ToString();
+    }
+
+    public bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format,
+        IFormatProvider? provider)
+    {
+        charsWritten = 0;
+        var helper = new WriteHelper(destination, ref charsWritten);
+        if (!helper.Append(Value))
+        {
+            return false;
         }
         return true;
     }
@@ -547,12 +615,12 @@ public readonly record struct CategorizedInfoList(
     Category Category,
     ImmutableArray<InfoString> Values);
 
-public readonly record struct Category(string DisplayName)
+public readonly record struct Category(string DisplayName, bool IsUrl = false)
 {
     public static Category Unspecified = new("");
-    public static Category Website => new("Website");
-    public static Category GitHub => new("GitHub");
-    public static Category LinkedIn => new("LinkedIn");
+    public static Category Website => new("Website", IsUrl: true);
+    public static Category GitHub => new("GitHub", IsUrl: true);
+    public static Category LinkedIn => new("LinkedIn", IsUrl: true);
     public static Category Email => new("Email");
     public static Category Location => new("Location");
     public static Category Phone => new("Phone");
