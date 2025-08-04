@@ -29,32 +29,32 @@ await CvTemplate.Generate(new()
         },
         CategorizedInfoLists = [
             new(Category.Technologies, [
-                new(".NET"),
-                new("ASP.NET Core"),
-                new("EF Core"),
-                new("AWS"),
+                ".NET",
+                "ASP.NET Core",
+                "EF Core",
+                "AWS",
             ]),
             new(Category.GitHub, [
-                new("https://github.com/AntonC9018"),
+                "https://github.com/AntonC9018",
             ]),
             new(Category.LinkedIn, [
-                new("https://www.linkedin.com/in/anton-curmanschii-647232161"),
+                "https://www.linkedin.com/in/anton-curmanschii-647232161",
             ]),
         ],
         CategorizedInfos = [
             new(Category.Location, location.FormatInfo()),
-            new(Category.Email, new(personalInfo.Email)),
-            new(Category.Phone, new(Miscellanious.BlurPhone(new()
+            new(Category.Email, personalInfo.Email),
+            new(Category.Phone, Miscellanious.BlurPhone(new()
             {
                 String = personalInfo.Phone,
-            }))),
+            })),
         ],
         Profession = new("Backend Software Developer"),
         Educations = [
             new()
             {
                 Place = new("Example University"),
-                Title = new("Master of Applied Informatics"),
+                Title = "Master of Applied Informatics",
                 DateRange = DateRange.Completed(
                     start: new(Year: 2022),
                     end: new(Year: 2024)),
@@ -63,7 +63,7 @@ await CvTemplate.Generate(new()
             new()
             {
                 Place = new("Example University"),
-                Title = new("Bachelor of Applied Informatics"),
+                Title = "Bachelor of Applied Informatics",
                 DateRange = DateRange.Completed(
                     start: new(Year: 2019),
                     end: new(Year: 2022)),
@@ -94,7 +94,7 @@ await CvTemplate.Generate(new()
             new()
             {
                 Place = new("Example University"),
-                Title = new("University Tutor"),
+                Title = "University Tutor",
                 DateRange = DateRange.Current(
                     start: new(Year: 2023)),
                 Text = new("I teach algorithms, data structures, and C++ programming to students. My lessons are public on YouTube."),
