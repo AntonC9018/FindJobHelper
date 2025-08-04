@@ -58,6 +58,8 @@ public static class CvTemplate
 
         % Main Content
 
+        {{{ Languages(p.Model.Languages) }}}
+
         {{{ Events(p.Model.WorkExperiences, sectionName: "Experience") }}}
 
         {{{ Events(p.Model.Educations, "Education") }}}
@@ -104,6 +106,52 @@ public static class CvTemplate
             var pdfOutputPath = Path.Join(tempDir.FullName, pdfOutputName);
             ExplorerHelper.OpenFolderAndSelectFile(pdfOutputPath);
         }
+    }
+
+    private static FormattableString Languages(
+        ImmutableArray<LanguageProficiencyInfo> languages)
+    {
+        if (languages.IsEmpty)
+        {
+            return $"";
+        }
+
+        return $$"""
+            \cvsection{Languages}
+
+            \languagetable{
+            {{
+                languages
+                    .Select(lang =>
+                    {
+                        var skills = lang.Skills
+                            .Select(s => s.Text)
+                            .Render(ListItemSeparator);
+
+                        return (FormattableString) $$"""{{ lang.Language.Name }} & {{ lang.GeneralProficiencyLevel.Value }} & {{ skills }} \\""";
+                    })
+                    .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)
+            }}}
+        """;
+
+//             \end{tabularx}
+//             \begin{itemize}[topsep=3pt, partopsep=0pt, itemsep=3pt, parsep=0pt]
+//             {{
+//                 languages
+//                     .Select(lang =>
+//                     {
+//                         return (FormattableString) $$"""
+//                         \item \textbf{ {{ lang.Language.Name }} } — {{ lang.GeneralProficiencyLevel.Value }}
+//                               {{ Symbols.IF(!lang.Skills.IsEmpty) }}({{
+//                                         lang.Skills
+//                                             .Select(skill => skill.Text)
+//                                             .Render(ListItemSeparator)
+//                                     }}){{ Symbols.ENDIF }}
+//                         """;
+//                     })
+//                     .RenderWithLineBreaks()
+//             }}
+//             \end{itemize}
     }
 
     private static readonly RenderEnumerableOptions ListItemSeparator =
@@ -192,8 +240,6 @@ public static class CvTemplate
         return $"{s}{newExtension}";
     }
 
-    private static LatexEscapedString LatexEscape(MaybeInfoString s) => new(s.Value ?? "");
-
     private static FormattableString Events(ImmutableArray<Event> events, string sectionName)
     {
         if (events.Length == 0)
@@ -258,12 +304,12 @@ public static class CvTemplate
         {
             if (!website.IsNull)
             {
-                arr[i] = $$"""\textnormal{\textcolor{sectcol}{ \url{{{ LatexEscape(website) }}} }""";
+                arr[i] = $$"""\textnormal{\textcolor{sectcol}{ \url{{{ website }}} }""";
                 i++;
             }
             if (!github.IsNull)
             {
-                arr[i] = $$"""\textcolor{sectcol}{ \url{{{ LatexEscape(github) }}} }""";
+                arr[i] = $$"""\textcolor{sectcol}{ \url{{{ github }}} }""";
                 i++;
             }
             _ = i;
@@ -290,8 +336,8 @@ public sealed class CvDataModel
     public ImmutableArray<LanguageProficiencyInfo> Languages = ImmutableArray<LanguageProficiencyInfo>.Empty;
     public ImmutableArray<Event> WorkExperiences = ImmutableArray<Event>.Empty;
     public ImmutableArray<Event> Educations = ImmutableArray<Event>.Empty;
-    public MaybeInfoString Website;
-    public MaybeInfoString GitHub;
+    public NullableInfoString Website;
+    public NullableInfoString GitHub;
 }
 
 public record struct Event()
@@ -454,7 +500,12 @@ public readonly record struct DateRange(
     }
 }
 
-public readonly record struct Language(string Name);
+public readonly record struct Language(string Name, string ShortName)
+{
+    public static Language English => new("English", "EN");
+    public static Language Romanian => new("Romanian", "RO");
+    public static Language Russian => new("Russian", "RU");
+}
 public readonly record struct LanguageProficiencyLevel(string Value)
 {
     public static LanguageProficiencyLevel A1 => new("A1");
@@ -468,7 +519,19 @@ public readonly record struct LanguageProficiencyLevel(string Value)
 // public readonly record struct LanguageClassificationCategory(string Category);
 public readonly record struct LanguageProficiencyInfo(
     Language Language,
-    LanguageProficiencyLevel GeneralProficiencyLevel);
+    LanguageProficiencyLevel GeneralProficiencyLevel,
+    ImmutableArray<LanguageSkill> Skills = default)
+{
+    public readonly ImmutableArray<LanguageSkill> Skills = Skills == default ? [] : Skills;
+}
+
+public readonly record struct LanguageSkill(InfoString Text)
+{
+    public LanguageSkill(string text)
+        : this(new InfoString(text))
+    {
+    }
+}
 
 public readonly record struct LatexEscapedString(string Value) : ISpanFormattable
 {
@@ -584,26 +647,83 @@ public readonly record struct NullableLatexString(string? Value) : ISpanFormatta
     }
 }
 
-public readonly record struct InfoString(string Value);
-public readonly record struct MaybeInfoString
+public readonly record struct InfoString(string Value) : ISpanFormattable
+{
+    public string ToString(
+        string? format,
+        IFormatProvider? formatProvider)
+    {
+        _ = format;
+        _ = formatProvider;
+        return ToString();
+    }
+
+    public bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format,
+        IFormatProvider? provider)
+    {
+        return new LatexEscapedString(Value).TryFormat(
+            destination,
+            out charsWritten,
+            format,
+            provider);
+    }
+
+    public override string ToString() => $"{this}";
+}
+
+public readonly record struct NullableInfoString : ISpanFormattable
 {
     public readonly string? Value;
 
-    public MaybeInfoString(string? value)
+    public NullableInfoString(string? value)
     {
         Value = value;
     }
 
-    public MaybeInfoString(InfoString s) : this(s.Value)
+    public NullableInfoString(InfoString s) : this(s.Value)
     {
     }
 
-    public static MaybeInfoString Null => default;
+    public static NullableInfoString Null => default;
     public bool IsNull => Value is null;
     public InfoString ToInfoString()
     {
         Debug.Assert(Value is not null);
         return new InfoString(Value);
+    }
+
+    public static implicit operator NullableInfoString(InfoString s)
+    {
+        return new NullableInfoString(s);
+    }
+
+    public override string ToString() => $"{Value}";
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
+        _ = format;
+        _ = formatProvider;
+        return ToString();
+    }
+    public bool TryFormat(
+        Span<char> destination,
+        out int charsWritten,
+        ReadOnlySpan<char> format,
+        IFormatProvider? provider)
+    {
+        if (Value is null)
+        {
+            charsWritten = 0;
+            return true;
+        }
+
+        return new InfoString(Value).TryFormat(
+            destination,
+            out charsWritten,
+            format,
+            provider);
     }
 }
 

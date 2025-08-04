@@ -69,7 +69,25 @@ await CvTemplate.Generate(new()
                     end: new(Year: 2022)),
                 Text = new("""Thesis: \href{https://github.com/AntonC9018/uni_thesis}{\textit{Roslyn Code Generators}}"""),
             }],
-        Languages = [],
+        Languages = [
+            new(
+                Language.Russian,
+                LanguageProficiencyLevel.Native),
+            new(
+                Language.Romanian,
+                LanguageProficiencyLevel.B2,
+                Skills: [
+                    new("Technical Conversation"),
+                    new("Teaching"),
+                ]),
+            new(
+                Language.English,
+                LanguageProficiencyLevel.C2,
+                Skills: [
+                    new("Technical Writing & Reading"),
+                    new("Conversational Fluency"),
+                ]),
+        ],
         Location = location,
         Summary = NullableLatexString.Null,
         WorkExperiences = [

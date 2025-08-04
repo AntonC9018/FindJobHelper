@@ -21,13 +21,17 @@
 %we use article class because we want to fully customize the page and don't use a cv template
 \documentclass[10pt,A4]{article}
 
-%we use utf8 since we want to build from any machine
-\usepackage[utf8]{inputenc}
-
 \usepackage[english,romanian]{babel}
 % Being able to copy-paste from the document
 % Display the diacritics correctly
 \usepackage{fontspec}
+
+\usepackage{booktabs}
+\usepackage[x11names,dvipsnames,table]{xcolor} %for use in color links
+\usepackage{colortbl}
+
+\definecolor{lightgray}{gray}{0.9}                % for ragged-right table cells
+
 
 % provides \isempty test
 \usepackage{xifthen}
@@ -97,8 +101,6 @@
 %for drawing graphics
 \usepackage{tikz}
 \usetikzlibrary{shapes, backgrounds,mindmap, trees}
-
-\usepackage{color}
 
 %accent color
 \definecolor{sectcol}{RGB}{0,150,255}
@@ -241,3 +243,16 @@
 %----------------------------------------------------------------------------------------
 \newcommand{\lorem}
 {Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec a diam lectus.}
+
+\newcommand{\languagetable}[1]{%
+  \rowcolors{2}{lightgray}{white}
+  \renewcommand{\arraystretch}{1.3}
+  \noindent
+  \begin{tabular}{p{0.25\linewidth} p{0.15\linewidth} p{0.55\linewidth}}
+    \rowcolor{gray!25}
+    \textbf{Language} & \textbf{Level} & \textbf{Skills} \\
+    #1
+  \end{tabular}
+}
+
+
