@@ -175,7 +175,7 @@ public static class CvTemplate
                 return default;
             }
 
-            static FormattableString Wrap(Category cat, InfoString str)
+            static FormattableString Wrap(Category cat, RegularString str)
             {
                 if (str == default)
                 {
@@ -267,7 +267,7 @@ public static class CvTemplate
 
             return (FormattableString) $$"""
             \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ e.Place.Name }}}{
-                {{ subItems }}}{ {{ e.Text.Value }} }
+                {{ subItems }}}{{{ e.Text }}}
             """;
         });
         var eventsRendered = items.Render(RenderEnumerableOptions.LineBreaksWithSpacer);
@@ -336,18 +336,18 @@ public sealed class CvDataModel
     public ImmutableArray<LanguageProficiencyInfo> Languages = ImmutableArray<LanguageProficiencyInfo>.Empty;
     public ImmutableArray<Event> WorkExperiences = ImmutableArray<Event>.Empty;
     public ImmutableArray<Event> Educations = ImmutableArray<Event>.Empty;
-    public NullableInfoString Website;
-    public NullableInfoString GitHub;
+    public NullableRegularString Website;
+    public NullableRegularString GitHub;
 }
 
 public record struct Event()
 {
-    public required string Title;
+    public required RegularString Title;
     public required Place Place;
     public required DateRange DateRange;
     public NullableLatexString Text = NullableLatexString.Null;
     public ImmutableArray<LatexString> SubItems = [];
-    public ImmutableArray<string> Urls = [];
+    public ImmutableArray<RegularString> Urls = [];
 }
 
 // public record struct EducationItem()
@@ -372,7 +372,7 @@ public record struct Event()
 // }
 //
 // public readonly record struct JobResponsibility(LatexString Text);
-public readonly record struct Place(string Name);
+public readonly record struct Place(RegularString Name);
 // public readonly record struct JobPosition(string Title);
 
 public readonly record struct OptionalDateParts
@@ -500,13 +500,13 @@ public readonly record struct DateRange(
     }
 }
 
-public readonly record struct Language(string Name, string ShortName)
+public readonly record struct Language(RegularString Name, RegularString ShortName)
 {
     public static Language English => new("English", "EN");
     public static Language Romanian => new("Romanian", "RO");
     public static Language Russian => new("Russian", "RU");
 }
-public readonly record struct LanguageProficiencyLevel(string Value)
+public readonly record struct LanguageProficiencyLevel(RegularString Value)
 {
     public static LanguageProficiencyLevel A1 => new("A1");
     public static LanguageProficiencyLevel A2 => new("A2");
@@ -525,12 +525,8 @@ public readonly record struct LanguageProficiencyInfo(
     public readonly ImmutableArray<LanguageSkill> Skills = Skills == default ? [] : Skills;
 }
 
-public readonly record struct LanguageSkill(InfoString Text)
+public readonly record struct LanguageSkill(RegularString Text)
 {
-    public LanguageSkill(string text)
-        : this(new InfoString(text))
-    {
-    }
 }
 
 public readonly record struct LatexEscapedString(string Value) : ISpanFormattable
@@ -647,7 +643,7 @@ public readonly record struct NullableLatexString(string? Value) : ISpanFormatta
     }
 }
 
-public readonly record struct InfoString(string Value) : ISpanFormattable
+public readonly record struct RegularString(string Value) : ISpanFormattable
 {
     public string ToString(
         string? format,
@@ -672,32 +668,37 @@ public readonly record struct InfoString(string Value) : ISpanFormattable
     }
 
     public override string ToString() => $"{this}";
+
+    public static implicit operator RegularString(string s)
+    {
+        return new RegularString(s);
+    }
 }
 
-public readonly record struct NullableInfoString : ISpanFormattable
+public readonly record struct NullableRegularString : ISpanFormattable
 {
     public readonly string? Value;
 
-    public NullableInfoString(string? value)
+    public NullableRegularString(string? value)
     {
         Value = value;
     }
 
-    public NullableInfoString(InfoString s) : this(s.Value)
+    public NullableRegularString(RegularString s) : this(s.Value)
     {
     }
 
-    public static NullableInfoString Null => default;
+    public static NullableRegularString Null => default;
     public bool IsNull => Value is null;
-    public InfoString ToInfoString()
+    public RegularString ToInfoString()
     {
         Debug.Assert(Value is not null);
-        return new InfoString(Value);
+        return new RegularString(Value);
     }
 
-    public static implicit operator NullableInfoString(InfoString s)
+    public static implicit operator NullableRegularString(RegularString s)
     {
-        return new NullableInfoString(s);
+        return new NullableRegularString(s);
     }
 
     public override string ToString() => $"{Value}";
@@ -719,21 +720,26 @@ public readonly record struct NullableInfoString : ISpanFormattable
             return true;
         }
 
-        return new InfoString(Value).TryFormat(
+        return new RegularString(Value).TryFormat(
             destination,
             out charsWritten,
             format,
             provider);
     }
+
+    public static implicit operator NullableRegularString(string? s)
+    {
+        return new NullableRegularString(s);
+    }
 }
 
 public readonly record struct CategorizedInfo(
     Category Category,
-    InfoString Value);
+    RegularString Value);
 
 public readonly record struct CategorizedInfoList(
     Category Category,
-    ImmutableArray<InfoString> Values);
+    ImmutableArray<RegularString> Values);
 
 public readonly record struct Category(string DisplayName, bool IsUrl = false)
 {
@@ -748,12 +754,12 @@ public readonly record struct Category(string DisplayName, bool IsUrl = false)
 }
 
 public readonly record struct Name(
-    string First,
-    string Last)
+    RegularString First,
+    RegularString Last)
 {
 }
 
-public readonly record struct Profession(string Value);
+public readonly record struct Profession(RegularString Value);
 
 public readonly record struct Location(
     string City,
@@ -764,23 +770,23 @@ public readonly record struct Location(
         return new NullableLocation(location.City, location.Country);
     }
 
-    public InfoString FormatInfo()
+    public RegularString FormatInfo()
     {
         return new($"{City}, {Country}");
     }
 }
 
 public readonly record struct NullableLocation(
-    string? City,
-    string? Country)
+    NullableRegularString City,
+    NullableRegularString Country)
 {
     public static NullableLocation Null => default;
     public readonly bool IsNull
     {
         get
         {
-            Debug.Assert(Country is null == City is null);
-            return Country is null;
+            Debug.Assert(Country.IsNull == City.IsNull);
+            return Country.IsNull;
         }
     }
 }
