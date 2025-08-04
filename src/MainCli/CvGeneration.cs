@@ -133,25 +133,6 @@ public static class CvTemplate
                     .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)
             }}}
         """;
-
-//             \end{tabularx}
-//             \begin{itemize}[topsep=3pt, partopsep=0pt, itemsep=3pt, parsep=0pt]
-//             {{
-//                 languages
-//                     .Select(lang =>
-//                     {
-//                         return (FormattableString) $$"""
-//                         \item \textbf{ {{ lang.Language.Name }} } — {{ lang.GeneralProficiencyLevel.Value }}
-//                               {{ Symbols.IF(!lang.Skills.IsEmpty) }}({{
-//                                         lang.Skills
-//                                             .Select(skill => skill.Text)
-//                                             .Render(ListItemSeparator)
-//                                     }}){{ Symbols.ENDIF }}
-//                         """;
-//                     })
-//                     .RenderWithLineBreaks()
-//             }}
-//             \end{itemize}
     }
 
     private static readonly RenderEnumerableOptions ListItemSeparator =
