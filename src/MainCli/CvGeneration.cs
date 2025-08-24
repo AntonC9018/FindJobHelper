@@ -243,7 +243,10 @@ public static class CvTemplate
             }
 
             var subItems = subItemsE
-                .Select(x => (FormattableString) $"""\item {x}""")
+                .Select(x => (FormattableString) $"""
+                     \item
+                        {x}
+                     """)
                 .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer);
 
             return (FormattableString) $$"""
