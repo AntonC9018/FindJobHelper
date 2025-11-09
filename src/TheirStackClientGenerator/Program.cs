@@ -135,6 +135,7 @@ sealed class OperationNameGenerator : IOperationNameGenerator
 
 
         ReadOnlySpan<char> category = "";
+        // ReSharper disable once RedundantAssignment
         ReadOnlySpan<char> action = "";
         {
             const string separator = "__";
@@ -289,6 +290,7 @@ public static class OpenApiSchemaPatcher
         var defs = doc.Components.Schemas.Concat(doc.Definitions);
         foreach (var (key, schema) in defs)
         {
+            _ = key;
             if (schema.Type != JsonObjectType.Object)
             {
                 continue;
