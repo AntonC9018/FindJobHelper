@@ -46,10 +46,7 @@ await CvTemplate.Generate(new()
         CategorizedInfos = [
             new(Category.Location, location.FormatInfo()),
             new(Category.Email, personalInfo.Email),
-            new(Category.Phone, Miscellanious.BlurPhone(new()
-            {
-                String = personalInfo.Phone,
-            })),
+            new(Category.Phone, personalInfo.Phone),
         ],
         Profession = new("Backend Software Developer"),
         Educations = [
@@ -104,7 +101,9 @@ await CvTemplate.Generate(new()
                         // number of tags
                         .ThenBy(i => i.Item.Tags.Length)
                         .Select(i => i.Item)
-                        .Take(3);
+                        .TopologicalSort(i => i.MustBeAfter)
+                        .Take(4);
+
                     return new Event
                     {
                         Place = x.Place,
