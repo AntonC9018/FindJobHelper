@@ -92,6 +92,7 @@ await CvTemplate.Generate(new()
         WorkExperiences = [
             .. experienceDatabase.Experiences
                 .Where(x => x.IsJob)
+                .OrderByDescending(x => x.DateRange, DateRangeComparer.ByEnd)
                 .Select(x =>
                 {
                     var items = x.Items
@@ -102,7 +103,7 @@ await CvTemplate.Generate(new()
                         .ThenBy(i => i.Item.Tags.Length)
                         .Select(i => i.Item)
                         .TopologicalSort(i => i.MustBeAfter)
-                        .Take(4);
+                        .Take(2);
 
                     return new Event
                     {

@@ -391,7 +391,7 @@ public readonly record struct DateRange(
     OptionalDateParts Start,
     OptionalDateParts End) : ISpanFormattable
 {
-    public static DateRange Current(OptionalDateParts start)
+    public static DateRange Ongoing(OptionalDateParts start)
     {
         Debug.Assert(!start.IsUnspecified);
         return new(start, OptionalDateParts.Unspecified);
@@ -481,6 +481,85 @@ public readonly record struct DateRange(
             }
             return true;
         }
+    }
+}
+
+public sealed class DateRangeComparer : IComparer<DateRange>
+{
+    private readonly Func<DateRange, OptionalDateParts> _selector;
+
+    private DateRangeComparer(Func<DateRange, OptionalDateParts> selector)
+    {
+        _selector = selector;
+    }
+
+    public static DateRangeComparer ByStart { get; } = new(dr => dr.Start);
+    public static DateRangeComparer ByEnd { get; } = new(dr => dr.End);
+
+    public int Compare(DateRange x, DateRange y)
+    {
+        return CompareDates(_selector(x), _selector(y));
+    }
+
+    private static int CompareDates(OptionalDateParts a, OptionalDateParts b)
+    {
+        // Unspecified dates are considered "greater than" specified dates
+        // (they sort to the end, like ongoing/current dates)
+        if (a.IsUnspecified && b.IsUnspecified)
+        {
+            return 0;
+        }
+        if (a.IsUnspecified)
+        {
+            return 1;
+        }
+        if (b.IsUnspecified)
+        {
+            return -1;
+        }
+
+        // Compare years
+        int yearComparison = a.Year.CompareTo(b.Year);
+        if (yearComparison != 0)
+        {
+            return yearComparison;
+        }
+
+        // Compare months (0 means unspecified, treat as less precise but equal within year)
+        if (a.Month == 0 && b.Month == 0)
+        {
+            return 0;
+        }
+        if (a.Month == 0)
+        {
+            return -1; // Less precise sorts earlier
+        }
+        if (b.Month == 0)
+        {
+            return 1;
+        }
+
+        int monthComparison = a.Month.CompareTo(b.Month);
+        if (monthComparison != 0)
+        {
+            return monthComparison;
+        }
+
+        // Compare days (0 means unspecified)
+        if (a.Day == 0 && b.Day == 0)
+        {
+            return 0;
+        }
+        if (a.Day == 0)
+        {
+            return -1; // Less precise sorts earlier
+        }
+        if (b.Day == 0)
+        {
+            return 1;
+        }
+
+        return a.Day.CompareTo(b.Day);
     }
 }
 
