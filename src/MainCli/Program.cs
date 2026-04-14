@@ -33,7 +33,9 @@ await CvTemplate.Generate(new()
             new(Category.Technologies, [
                 ".NET",
                 "ASP.NET Core",
-                "EF Core",
+                "Blazor",
+                // "EF Core",
+                "ESB",
                 "AWS",
             ]),
             new(Category.GitHub, [
@@ -73,18 +75,18 @@ await CvTemplate.Generate(new()
                 Language.Russian,
                 LanguageProficiencyLevel.Native),
             new(
-                Language.Romanian,
-                LanguageProficiencyLevel.B2,
-                Skills: [
-                    new("Technical Conversation"),
-                    new("Teaching"),
-                ]),
-            new(
                 Language.English,
                 LanguageProficiencyLevel.C2,
                 Skills: [
                     new("Technical Writing & Reading"),
                     new("Conversational Fluency"),
+                ]),
+            new(
+                Language.Romanian,
+                LanguageProficiencyLevel.B2,
+                Skills: [
+                    new("Technical Conversation"),
+                    new("Tutoring"),
                 ]),
         ],
         Location = location,
@@ -95,16 +97,32 @@ await CvTemplate.Generate(new()
                 .OrderByDescending(x => x.DateRange, DateRangeComparer.ByEnd)
                 .Select(x =>
                 {
-                    var items = x.Items
-                        .Select(i => (Item: i, ScoreSum: i.Tags.Sum(t => t.Score)))
-                        // average per tag
-                        .OrderBy(i => (float) i.ScoreSum / i.Item.Tags.Length)
-                        // number of tags
-                        .ThenBy(i => i.Item.Tags.Length)
-                        .Select(i => i.Item)
-                        .TopologicalSort(i => i.MustBeAfter)
-                        .Take(2);
+                    // var items = x.Items
+                    //     .Select(i => (Item: i, ScoreSum: i.Tags.Sum(t => t.Score)))
+                    //     // average per tag
+                    //     .OrderBy(i => (float) i.ScoreSum / i.Item.Tags.Length)
+                    //     // number of tags
+                    //     .ThenBy(i => i.Item.Tags.Length)
+                    //     .Select(i => i.Item)
+                    //     .TopologicalSort(i => i.MustBeAfter)
+                    //     .Take(2);
+                    // var items = x.Items
+                    //     .Select(i => (Item: i, RelevantTags: i.Tags.Where(t =>
+                    //     {
+                    //         return t.Tag.Is(".NET")
+                    //             || t.Tag.Is("AWS")
+                    //             || t.Tag.Is("ASP.NET Core");
+                    //
+                    //     }).ToArray()))
+                    //     .Where(i => i.RelevantTags.Length > 0)
+                    //     .OrderByDescending(i => i.RelevantTags.Sum(t => t.Score))
+                    //     .ThenByDescending(i => i.RelevantTags.Length)
+                    //     .ThenByDescending(i => i.Item.Tags.Length)
+                    //     .Select(i => i.Item)
+                    //     .TopologicalSort(i => i.MustBeAfter)
+                    //     .Take(3);
 
+                    var items = x.Items;
                     return new Event
                     {
                         Place = x.Place,
