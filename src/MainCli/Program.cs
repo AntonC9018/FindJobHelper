@@ -106,23 +106,36 @@ await CvTemplate.Generate(new()
                     //     .Select(i => i.Item)
                     //     .TopologicalSort(i => i.MustBeAfter)
                     //     .Take(2);
-                    // var items = x.Items
-                    //     .Select(i => (Item: i, RelevantTags: i.Tags.Where(t =>
-                    //     {
-                    //         return t.Tag.Is(".NET")
-                    //             || t.Tag.Is("AWS")
-                    //             || t.Tag.Is("ASP.NET Core");
-                    //
-                    //     }).ToArray()))
-                    //     .Where(i => i.RelevantTags.Length > 0)
-                    //     .OrderByDescending(i => i.RelevantTags.Sum(t => t.Score))
-                    //     .ThenByDescending(i => i.RelevantTags.Length)
-                    //     .ThenByDescending(i => i.Item.Tags.Length)
-                    //     .Select(i => i.Item)
-                    //     .TopologicalSort(i => i.MustBeAfter)
-                    //     .Take(3);
 
-                    var items = x.Items;
+                    var tags = experienceDatabase.FindTags(
+                        ".NET",
+                        "AWS",
+                        "ASP.NET Core",
+                        "TypeScript",
+                        "JavaScript",
+                        "UnitTests",
+                        "Tailwind",
+                        "frontend",
+                        "git",
+                        "SqlServer",
+                        "Java");
+                    var items = x.Items
+                        .Select(i => (Item: i, RelevantTags: i.Tags.Where(t =>
+                        {
+                            return t.Tag.Is(".NET")
+                                || t.Tag.Is("AWS")
+                                || t.Tag.Is("ASP.NET Core");
+
+                        }).ToArray()))
+                        .Where(i => i.RelevantTags.Length > 0)
+                        .OrderByDescending(i => i.RelevantTags.Sum(t => t.Score))
+                        .ThenByDescending(i => i.RelevantTags.Length)
+                        .ThenByDescending(i => i.Item.Tags.Length)
+                        .Select(i => i.Item)
+                        .TopologicalSort(i => i.MustBeAfter)
+                        .Take(3);
+
+                    // var items = x.Items;
                     return new Event
                     {
                         Place = x.Place,
