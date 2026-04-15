@@ -1,5 +1,4 @@
 ﻿using System.ClientModel.Primitives;
-using System.Collections.Immutable;
 using System.Text.Json;
 using MainCli;
 using MainCli.Helper;
@@ -16,7 +15,9 @@ await using var serviceProvider = await AppConfiguration.CreateApp(cancellationT
 _ = serviceProvider;
 
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
+// ReSharper disable once RedundantAssignment
 bool isDebug = true;
+// isDebug = false;
 if (isDebug)
 {
     personalInfo.Phone = Miscellanious.BlurPhone(new()
@@ -30,21 +31,23 @@ if (isDebug)
 var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
 var location = new Location(City: "Chișinău", Country: "Moldova");
 var experienceDatabase = ExperienceDatabaseFactory.Create();
+
+var tags = experienceDatabase.WeightedTasks([
+    (".NET", 1.0f),
+    ("ASP.NET Core", 1.0f),
+    ("TypeScript", 0.5f),
+    ("JavaScript", 0.5f),
+    ("Unit Tests", 0.8f),
+    ("Tailwind", 0.2f),
+    ("frontend", 0.5f),
+    ("git", 0.2f),
+    ("SqlServer", 0.8f),
+    ("Java", 1.0f),
+]);
 var searchParams = new SearchParams(
-    Tags: experienceDatabase.WeightedTasks([
-        (".NET", 1.0f),
-        ("ASP.NET Core", 1.0f),
-        ("TypeScript", 0.5f),
-        ("JavaScript", 0.5f),
-        ("Unit Tests", 0.8f),
-        ("Tailwind", 0.2f),
-        ("frontend", 0.5f),
-        ("git", 0.2f),
-        ("SqlServer", 0.8f),
-        ("Java", 1.0f),
-    ]),
-    TotalItemBudget: 10,
-    ScoreLowerBound: 3);
+    Tags: tags,
+    TotalItemBudget: 8,
+    ScoreLowerBound: 4);
 
 await CvTemplate.Generate(new()
 {
@@ -60,10 +63,13 @@ await CvTemplate.Generate(new()
             new(Category.Technologies, [
                 ".NET",
                 "ASP.NET Core",
-                "Blazor",
+                "SQL Server",
+                "TypeScript",
+                "Git",
+                // "Blazor",
                 // "EF Core",
-                "ESB",
-                "AWS",
+                // "ESB",
+                // "AWS",
             ]),
             new(Category.GitHub, [
                 "https://github.com/AntonC9018",

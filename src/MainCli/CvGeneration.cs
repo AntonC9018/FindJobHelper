@@ -303,7 +303,7 @@ public static class CvTemplate
             }
             else
             {
-                ret = $$"""\debugscore{{{score:0.##}}}""";
+                ret = $$"""\debugscore{{{score:0.##}}} """;
             }
             return ret;
         }
