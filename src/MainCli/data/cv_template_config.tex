@@ -61,7 +61,7 @@
 \usepackage[a4paper]{geometry}
 
 % for example, change the margins to 2 inches all round
-\geometry{top=1.25cm, bottom=-.6cm, left=1.5cm, right=1.5cm}
+\geometry{top=1cm, bottom=0.4cm, left=1cm, right=1cm}
 
 %use customized header
 \usepackage{fancyhdr}
@@ -155,7 +155,6 @@
 %
 \newcommand{\cvsection}[1]
 {
-    \needspace{5\baselineskip}
     \begin{center}
         \large\textcolor{sectcol}{\textbf{#1}}
     \end{center}
@@ -259,5 +258,15 @@
   \end{tabularx}
 }
 
+\usepackage{xcolor}
+\newcommand{\debugscore}[1]{\textcolor{red}{#1}}
 
+\usepackage{varwidth}
+\usepackage{environ}
 
+\NewEnviron{flowblock}{%
+    \begin{varwidth}[t]{\linewidth}
+        \BODY
+    \end{varwidth}%
+    \hspace{1em plus 1fill}\allowbreak
+}

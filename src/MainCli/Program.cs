@@ -16,31 +16,39 @@ await using var serviceProvider = await AppConfiguration.CreateApp(cancellationT
 _ = serviceProvider;
 
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
-personalInfo.Phone = Miscellanious.BlurPhone(new()
+bool isDebug = true;
+if (isDebug)
 {
-    String = personalInfo.Phone,
-    MaxVisibleLen = 6,
-    MinVisibleLen = 3,
-});
+    personalInfo.Phone = Miscellanious.BlurPhone(new()
+    {
+        String = personalInfo.Phone,
+        MaxVisibleLen = 6,
+        MinVisibleLen = 3,
+    });
+}
 
 var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
 var location = new Location(City: "Chișinău", Country: "Moldova");
 var experienceDatabase = ExperienceDatabaseFactory.Create();
-var searchParams = new SearchParams(experienceDatabase.WeightedTasks([
-    (".NET", 1.0f),
-    ("ASP.NET Core", 1.0f),
-    ("TypeScript", 0.5f),
-    ("JavaScript", 0.5f),
-    ("Unit Tests", 0.8f),
-    ("Tailwind", 0.2f),
-    ("frontend", 0.5f),
-    ("git", 0.2f),
-    ("SqlServer", 0.8f),
-    ("Java", 1.0f),
-]), TotalItemBudget: 10);
+var searchParams = new SearchParams(
+    Tags: experienceDatabase.WeightedTasks([
+        (".NET", 1.0f),
+        ("ASP.NET Core", 1.0f),
+        ("TypeScript", 0.5f),
+        ("JavaScript", 0.5f),
+        ("Unit Tests", 0.8f),
+        ("Tailwind", 0.2f),
+        ("frontend", 0.5f),
+        ("git", 0.2f),
+        ("SqlServer", 0.8f),
+        ("Java", 1.0f),
+    ]),
+    TotalItemBudget: 10,
+    ScoreLowerBound: 3);
 
 await CvTemplate.Generate(new()
 {
+    IsDebug = isDebug,
     Model = new()
     {
         Name = new()

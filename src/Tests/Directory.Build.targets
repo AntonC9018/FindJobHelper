@@ -1,3 +1,10 @@
 <Project>
     <Import Project="TestReferences.targets" />
+
+    <ItemGroup>
+        <None Include="$(MSBuildThisFileDirectory)data\**\*">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+            <TargetPath>data\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+        </None>
+    </ItemGroup>
 </Project>

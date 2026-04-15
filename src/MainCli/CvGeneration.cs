@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Text.Json.Serialization;
 using CliWrap;
 using CodegenCS;
 using CodegenCS.IO;
@@ -13,6 +14,7 @@ public record struct GenerateParams()
     public required CvDataModel Model;
     public required CancellationToken CancellationToken;
     public bool OpenInOs = false;
+    public bool IsDebug = false;
 }
 
 public static class CvTemplate
@@ -30,9 +32,17 @@ public static class CvTemplate
         writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
         var languages = Languages(p.Model.Languages);
-        var experience = Events(p.Model.WorkExperiences, sectionName: "Experience");
-        var education = Events(p.Model.Educations, "Education");
-        var personalProjects = Events(p.Model.PersonalProjects, sectionName: "Personal Projects") ;
+
+        FormattableString Events1(ImmutableArray<Event> e, string sectionName)
+        {
+            return Events(
+                isDebug: p.IsDebug,
+                sectionName: sectionName,
+                events: e);
+        }
+        var experience = Events1(p.Model.WorkExperiences, "Experience");
+        var education = Events1(p.Model.Educations, "Education");
+        var personalProjects = Events1(p.Model.PersonalProjects, "Personal Projects") ;
         var sections = new List<FormattableString>();
         foreach (var section in p.Model.SectionOrder)
         {
@@ -234,7 +244,10 @@ public static class CvTemplate
         return $"{s}{newExtension}";
     }
 
-    private static FormattableString Events(ImmutableArray<Event> events, string sectionName)
+    private static FormattableString Events(
+        bool isDebug,
+        ImmutableArray<Event> events,
+        string sectionName)
     {
         if (events.Length == 0)
         {
@@ -244,7 +257,7 @@ public static class CvTemplate
         var items = events.Select(e =>
         {
             var subItemsE = e.SubItems
-                .Select(x => (FormattableString) $$"""{{ x }}""");
+                .Select(x => (FormattableString) $$"""{{ Score(x.DebugScore) }}{{ x.String }}""");
 
             if (!e.Urls.IsEmpty)
             {
@@ -262,21 +275,38 @@ public static class CvTemplate
                      """)
                 .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer);
 
-            var place = e.Place.Name == "personal"
+            var place = e.Place.IsPersonal
                 ? ""
                 : e.Place.Name;
 
             return (FormattableString) $$"""
+            {{{ Score(e.DebugScore) }}}
             \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ place }}}{
                 {{ subItems }}}{{{ e.Text }}}
             """;
         });
         var eventsRendered = items.Render(RenderEnumerableOptions.LineBreaksWithSpacer);
         return $$"""
+            \begin{flowblock}
             \cvsection{{{ sectionName }}}
 
             {{ eventsRendered }}
+            \end{flowblock}
         """;
+
+        FormattableString Score(float score)
+        {
+            FormattableString ret;
+            if (!isDebug)
+            {
+                ret = $"";
+            }
+            else
+            {
+                ret = $$"""\debugscore{{{score:0.##}}}""";
+            }
+            return ret;
+        }
     }
 
 
@@ -361,10 +391,13 @@ public record struct Event()
     public required RegularString Title;
     public required Place Place;
     public required DateRange DateRange;
+    public float DebugScore;
     public NullableLatexString Text = NullableLatexString.Null;
-    public ImmutableArray<LatexString> SubItems = [];
+    public ImmutableArray<SubEvent> SubItems = [];
     public ImmutableArray<RegularString> Urls = [];
 }
+
+public readonly record struct SubEvent(float DebugScore, LatexString String);
 
 // public record struct EducationItem()
 // {
@@ -388,15 +421,20 @@ public record struct Event()
 // }
 //
 // public readonly record struct JobResponsibility(LatexString Text);
-public readonly record struct Place(RegularString Name);
+public readonly record struct Place(RegularString Name)
+{
+    public static Place Personal => new("Personal");
+    public bool IsPersonal => Name == "Personal";
+}
 // public readonly record struct JobPosition(string Title);
 
 public readonly record struct OptionalDateParts
 {
-    public readonly int Year;
-    public readonly int Month;
-    public readonly int Day;
+    public readonly int Year { get; }
+    public readonly int Month { get; }
+    public readonly int Day { get; }
 
+    [JsonConstructor]
     public OptionalDateParts(int Year, int Month = 0, int Day = 0)
     {
         Debug.Assert(Month is >= 0 and <= 12);
@@ -415,7 +453,9 @@ public readonly record struct OptionalDateParts
         this.Day = Day;
     }
 
+    [JsonIgnore]
     public static OptionalDateParts Unspecified => default;
+    [JsonIgnore]
     public bool IsUnspecified => Year == 0;
 }
 
