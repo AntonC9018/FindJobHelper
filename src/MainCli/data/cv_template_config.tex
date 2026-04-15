@@ -70,6 +70,8 @@
 %less space between header and content
 \setlength{\headheight}{-5pt}
 
+\usepackage{needspace}
+
 
 %customize entries left, center and right
 %\lhead{}
@@ -153,9 +155,10 @@
 %
 \newcommand{\cvsection}[1]
 {
-	\begin{center}
-		\large\textcolor{sectcol}{\textbf{#1}}
-	\end{center}
+    \needspace{5\baselineskip}
+    \begin{center}
+        \large\textcolor{sectcol}{\textbf{#1}}
+    \end{center}
 }
 
 %create a coloured arrow with title as cv meta section section

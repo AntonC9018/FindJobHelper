@@ -16,10 +16,29 @@ await using var serviceProvider = await AppConfiguration.CreateApp(cancellationT
 _ = serviceProvider;
 
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
+personalInfo.Phone = Miscellanious.BlurPhone(new()
+{
+    String = personalInfo.Phone,
+    MaxVisibleLen = 6,
+    MinVisibleLen = 3,
+});
 
 var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
 var location = new Location(City: "Chișinău", Country: "Moldova");
 var experienceDatabase = ExperienceDatabaseFactory.Create();
+var searchParams = new SearchParams(experienceDatabase.WeightedTasks([
+    (".NET", 1.0f),
+    ("ASP.NET Core", 1.0f),
+    ("TypeScript", 0.5f),
+    ("JavaScript", 0.5f),
+    ("Unit Tests", 0.8f),
+    ("Tailwind", 0.2f),
+    ("frontend", 0.5f),
+    ("git", 0.2f),
+    ("SqlServer", 0.8f),
+    ("Java", 1.0f),
+]), TotalItemBudget: 10);
+
 await CvTemplate.Generate(new()
 {
     Model = new()
@@ -91,61 +110,20 @@ await CvTemplate.Generate(new()
         ],
         Location = location,
         Summary = NullableLatexString.Null,
-        WorkExperiences = [
-            .. experienceDatabase.Experiences
-                .Where(x => x.IsJob)
-                .OrderByDescending(x => x.DateRange, DateRangeComparer.ByEnd)
-                .Select(x =>
-                {
-                    // var items = x.Items
-                    //     .Select(i => (Item: i, ScoreSum: i.Tags.Sum(t => t.Score)))
-                    //     // average per tag
-                    //     .OrderBy(i => (float) i.ScoreSum / i.Item.Tags.Length)
-                    //     // number of tags
-                    //     .ThenBy(i => i.Item.Tags.Length)
-                    //     .Select(i => i.Item)
-                    //     .TopologicalSort(i => i.MustBeAfter)
-                    //     .Take(2);
-
-                    var tags = experienceDatabase.FindTags(
-                        ".NET",
-                        "AWS",
-                        "ASP.NET Core",
-                        "TypeScript",
-                        "JavaScript",
-                        "UnitTests",
-                        "Tailwind",
-                        "frontend",
-                        "git",
-                        "SqlServer",
-                        "Java");
-                    var items = x.Items
-                        .Select(i => (Item: i, RelevantTags: i.Tags.Where(t =>
-                        {
-                            return t.Tag.Is(".NET")
-                                || t.Tag.Is("AWS")
-                                || t.Tag.Is("ASP.NET Core");
-
-                        }).ToArray()))
-                        .Where(i => i.RelevantTags.Length > 0)
-                        .OrderByDescending(i => i.RelevantTags.Sum(t => t.Score))
-                        .ThenByDescending(i => i.RelevantTags.Length)
-                        .ThenByDescending(i => i.Item.Tags.Length)
-                        .Select(i => i.Item)
-                        .TopologicalSort(i => i.MustBeAfter)
-                        .Take(3);
-
-                    // var items = x.Items;
-                    return new Event
-                    {
-                        Place = x.Place,
-                        Title = x.Title,
-                        DateRange = x.DateRange,
-                        SubItems = [.. items.Select(i => i.Text)],
-                        Text = x.Description,
-                        Urls = x.Urls,
-                    };
-                }),
+        WorkExperiences = experienceDatabase.Experiences
+            .Where(x => x.IsJob)
+            .SelectEvents(searchParams),
+        PersonalProjects = experienceDatabase.Experiences
+            .Where(x => !x.IsJob)
+            .SelectEvents(searchParams with
+            {
+                // TotalItemBudget = 5,
+            }),
+        SectionOrder = [
+            Section.WorkExperience,
+            Section.Education,
+            Section.Languages,
+            Section.PersonalProjects,
         ],
     },
     CancellationToken = cancellationToken,

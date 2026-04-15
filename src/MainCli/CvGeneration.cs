@@ -29,8 +29,25 @@ public static class CvTemplate
         writer.CurlyBracesStyle = CodegenTextWriter.CurlyBracesStyleType.C;
         writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
-        writer.Write($$$"""
-        \input{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}
+        var languages = Languages(p.Model.Languages);
+        var experience = Events(p.Model.WorkExperiences, sectionName: "Experience");
+        var education = Events(p.Model.Educations, "Education");
+        var personalProjects = Events(p.Model.PersonalProjects, sectionName: "Personal Projects") ;
+        var sections = new List<FormattableString>();
+        foreach (var section in p.Model.SectionOrder)
+        {
+            sections.Add(section switch
+            {
+                Section.Education => education,
+                Section.Languages => languages,
+                Section.PersonalProjects => personalProjects,
+                Section.WorkExperience => experience,
+                _ => throw null!,
+            });
+        }
+
+        writer.Write($$$$"""
+        \input{{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}}
 
         \begin{document}
 
@@ -39,32 +56,28 @@ public static class CvTemplate
         % Title Headline
         \vspace{-8pt}
         \begin{center}
-            \HUGE \textsc{{{{ p.Model.Name.Last }}} {{{ p.Model.Name.First }}}} \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
-            \small {{{ p.Model.Profession.Value }}}
+            \HUGE \textsc{{{{{ p.Model.Name.Last }}}} {{{{ p.Model.Name.First }}}}} \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
+            \small {{{{ p.Model.Profession.Value }}}}
         \end{center}
 
         \vspace{6pt}
 
-        {{{ MetaLists(p.Model) }}}
+        {{{{ MetaLists(p.Model) }}}}
 
-        {{{ Symbols.IF(!p.Model.Summary.IsNull) }}}
+        {{{{ Symbols.IF(!p.Model.Summary.IsNull) }}}}
         % Summary
         \vspace{-6pt}
         \cvsection{Summary}
 
-        {{{ p.Model.Summary }}}\\
+        {{{{ p.Model.Summary }}}}\\
 
-        {{{ Symbols.ENDIF }}}
+        {{{{ Symbols.ENDIF }}}}
 
         % Main Content
 
-        {{{ Languages(p.Model.Languages) }}}
+        {{{{ sections.Render() }}}}
 
-        {{{ Events(p.Model.WorkExperiences, sectionName: "Experience") }}}
-
-        {{{ Events(p.Model.Educations, "Education") }}}
-
-        {{{ Footer(p.Model) }}}
+        {{{{ Footer(p.Model) }}}}
 
         \end{document}
         """);
@@ -121,17 +134,17 @@ public static class CvTemplate
 
             \languagetable{
             {{
-                languages
-                    .Select(lang =>
-                    {
-                        var skills = lang.Skills
-                            .Select(s => s.Text)
-                            .Render(ListItemSeparator);
+                    languages
+                        .Select(lang =>
+                        {
+                            var skills = lang.Skills
+                                .Select(s => s.Text)
+                                .Render(ListItemSeparator);
 
-                        return (FormattableString) $$"""{{ lang.Language.Name }} & {{ lang.GeneralProficiencyLevel.Value }} & {{ skills }} \\""";
-                    })
-                    .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)
-            }}}
+                            return (FormattableString) $$"""{{ lang.Language.Name }} & {{ lang.GeneralProficiencyLevel.Value }} & {{ skills }} \\""";
+                        })
+                        .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)
+                }}}
         """;
     }
 
@@ -249,8 +262,12 @@ public static class CvTemplate
                      """)
                 .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer);
 
+            var place = e.Place.Name == "personal"
+                ? ""
+                : e.Place.Name;
+
             return (FormattableString) $$"""
-            \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ e.Place.Name }}}{
+            \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ place }}}{
                 {{ subItems }}}{{{ e.Text }}}
             """;
         });
@@ -319,9 +336,24 @@ public sealed class CvDataModel
     public NullableLatexString Summary = NullableLatexString.Null;
     public ImmutableArray<LanguageProficiencyInfo> Languages = ImmutableArray<LanguageProficiencyInfo>.Empty;
     public ImmutableArray<Event> WorkExperiences = ImmutableArray<Event>.Empty;
+    public ImmutableArray<Event> PersonalProjects = ImmutableArray<Event>.Empty;
     public ImmutableArray<Event> Educations = ImmutableArray<Event>.Empty;
+    public ImmutableArray<Section> SectionOrder = [
+        Section.Languages,
+        Section.WorkExperience,
+        Section.Education,
+        Section.PersonalProjects,
+    ];
     public NullableRegularString Website;
     public NullableRegularString GitHub;
+}
+
+public enum Section
+{
+    Languages,
+    WorkExperience,
+    Education,
+    PersonalProjects,
 }
 
 public record struct Event()

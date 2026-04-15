@@ -2,6 +2,7 @@ using System.ClientModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Text.Json;
+using MainCli.Helper;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -86,6 +87,10 @@ internal static class AppConfiguration
             .Bind(config.GetRequiredSection(PersonalInfoOptions.DefaultKey))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        services.Configure<PersonalInfoOptions>(p =>
+        {
+        });
 
         var ret = services.BuildServiceProvider();
         return ValueTask.FromResult(ret);
