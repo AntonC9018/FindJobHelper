@@ -5,6 +5,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
+using MainCli;
 using static RichTextFactory;
 
 public sealed class RichTextFactory
@@ -232,6 +234,15 @@ public sealed class RichTextVisitationMapBuilder
         return this;
     }
 
+    public RichTextVisitationMapBuilder Default<T>()
+    {
+        var x = GetOrAdd<T>();
+        // TODO: Some flag to ensure this.
+        // Maybe add default action flag to validate
+        _ = x;
+        return this;
+    }
+
     public RichTextVisitationMapBuilder DefaultDoNothing<T>()
     {
         return SetDefault<T>((a, b) =>
@@ -242,7 +253,6 @@ public sealed class RichTextVisitationMapBuilder
     }
 
     public RichTextVisitationMapBuilder Override<T>(Visit<T> func)
-        where T : IRichTextNode
     {
         var x = GetOrAdd<T>();
         x.List.Add(func);
@@ -571,4 +581,75 @@ public static class RichTextVisitorDefaults
     }
 
     public static RichTextVisitationMapBuilder CreateBuilder() => Builder.Copy();
+}
+
+
+public static class LatexConverter
+{
+    private sealed class LatexData
+    {
+        public readonly StringBuilder StringBuilder = new();
+    }
+
+    public static LatexString ToLatexString(
+        this RichText richText)
+    {
+        var visitor = VisitationMap.CreateVisitor();
+        var data = new LatexData();
+        visitor.Data.Add(Key, data);
+
+        visitor.Visit(richText);
+
+        return new(data.StringBuilder.ToString());
+    }
+
+    private static Key<LatexData> Key = new(new("Latex"));
+    private static RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
+        .Override<Href>(next => (node, c) =>
+        {
+            var data = c.Data.Get(Key);
+            // needs escaping or no?
+            // might depend on the context.
+            var str = node.Url.ToString();
+            data.StringBuilder.Append($@"\href{{{str}}}{{");
+            next(node, c);
+            data.StringBuilder.Append("}");
+        })
+        .Override<StyledText>(next => (node, c) =>
+        {
+            var data = c.Data.Get(Key);
+            var str = new RegularString(node.Text);
+
+            int indent = 0;
+            foreach (var x in new (StyleFlags Flag, string Label)[]
+                {
+                    (StyleFlags.Bold, "textbf"),
+                    // Might fail, consider verb||
+                    (StyleFlags.Code, "texttt"),
+                    (StyleFlags.Italic, "textit"),
+                })
+            {
+                if (node.Style.HasFlag(x.Flag))
+                {
+                    data.StringBuilder.Append($@"\{x.Label}{{");
+                    indent++;
+                }
+            }
+
+            data.StringBuilder.Append($"{str}");
+
+            next(node, c);
+
+            for (int i = 0; i < indent; i++)
+            {
+                data.StringBuilder.Append("}");
+            }
+        })
+        .Override<PlainText>(next => (node, c) =>
+        {
+            c.Data.Get(Key).StringBuilder.Append(new RegularString(node.Text));
+            next(node, c);
+        })
+        .Default<RichText>()
+        .Build();
 }

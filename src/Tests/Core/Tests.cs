@@ -65,30 +65,26 @@ public sealed class SomeTests
         await Verify(ev);
     }
 
+    private static readonly RichText text = RichText.Create($"""
+    {RichTextFactory.Bold("Hello")} world,
+    {RichTextFactory.Href("https://Test.com", RichTextFactory.Bold("url"))}
+    Regular text
+    """);
+
     [Fact]
     public void RichTextTest()
     {
-        var text = $"""
-        {RichTextFactory.Bold("Hello")} world,
-        {RichTextFactory.Href("https://Test.com", $"{RichTextFactory.Bold("url")}")}
-        Regular text
-        """;
         const string expected = """
         Hello world,
         url
         Regular text
         """;
-        Assert.Equal(expected, text);
+        Assert.Equal(expected, text.ToString());
     }
 
     [Fact]
     public void RichTextTestTreeEqual()
     {
-        var text = RichText.Create($"""
-        {RichTextFactory.Bold("Hello")} world,
-        {RichTextFactory.Href("https://Test.com", RichTextFactory.Bold("url"))}
-        Regular text
-        """);
         var expected = new RichText
         {
             Items = [
@@ -118,6 +114,12 @@ public sealed class SomeTests
         };
         var ret = EqualityCheckVisitor.Compare(text, expected) ?? [];
         Assert.Empty(ret);
+    }
+
+    [Fact]
+    public Task ToLatex()
+    {
+        return Verify(text.ToLatexString().ToString());
     }
 }
 
@@ -215,6 +217,7 @@ public static class EqualityCheckVisitor
         .Compare<Href>((a, b) => a.Url.Equals(b.Url))
         .Compare<PlainText>((a, b) => a.Text.Equals(b.Text))
         .Compare<StyledText>((a, b) => a.Text.Equals(b.Text) && a.Style.Equals(b.Style))
+        .Default<RichText>()
         .Build();
 
 
