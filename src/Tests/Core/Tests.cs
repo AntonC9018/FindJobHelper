@@ -66,7 +66,7 @@ public sealed class SomeTests
     }
 
     private static readonly RichText text = RichText.Create($"""
-    {RichTextFactory.Bold("Hello")} world,
+    {RichTextFactory.Styled("Hello", StyleFlags.Code | StyleFlags.Italic)} world,
     {RichTextFactory.Href("https://Test.com", RichTextFactory.Bold("url"))}
     Regular text
     """);
@@ -90,7 +90,7 @@ public sealed class SomeTests
             Items = [
                 new StyledText
                 {
-                    Style = StyleFlags.Bold,
+                    Style = StyleFlags.Italic | StyleFlags.Code,
                     Text = "Hello",
                 },
                 new PlainText
@@ -120,6 +120,12 @@ public sealed class SomeTests
     public Task ToLatex()
     {
         return Verify(text.ToLatexString().ToString());
+    }
+
+    [Fact]
+    public Task ToMarkdown()
+    {
+        return Verify(text.ToMarkdownString());
     }
 }
 

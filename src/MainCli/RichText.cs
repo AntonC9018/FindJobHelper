@@ -581,43 +581,39 @@ public static class RichTextVisitorDefaults
     }
 
     public static RichTextVisitationMapBuilder CreateBuilder() => Builder.Copy();
+    public static readonly Key<StringBuilder> OutputKey = new(new("Output"));
 }
 
 
 public static class LatexConverter
 {
-    private sealed class LatexData
-    {
-        public readonly StringBuilder StringBuilder = new();
-    }
-
     public static LatexString ToLatexString(
         this RichText richText)
     {
         var visitor = VisitationMap.CreateVisitor();
-        var data = new LatexData();
-        visitor.Data.Add(Key, data);
+        var data = new StringBuilder();
+        visitor.Data.Add(RichTextVisitorDefaults.OutputKey, data);
 
         visitor.Visit(richText);
 
-        return new(data.StringBuilder.ToString());
+        return new(data.ToString());
     }
+    private static Key<StringBuilder> Key => RichTextVisitorDefaults.OutputKey;
 
-    private static Key<LatexData> Key = new(new("Latex"));
     private static RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
         .Override<Href>(next => (node, c) =>
         {
-            var data = c.Data.Get(Key);
+            var sb = c.Data.Get(Key);
             // needs escaping or no?
             // might depend on the context.
             var str = node.Url.ToString();
-            data.StringBuilder.Append($@"\href{{{str}}}{{");
+            sb.Append($@"\href{{{str}}}{{");
             next(node, c);
-            data.StringBuilder.Append("}");
+            sb.Append("}");
         })
         .Override<StyledText>(next => (node, c) =>
         {
-            var data = c.Data.Get(Key);
+            var sb = c.Data.Get(Key);
             var str = new RegularString(node.Text);
 
             int indent = 0;
@@ -631,23 +627,89 @@ public static class LatexConverter
             {
                 if (node.Style.HasFlag(x.Flag))
                 {
-                    data.StringBuilder.Append($@"\{x.Label}{{");
+                    sb.Append($@"\{x.Label}{{");
                     indent++;
                 }
             }
 
-            data.StringBuilder.Append($"{str}");
+            sb.Append($"{str}");
 
             next(node, c);
 
             for (int i = 0; i < indent; i++)
             {
-                data.StringBuilder.Append("}");
+                sb.Append("}");
             }
         })
         .Override<PlainText>(next => (node, c) =>
         {
-            c.Data.Get(Key).StringBuilder.Append(new RegularString(node.Text));
+            // Won't escape by default??
+            c.Data.Get(Key).Append(new RegularString(node.Text));
+            next(node, c);
+        })
+        .Default<RichText>()
+        .Build();
+}
+
+public static class MarkdownConverter
+{
+    public static string ToMarkdownString(
+        this RichText richText)
+    {
+        var visitor = VisitationMap.CreateVisitor();
+        var sb = new StringBuilder();
+        visitor.Data.Add(Key, sb);
+
+        visitor.Visit(richText);
+
+        return sb.ToString();
+    }
+
+    private static Key<StringBuilder> Key = RichTextVisitorDefaults.OutputKey;
+    private static RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
+        .Override<Href>(next => (node, c) =>
+        {
+            var sb = c.Data.Get(Key);
+            sb.Append("[");
+            next(node, c);
+            var str = node.Url.ToString();
+            sb.Append($"]({str})");
+        })
+        .Override<StyledText>(next => (node, c) =>
+        {
+            var sb = c.Data.Get(Key);
+
+            void InsertChars(bool reverse)
+            {
+                var chars = new (StyleFlags Flag, string Label)[]
+                {
+                    (StyleFlags.Bold, "**"),
+                    // Might fail, consider verb||
+                    (StyleFlags.Italic, "*"),
+                    (StyleFlags.Code, "`"),
+                };
+                if (reverse)
+                {
+                    Array.Reverse(chars);
+                }
+                foreach (var x in chars)
+                {
+                    if (node.Style.HasFlag(x.Flag))
+                    {
+                        sb.Append(x.Label);
+                    }
+                }
+            }
+
+            InsertChars(reverse: false);
+            // TODO: escape
+            sb.Append($"{node.Text}");
+            next(node, c);
+            InsertChars(reverse: true);
+        })
+        .Override<PlainText>(next => (node, c) =>
+        {
+            c.Data.Get(Key).Append(node.Text);
             next(node, c);
         })
         .Default<RichText>()
