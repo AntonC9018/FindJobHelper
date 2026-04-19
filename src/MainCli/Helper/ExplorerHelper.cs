@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace ReaderApp.Helper;
+namespace FindJobHelper.Core.Helper;
 
 public static class ExplorerHelper
 {

@@ -1,12 +1,14 @@
 ﻿using System.ClientModel.Primitives;
 using System.Text.Json;
+using FindJobHelper.Core;
+using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
 using MainCli;
-using MainCli.Helper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OpenAI.Models;
 using TheirStack;
-using Location = MainCli.Location;
+using Location = FindJobHelper.CVGeneration.Location;
 
 #pragma warning disable CS8321 // Local function is declared but never used
 
@@ -30,11 +32,11 @@ if (isDebug)
 
 var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
 var location = new Location(City: "Chișinău", Country: "Moldova");
-var (tags, tagsDatabase) = TagDatabaseFactory.Create();
+var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
 _ = tagsDatabase;
 var experienceDatabase = ExperienceDatabaseFactory.Create(tags);
 
-var weightedTags = tagsDatabase.WeightedTasks([
+var weightedTags = tagsDatabase.Weighted([
     (".NET", 1.0f),
     ("ASP.NET Core", 1.0f),
     ("TypeScript", 0.5f),

@@ -7,7 +7,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
-using MainCli;
+
+namespace FindJobHelper.Core.Helper;
 using static RichTextFactory;
 
 public sealed class RichTextFactory
@@ -610,73 +611,6 @@ public static class RichTextVisitorDefaults
     public static readonly Key<StringBuilder> OutputKey = new(new("Output"));
 }
 
-
-public static class LatexConverter
-{
-    public static LatexString ToLatexString(
-        this RichText richText)
-    {
-        var visitor = VisitationMap.CreateVisitor();
-        visitor.AddOutput();
-        visitor.Visit(richText);
-        return new(visitor.GetOutput().ToString());
-    }
-
-    private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
-        .Override<Href>(next => (node, c) =>
-        {
-            var sb = c.GetOutput();
-            var str = new LatexEscapedString(node.Url.ToString());
-            sb.Append($@"\href{{{str}}}{{");
-            next(node, c);
-            sb.Append("}");
-        })
-        .Override<StyledText>(next => (node, c) =>
-        {
-            var sb = c.GetOutput();
-            var str = new LatexEscapedString(node.Text);
-
-            int indent = 0;
-            foreach (var x in new (StyleFlags Flag, string Label)[]
-                {
-                    (StyleFlags.Bold, "textbf"),
-                    // Might fail, consider verb||
-                    (StyleFlags.Code, "texttt"),
-                    (StyleFlags.Italic, "textit"),
-                })
-            {
-                if (node.Style.HasFlag(x.Flag))
-                {
-                    sb.Append($@"\{x.Label}{{");
-                    indent++;
-                }
-            }
-
-            sb.Append($"{str}");
-
-            next(node, c);
-
-            for (int i = 0; i < indent; i++)
-            {
-                sb.Append("}");
-            }
-        })
-        .Override<PlainText>(next => (node, c) =>
-        {
-            var sb = c.GetOutput();
-            AppendEscapedString(sb, node.Text);
-            next(node, c);
-        })
-        .Default<RichText>()
-        .Build();
-
-    private static void AppendEscapedString(StringBuilder sb, string str)
-    {
-        var latexStr = new LatexEscapedString(str);
-        sb.Append($"{latexStr}");
-    }
-
-}
 
 public static class MarkdownConverter
 {

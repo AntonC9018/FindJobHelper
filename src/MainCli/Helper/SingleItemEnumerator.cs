@@ -1,5 +1,7 @@
 using System.Collections;
 
+namespace FindJobHelper.Core.Helper;
+
 public sealed class SingleItemEnumerator<T> : IEnumerator<T>
 {
     private T? _item;

@@ -1,5 +1,11 @@
-public sealed class Tags<T>
+using FindJobHelper.Core;
+
+namespace MainCli;
+
+public sealed class Tags<T> : KnownTags<T>
 {
+    public Tags<U> Map<U>(Func<T, U> f) => (Tags<U>) MapImpl(f);
+
     public required T programming { get; init; }
     public required T dotnet { get; init; }
     public required T go { get; init; }
@@ -53,20 +59,9 @@ public sealed class Tags<T>
     public required T vue { get; init; }
     public required T css { get; init; }
     public required T jquery { get; init; }
-
-    public Tags<U> Map<U>(Func<T, U> f)
-    {
-        var retType = typeof(Tags<U>);
-        var ret = Activator.CreateInstance(retType);
-        foreach (var prop in this.GetType().GetProperties())
-        {
-            prop.SetValue(ret, f((T) prop.GetValue(this)!));
-        }
-        return (Tags<U>) ret!;
-    }
 }
 
-public static class TagDatabaseFactory
+public static class TagsDatabaseFactory
 {
     public static (Tags<Tag> Tags, TagsDatabase TagsDatabase) Create()
     {
@@ -129,41 +124,41 @@ public static class TagDatabaseFactory
             programming = db.Tag("Programming"),
         };
 
-        t.dotnet.Overlaps(t.nswag).By(0.05f).WhichOverlaps().By(0.4f);
-        t.dotnet.Overlaps(t.aspnet).By(0.1f).WhichOverlaps().By(0.3f);
-        t.dotnet.Overlaps(t.cpp).By(0.2f).WhichOverlaps().By(0.2f);
-        t.dotnet.Overlaps(t.designPatterns).By(0.2f).WhichOverlaps().By(0.75f);
-        t.dotnet.Overlaps(t.efCore).By(0.1f).WhichOverlaps().By(0.8f);
-        t.dotnet.Overlaps(t.fluentValidation).By(0.1f).WhichOverlaps().By(0.9f);
-        t.dotnet.Overlaps(t.gameProgramming).By(0.15f).WhichOverlaps().By(0.2f);
-        t.dotnet.Overlaps(t.hotChocolate).By(0.05f).WhichOverlaps().By(0.2f);
-        t.dotnet.Overlaps(t.java).By(0.4f).WhichOverlaps().By(0.4f);
-        t.dotnet.Overlaps(t.linq2db).By(0.1f).WhichOverlaps().By(0.8f);
-        t.dotnet.Overlaps(t.mediator).By(0.1f).WhichOverlaps().By(0.95f);
-        t.dotnet.Overlaps(t.typeScript).By(0.2f).WhichOverlaps().By(0.25f);
+        t.dotnet.OverlapsWith(t.nswag).By(0.05f).WhichOverlaps().By(0.4f);
+        t.dotnet.OverlapsWith(t.aspnet).By(0.1f).WhichOverlaps().By(0.3f);
+        t.dotnet.OverlapsWith(t.cpp).By(0.2f).WhichOverlaps().By(0.2f);
+        t.dotnet.OverlapsWith(t.designPatterns).By(0.2f).WhichOverlaps().By(0.75f);
+        t.dotnet.OverlapsWith(t.efCore).By(0.1f).WhichOverlaps().By(0.8f);
+        t.dotnet.OverlapsWith(t.fluentValidation).By(0.1f).WhichOverlaps().By(0.9f);
+        t.dotnet.OverlapsWith(t.gameProgramming).By(0.15f).WhichOverlaps().By(0.2f);
+        t.dotnet.OverlapsWith(t.hotChocolate).By(0.05f).WhichOverlaps().By(0.2f);
+        t.dotnet.OverlapsWith(t.java).By(0.4f).WhichOverlaps().By(0.4f);
+        t.dotnet.OverlapsWith(t.linq2db).By(0.1f).WhichOverlaps().By(0.8f);
+        t.dotnet.OverlapsWith(t.mediator).By(0.1f).WhichOverlaps().By(0.95f);
+        t.dotnet.OverlapsWith(t.typeScript).By(0.2f).WhichOverlaps().By(0.25f);
 
-        t.dotnet.Overlaps(t.programming).By(0.25f).WhichOverlaps().Fully();
-        t.cpp.Overlaps(t.programming).By(0.2f).WhichOverlaps().Fully();
-        t.typeScript.Overlaps(t.programming).By(0.3f).WhichOverlaps().Fully();
-        t.java.Overlaps(t.programming).By(0.3f).WhichOverlaps().Fully();
-        t.javaScript.Overlaps(t.programming).By(0.4f).WhichOverlaps().Fully();
-        t.d.Overlaps(t.programming).By(0.25f).WhichOverlaps().Fully();
-        t.python.Overlaps(t.programming).By(0.3f).WhichOverlaps().Fully();
+        t.dotnet.OverlapsWith(t.programming).By(0.25f).WhichOverlaps().Fully();
+        t.cpp.OverlapsWith(t.programming).By(0.2f).WhichOverlaps().Fully();
+        t.typeScript.OverlapsWith(t.programming).By(0.3f).WhichOverlaps().Fully();
+        t.java.OverlapsWith(t.programming).By(0.3f).WhichOverlaps().Fully();
+        t.javaScript.OverlapsWith(t.programming).By(0.4f).WhichOverlaps().Fully();
+        t.d.OverlapsWith(t.programming).By(0.25f).WhichOverlaps().Fully();
+        t.python.OverlapsWith(t.programming).By(0.3f).WhichOverlaps().Fully();
 
-        t.javaScript.Overlaps(t.typeScript).Fully().WhichOverlaps().By(0.3f);
+        t.javaScript.OverlapsWith(t.typeScript).Fully().WhichOverlaps().By(0.3f);
 
-        t.hotChocolate.Overlaps(t.graphql).By(0.7f).WhichOverlaps().By(0.9f);
-        t.openApi.Overlaps(t.nswag).By(0.9f).WhichOverlaps().By(0.6f);
-        t.restApi.Overlaps(t.aspnet).By(0.8f).WhichOverlaps().By(0.15f);
+        t.hotChocolate.OverlapsWith(t.graphql).By(0.7f).WhichOverlaps().By(0.9f);
+        t.openApi.OverlapsWith(t.nswag).By(0.9f).WhichOverlaps().By(0.6f);
+        t.restApi.OverlapsWith(t.aspnet).By(0.8f).WhichOverlaps().By(0.15f);
 
-        t.typeScript.Overlaps(t.frontend).By(0.4f).WhichOverlaps().By(0.15f);
-        t.javaScript.Overlaps(t.frontend).By(0.7f).WhichOverlaps().By(0.07f);
+        t.typeScript.OverlapsWith(t.frontend).By(0.4f).WhichOverlaps().By(0.15f);
+        t.javaScript.OverlapsWith(t.frontend).By(0.7f).WhichOverlaps().By(0.07f);
         // build tools
-        t.vite.Overlaps(t.frontend).By(0.75f).WhichOverlaps().By(0.05f);
-        t.restApi.Overlaps(t.frontend).By(0.35f).WhichOverlaps().By(0.04f);
+        t.vite.OverlapsWith(t.frontend).By(0.75f).WhichOverlaps().By(0.05f);
+        t.restApi.OverlapsWith(t.frontend).By(0.35f).WhichOverlaps().By(0.04f);
         // dom manipulation
-        t.jquery.Overlaps(t.frontend).By(0.95f).WhichOverlaps().By(0.05f);
-        t.vue.Overlaps(t.frontend).By(0.7f).WhichOverlaps().By(0.15f);
+        t.jquery.OverlapsWith(t.frontend).By(0.95f).WhichOverlaps().By(0.05f);
+        t.vue.OverlapsWith(t.frontend).By(0.7f).WhichOverlaps().By(0.15f);
 
         var r = db.Build();
         if (r.Errors != null)

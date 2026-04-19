@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace MainCli;
+namespace FindJobHelper.Core.Helper;
 
 public readonly struct Repeat : ISpanFormattable
 {

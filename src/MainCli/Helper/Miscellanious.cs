@@ -1,4 +1,4 @@
-namespace MainCli.Helper;
+namespace FindJobHelper.Core.Helper;
 
 public record struct BlurParams()
 {
@@ -6,6 +6,7 @@ public record struct BlurParams()
     public int MaxVisibleLen = 5;
     public int MinVisibleLen = 5;
 }
+
 public static class Miscellanious
 {
     public static string BlurPhone(BlurParams p)

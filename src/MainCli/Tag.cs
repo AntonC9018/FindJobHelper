@@ -1,8 +1,11 @@
-using System.Collections;
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace FindJobHelper.Core;
 
 public readonly record struct Tag : IEquatable<Tag>
 {
@@ -24,7 +27,9 @@ public readonly record struct Tag : IEquatable<Tag>
     }
 }
 
-public readonly record struct TagLink(Tag Tag, OverlapScore Score);
+public readonly record struct TagRelation(
+    Tag OtherTag,
+    OverlapScore PercentageOfSelfIncludedInTheOtherTag);
 
 public readonly struct Builders
 {
@@ -69,7 +74,7 @@ public readonly struct TagBuilderOtherClause(Builders b)
 
     public void By(float score)
     {
-        b.Other.Overlaps(b.Self).By(score);
+        b.Other.OverlapsWith(b.Self).By(score);
     }
 }
 
@@ -94,6 +99,7 @@ public readonly record struct OverlapScore : ISpanFormattable
     public static OverlapScore Full => new(1.0f);
 
     public string ToString(string? format, IFormatProvider? formatProvider) => $"{this}";
+    public override string ToString() => $"{this}";
 
     public bool TryFormat(
         Span<char> destination,
@@ -102,11 +108,6 @@ public readonly record struct OverlapScore : ISpanFormattable
         IFormatProvider? provider)
     {
         return destination.TryWrite(provider, $"{Value}", out charsWritten);
-    }
-
-    public override string ToString()
-    {
-        return $"{nameof(Value)}: {Value}";
     }
 }
 
@@ -120,14 +121,14 @@ public sealed class TagBuilder
     public List<TagBuilderLink> _OverlapsWithArray { get; } = new();
 
     // a.Overlaps(b).By(0.9f) means 10% of a is not in b, 90% is
-    public TagBuilderOverlapClause Overlaps(TagBuilder other)
+    public TagBuilderOverlapClause OverlapsWith(TagBuilder other)
     {
         return new(new(this, other));
     }
 
     public void SameAs(TagBuilder other)
     {
-        Overlaps(other).Fully().WhichOverlaps().Fully();
+        OverlapsWith(other).Fully().WhichOverlaps().Fully();
     }
 }
 
@@ -136,6 +137,59 @@ public enum MissingOverlapBehavior
     Error,
     UseMinimum,
 }
+
+
+public abstract record class TagsDatabaseCreationError
+{
+}
+
+public sealed record class DifferentOverlapSpecifiedSecondTime : TagsDatabaseCreationError
+{
+    public required Tag TagA { get; init; }
+    public required Tag TagB { get; init; }
+    public required OverlapScore ExistingScore { get; init; }
+    public required OverlapScore NewScore { get; init; }
+
+    public override string ToString()
+    {
+        return $"Link '{TagA.Name}' to '{TagB.Name}' different score specified for the second time ({NewScore}, not {ExistingScore})";
+    }
+}
+
+public readonly record struct TagPath(
+    Tag A,
+    Tag B,
+    Tag C,
+    OverlapScore AB,
+    OverlapScore BC,
+    OverlapScore AC);
+
+public sealed record class TransitiveImplicationError : TagsDatabaseCreationError
+{
+    public required TagPath TagPath { get; init; }
+    public required OverlapScore MinAC { get; init; }
+
+    public override string ToString()
+    {
+        var x = TagPath;
+        return $"{x.A}->{x.B}:{x.AB}' -> '{x.B}->{x.C}:{x.BC}', '{x.A}->{x.C}:{x.AC}' must be at least {MinAC}, but was {x.AC}";
+    }
+}
+
+public sealed record class NotEnoughInformationToImplyInclusionTransitively : TagsDatabaseCreationError
+{
+    public required Tag TagA { get; init; }
+    public required Tag TagB { get; init; }
+
+    public override string ToString()
+    {
+        return $"There is not enough information to imply the inclusion of tag '{TagA}' into '{TagB}'";
+    }
+}
+
+public readonly record struct TagsDatabaseCreateResult(
+    List<TagsDatabaseCreationError>? Errors,
+    TagsDatabase? Database);
 
 public sealed class TagsDatabaseBuilder
 {
@@ -178,7 +232,7 @@ public sealed class TagsDatabaseBuilder
         OverlapScore BC,
         OverlapScore CB)
     {
-        public Path GetPath(Node a, Node b, Node c)
+        public TagPath GetPath(Node a, Node b, Node c)
         {
             if (a == b || b == c || a == c)
             {
@@ -226,15 +280,7 @@ public sealed class TagsDatabaseBuilder
         C,
     }
 
-    private readonly record struct Path(
-        Tag A,
-        Tag B,
-        Tag C,
-        OverlapScore AB,
-        OverlapScore BC,
-        OverlapScore AC);
-
-    private struct OverlapDict(int count)
+    private readonly struct OverlapDict(int count)
     {
         public static OverlapScore NoneValue => new(-1);
         private readonly Dictionary<Tag, OverlapScore> _impl = new(count);
@@ -252,28 +298,55 @@ public sealed class TagsDatabaseBuilder
 
         public bool ContainsKey(Tag key) => _impl.ContainsKey(key);
         public void Add(Tag key, OverlapScore value) => _impl.Add(key, value);
+
+        public void Clear() => _impl.Clear();
+        public bool IsEmpty => _impl.Count == 0;
     }
 
     private struct BuilderContext(int tagCount)
     {
-        public List<string>? Errors = null;
-        public void AddError(string err) => (Errors ??= new()).Add(err);
-        public (List<string> Errors, TagsDatabase? Database)? ErrorReturn()
+        private List<TagsDatabaseCreationError>? _errors = null;
+        public void AddError(TagsDatabaseCreationError err)
         {
-            if (Errors is null)
+            (_errors ??= new()).Add(err);
+        }
+
+        public TagsDatabaseCreateResult? ErrorReturn()
+        {
+            if (_errors is null)
             {
                 return null;
             }
-            return (Errors, null);
+            return new(_errors, null);
         }
 
         public readonly Dictionary<Tag, OverlapDict> Overlaps = new(tagCount);
         public readonly Dictionary<Tag, OverlapDict> NewMaxMinOverlaps = new(tagCount);
+
+        public void ClearNewMaxMin()
+        {
+            foreach (var x in NewMaxMinOverlaps)
+            {
+                x.Value.Clear();
+            }
+        }
+        public bool MinMaxChanged()
+        {
+            foreach (var x in NewMaxMinOverlaps)
+            {
+                if (!x.Value.IsEmpty)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public readonly List<Tag> AllKeys = new(tagCount);
     }
 
-    public (List<string>? Errors, TagsDatabase? Database) Build(
-        MissingOverlapBehavior missingBehavior = MissingOverlapBehavior.Error)
+    public TagsDatabaseCreateResult Build(
+        MissingOverlapBehavior missingBehavior = MissingOverlapBehavior.UseMinimum)
     {
         var context = new BuilderContext(_allTags.Count);
 
@@ -281,7 +354,7 @@ public sealed class TagsDatabaseBuilder
 
         foreach (var a in context.AllKeys)
         {
-            context.NewMaxMinOverlaps.Add(a, new());
+            context.NewMaxMinOverlaps.Add(a, new(0));
         }
 
         foreach (var a in context.AllKeys)
@@ -298,7 +371,13 @@ public sealed class TagsDatabaseBuilder
                 {
                     if (score != x.PercentageOfSelfIncludedInTheOtherTag)
                     {
-                        context.AddError($"Link '{a.Name}' to '{b.Name}' different score specified for the second time ({x.PercentageOfSelfIncludedInTheOtherTag.Value}, not {score.Value})");
+                        context.AddError(new DifferentOverlapSpecifiedSecondTime
+                        {
+                            ExistingScore = score,
+                            NewScore = x.PercentageOfSelfIncludedInTheOtherTag,
+                            TagA = a,
+                            TagB = b,
+                        });
                     }
                 }
                 else
@@ -308,18 +387,6 @@ public sealed class TagsDatabaseBuilder
             }
         }
 
-        // Make sure if a is connected to b, b is connected to a.
-        // foreach (var (a, anodes) in context.Overlaps)
-        // {
-        //     foreach (var b in anodes.Keys)
-        //     {
-        //         if (!context.Overlaps[b].ContainsKey(a))
-        //         {
-        //             context.Errors.Add($"Link '{a.Name}' to '{b.Name}' specified, but the reverse link is not.");
-        //         }
-        //     }
-        // }
-
         {
             if (context.ErrorReturn() is { } e)
             {
@@ -328,7 +395,7 @@ public sealed class TagsDatabaseBuilder
         }
 
         var combos = Combos();
-        while (context.NewMaxMinOverlaps.Count != 0)
+        while (true)
         {
             // ReSharper disable once PossibleMultipleEnumeration
             foreach (var x in combos)
@@ -345,31 +412,64 @@ public sealed class TagsDatabaseBuilder
                 Handle(x.GetPath(c, b, a));
             }
 
+            bool minMaxChanged = context.MinMaxChanged();
+            if (minMaxChanged)
             {
-                if (context.ErrorReturn() is { } e)
+                foreach (var x in context.NewMaxMinOverlaps)
                 {
-                    return e;
+                    var nodes = context.Overlaps[x.Key];
+                    foreach (var y in x.Value)
+                    {
+                        Debug.Assert(!nodes.ContainsKey(y.Key));
+                        nodes.Add(y.Key, y.Value);
+                    }
+                }
+                context.ClearNewMaxMin();
+            }
+
+            {
+                if (context.ErrorReturn() is { })
+                {
+                    break;
                 }
             }
 
-            foreach (var x in context.NewMaxMinOverlaps)
+            if (!minMaxChanged)
             {
-                var nodes = context.Overlaps[x.Key];
-                foreach (var y in x.Value)
+                break;
+            }
+        }
+
+        // Make sure if a is connected to b, b is connected to a.
+        foreach (var (a, anodes) in context.Overlaps)
+        {
+            foreach (var b in anodes.Keys)
+            {
+                if (!context.Overlaps[b].ContainsKey(a))
                 {
-                    Debug.Assert(!nodes.ContainsKey(y.Key));
-                    nodes.Add(y.Key, y.Value);
+                    context.AddError(new NotEnoughInformationToImplyInclusionTransitively
+                    {
+                        TagA = a,
+                        TagB = b,
+                    });
                 }
+            }
+        }
+
+        {
+            if (context.ErrorReturn() is { } e)
+            {
+                return e;
             }
         }
 
         var graph = Ret().ToFrozenDictionary();
         var ret = new TagsDatabase(graph);
-        return (null, ret);
+        return new(null, ret);
 
-        IEnumerable<KeyValuePair<Tag, ImmutableArray<TagLink>>> Ret()
+        IEnumerable<KeyValuePair<Tag, Relations>> Ret()
         {
-            var builder = ImmutableArray.CreateBuilder<TagLink>();
+            var builder = ImmutableArray.CreateBuilder<TagRelation>();
             foreach (var x in context.Overlaps)
             {
                 foreach (var val in x.Value)
@@ -378,13 +478,13 @@ public sealed class TagsDatabaseBuilder
                 }
 
                 var arr = builder.ToImmutable();
-                yield return new(x.Key, arr);
+                yield return new(x.Key, new(arr));
 
                 builder.Clear();
             }
         }
 
-        void Handle(Path x)
+        void Handle(TagPath x)
         {
             var minac = MinAC(x.AB, x.BC);
             if (minac == OverlapDict.NoneValue)
@@ -404,7 +504,7 @@ public sealed class TagsDatabaseBuilder
                 }
                 case MissingOverlapBehavior.UseMinimum:
                 {
-                    if (x.AC == default)
+                    if (x.AC == OverlapDict.NoneValue)
                     {
                         ref var v = ref context.NewMaxMinOverlaps[x.A].GetValueRefOrAddDefault(x.C, out bool exists);
                         if (!exists || minac.Value > v.Value)
@@ -426,7 +526,11 @@ public sealed class TagsDatabaseBuilder
 
             void TransitivityError()
             {
-                context.AddError($"Through transitivity of '{x.A}->{x.B}:{x.AB}' -> '{x.B}->{x.C}:{x.BC}', '{x.A}->{x.C}:{x.AC}' must be at least {minac}, but was {x.AC}");
+                context.AddError(new TransitiveImplicationError
+                {
+                    MinAC = minac,
+                    TagPath = x,
+                });
             }
         }
 
@@ -533,50 +637,91 @@ public sealed class TagsDatabaseBuilder
     }
 }
 
+public readonly struct Relations
+{
+    private readonly ImmutableArray<TagRelation> _impl;
+    public Relations(ImmutableArray<TagRelation> impl)
+    {
+        _impl = impl;
+    }
+
+    public OverlapScore GetOverlapWith(Tag tag)
+    {
+        foreach (var x in _impl)
+        {
+            if (x.OtherTag == tag)
+            {
+                return x.PercentageOfSelfIncludedInTheOtherTag;
+            }
+        }
+        return default;
+    }
+
+    public ImmutableArray<TagRelation>.Enumerator GetEnumerator() => _impl.GetEnumerator();
+}
+
 public sealed class TagsDatabase
 {
-    public FrozenDictionary<Tag, ImmutableArray<TagLink>> TagsGraph { get; }
+    public FrozenDictionary<Tag, Relations> TagsGraph { get; }
 
-    public TagsDatabase(FrozenDictionary<Tag, ImmutableArray<TagLink>> tagsGraph)
+    public TagsDatabase(FrozenDictionary<Tag, Relations> tagsGraph)
     {
         TagsGraph = tagsGraph;
     }
+}
+
+public readonly record struct TagNode(Tag Tag, Relations Relations)
+{
+    public static implicit operator Tag(TagNode self) => self.Tag;
 }
 
 public static class TagsDatabaseExtensions
 {
     extension (TagsDatabase self)
     {
-        public WeightedTags WeightedTasks(ReadOnlySpan<(string Tag, float Weight)> inputs)
+        public WeightedTags Weighted(ReadOnlySpan<(string Tag, float Weight)> inputs)
         {
             var ret = new WeightedTags();
             foreach (var t in inputs)
             {
-                var tag = self.FindTag(t.Tag);
+                var tag = self.Find(t.Tag).Tag;
                 ret.Add(tag, t.Weight);
             }
-            return ret;
-        }
-
-        public List<Tag> FindTags(params ReadOnlySpan<string> text)
-        {
-            var ret = new List<Tag>();
-            foreach (var t in text)
+            // explore connections
+            foreach (var t in inputs)
             {
-                var tag = self.FindTag(t);
-                ret.Add(tag);
+                var tag = new Tag(t.Tag);
+                foreach (var link in self.RelationsOf(tag))
+                {
+                    var ab = link.PercentageOfSelfIncludedInTheOtherTag.Value;
+                    var candidate = ab * t.Weight;
+                    ref var x = ref CollectionsMarshal.GetValueRefOrAddDefault(ret, link.OtherTag, out bool exists);
+                    if (!exists || x < candidate)
+                    {
+                        x = candidate;
+                    }
+                }
             }
             return ret;
         }
 
-        public Tag FindTag(string text)
+        public Relations RelationsOf(Tag tag)
         {
-            var ret = new Tag(text);
-            if (!self.TagsGraph.TryGetValue(ret, out _))
+            if (!self.TagsGraph.TryGetValue(tag, out var x))
+            {
+                throw new InvalidOperationException($"Not found tag {tag}");
+            }
+            return x;
+        }
+
+        public TagNode Find(string text)
+        {
+            var tag = new Tag(text);
+            if (!self.TagsGraph.TryGetValue(tag, out var x))
             {
                 throw new InvalidOperationException($"Not found tag {text}");
             }
-            return ret;
+            return new(tag, x);
         }
     }
 
@@ -597,5 +742,57 @@ public static class TagsDatabaseExtensions
                 }
             }
         }
+    }
+}
+
+public static class TagDatabaseSerializer
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        ReferenceHandler = ReferenceHandler.Preserve,
+    };
+
+    extension (TagsDatabase db)
+    {
+        public async Task Serialize(Stream output, CancellationToken cancellationToken)
+        {
+            await JsonSerializer.SerializeAsync(
+                options: Options,
+                value: db,
+                utf8Json: output,
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    public static async Task<TagsDatabase> Deserialize(Stream input, CancellationToken cancellationToken)
+    {
+        var ret = await JsonSerializer.DeserializeAsync<TagsDatabase>(
+            options: Options,
+            utf8Json: input,
+            cancellationToken: cancellationToken);
+        if (ret == null)
+        {
+            throw new InvalidOperationException("File did not contain a db object.");
+        }
+        return ret;
+    }
+}
+
+public abstract class KnownTags<T>
+{
+    protected KnownTags<U> MapImpl<U>(Func<T, U> f)
+    {
+        var retType = GetType().GetGenericTypeDefinition().MakeGenericType(typeof(U));
+        var ret = Activator.CreateInstance(retType);
+        var source = this.GetType().GetProperties();
+        var target = retType.GetProperties();
+        int len = source.Length;
+        for (int i = 0; i < len; i++)
+        {
+            var val = f((T) source[i].GetValue(this)!);
+            target[i].SetValue(ret, val);
+        }
+        return (KnownTags<U>) ret!;
     }
 }

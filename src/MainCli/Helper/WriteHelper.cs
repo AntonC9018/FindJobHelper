@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace MainCli;
+namespace FindJobHelper.Core.Helper;
 
 internal readonly ref struct WriteHelper
 {

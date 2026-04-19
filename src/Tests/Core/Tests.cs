@@ -1,18 +1,20 @@
 using System.Diagnostics;
-using System.Diagnostics.SymbolStore;
+using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
+using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
 public sealed class SomeTests
 {
-    private static FileStream GetDbFile(CancellationToken ct)
+    private static FileStream GetDbFile()
     {
-        var input = new FileStream("data/db.json", FileMode.Open, FileAccess.Read);
+        var input = new FileStream("data/experience.json", FileMode.Open, FileAccess.Read);
         return input;
     }
     private static async Task<ExperienceDatabase> GetDb(CancellationToken ct)
     {
-        await using var input = GetDbFile(ct);
+        await using var input = GetDbFile();
         var ret = await ExperienceDatabaseSerializer.Deserialize(input, ct);
         return ret;
     }
@@ -21,7 +23,7 @@ public sealed class SomeTests
     {
         var ct = CancellationToken.None;
 
-        var input = GetDbFile(ct);
+        var input = GetDbFile();
         var prev = await ExperienceDatabaseSerializer.Deserialize(input, ct);
 
         using var memStream = new MemoryStream();
@@ -44,9 +46,10 @@ public sealed class SomeTests
     {
         var ct = CancellationToken.None;
         var db = await GetDb(ct);
+        var tags = TagsDatabaseFactory.Create().TagsDatabase;
 
         var searchParams = new SearchParams(
-            Tags: db.WeightedTasks([
+            Tags: tags.Weighted([
                 (".NET", 1.0f),
                 ("ASP.NET Core", 1.0f),
                 ("TypeScript", 0.5f),
