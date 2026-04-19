@@ -664,6 +664,8 @@ public readonly record struct LanguageSkill(RegularString Text)
 {
 }
 
+// NOTE: Cannot make the parameter ReadOnlySpan<char>,
+// for some reason ref struct is not supported in interpolation?
 public readonly record struct LatexEscapedString(string Value) : ISpanFormattable
 {
     public override string ToString() => $"{this}";
@@ -682,6 +684,11 @@ public readonly record struct LatexEscapedString(string Value) : ISpanFormattabl
         IFormatProvider? provider)
     {
         charsWritten = 0;
+        if (destination.Length < Value.Length)
+        {
+            return false;
+        }
+
         var helper = new WriteHelper(destination, ref charsWritten);
         foreach (var ch in Value)
         {

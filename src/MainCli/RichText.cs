@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections;
 using System.Collections.Frozen;
 using System.Collections.Immutable;
@@ -33,6 +34,14 @@ public sealed class RichTextFactory
     public static StyledText Code(string text)
     {
         return Styled(text, StyleFlags.Code);
+    }
+
+    public static Href Href(string url, string rt)
+    {
+        return Href(url, new PlainText
+        {
+            Text = rt,
+        });
     }
 
     public static Href Href(string url, RichTextInterpolatedStringHandler rt)
@@ -572,6 +581,23 @@ public static class RichTextVisitorDefaults
         // })
         ;
 
+
+    extension (RichTextVisitor visitor)
+    {
+        public StringBuilder GetOutput()
+        {
+            return visitor.Data.Get(OutputKey);
+        }
+
+        public StringBuilder AddOutput()
+        {
+            var x = new StringBuilder();
+            visitor.Data.Add(OutputKey, x);
+            return x;
+        }
+    }
+
+
     private static IEnumerator<IRichTextNode> GetChildren(RichText rt)
     {
         foreach (var x in rt.Items)
@@ -591,30 +617,24 @@ public static class LatexConverter
         this RichText richText)
     {
         var visitor = VisitationMap.CreateVisitor();
-        var data = new StringBuilder();
-        visitor.Data.Add(RichTextVisitorDefaults.OutputKey, data);
-
+        visitor.AddOutput();
         visitor.Visit(richText);
-
-        return new(data.ToString());
+        return new(visitor.GetOutput().ToString());
     }
-    private static Key<StringBuilder> Key => RichTextVisitorDefaults.OutputKey;
 
-    private static RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
+    private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
         .Override<Href>(next => (node, c) =>
         {
-            var sb = c.Data.Get(Key);
-            // needs escaping or no?
-            // might depend on the context.
-            var str = node.Url.ToString();
+            var sb = c.GetOutput();
+            var str = new LatexEscapedString(node.Url.ToString());
             sb.Append($@"\href{{{str}}}{{");
             next(node, c);
             sb.Append("}");
         })
         .Override<StyledText>(next => (node, c) =>
         {
-            var sb = c.Data.Get(Key);
-            var str = new RegularString(node.Text);
+            var sb = c.GetOutput();
+            var str = new LatexEscapedString(node.Text);
 
             int indent = 0;
             foreach (var x in new (StyleFlags Flag, string Label)[]
@@ -643,12 +663,19 @@ public static class LatexConverter
         })
         .Override<PlainText>(next => (node, c) =>
         {
-            // Won't escape by default??
-            c.Data.Get(Key).Append(new RegularString(node.Text));
+            var sb = c.GetOutput();
+            AppendEscapedString(sb, node.Text);
             next(node, c);
         })
         .Default<RichText>()
         .Build();
+
+    private static void AppendEscapedString(StringBuilder sb, string str)
+    {
+        var latexStr = new LatexEscapedString(str);
+        sb.Append($"{latexStr}");
+    }
+
 }
 
 public static class MarkdownConverter
@@ -657,19 +684,15 @@ public static class MarkdownConverter
         this RichText richText)
     {
         var visitor = VisitationMap.CreateVisitor();
-        var sb = new StringBuilder();
-        visitor.Data.Add(Key, sb);
-
+        visitor.AddOutput();
         visitor.Visit(richText);
-
-        return sb.ToString();
+        return visitor.GetOutput().ToString();
     }
 
-    private static Key<StringBuilder> Key = RichTextVisitorDefaults.OutputKey;
-    private static RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
+    private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
         .Override<Href>(next => (node, c) =>
         {
-            var sb = c.Data.Get(Key);
+            var sb = c.GetOutput();
             sb.Append("[");
             next(node, c);
             var str = node.Url.ToString();
@@ -677,7 +700,7 @@ public static class MarkdownConverter
         })
         .Override<StyledText>(next => (node, c) =>
         {
-            var sb = c.Data.Get(Key);
+            var sb = c.GetOutput();
 
             void InsertChars(bool reverse)
             {
@@ -703,15 +726,45 @@ public static class MarkdownConverter
 
             InsertChars(reverse: false);
             // TODO: escape
-            sb.Append($"{node.Text}");
+            AppendEscapedString(sb, node.Text);
             next(node, c);
             InsertChars(reverse: true);
         })
         .Override<PlainText>(next => (node, c) =>
         {
-            c.Data.Get(Key).Append(node.Text);
+            var sb = c.GetOutput();
+            AppendEscapedString(sb, node.Text);
             next(node, c);
         })
         .Default<RichText>()
         .Build();
+
+    private static readonly SearchValues<char> _escapedChars = SearchValues.Create(@"\`*_{}[]()#+-.!|>");
+    private static void AppendEscapedString(StringBuilder sb, ReadOnlySpan<char> str)
+    {
+        var current = str;
+        while (true)
+        {
+            // if (current.Length == 0)
+            // {
+            //     break;
+            // }
+
+            var until = current.IndexOfAny(_escapedChars);
+            if (until == -1)
+            {
+                sb.Append(current);
+                break;
+            }
+
+            var part = current[.. until];
+            sb.Append(part);
+
+            const char escapeChar = '\\';
+            sb.Append(escapeChar);
+            sb.Append(current[until]);
+
+            current = current[(until + 1) ..];
+        }
+    }
 }
