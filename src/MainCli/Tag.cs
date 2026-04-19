@@ -47,7 +47,7 @@ public readonly struct TagBuilderOverlapClause(Builders b)
     public TagBuilderOtherClauseStart By(float score)
     {
         var s = OverlapScore.Create(score);
-        b.Self.OverlapsWith.Add(new(b.Other, s));
+        b.Self._OverlapsWithArray.Add(new(b.Other, s));
         return new(b);
     }
 }
@@ -117,7 +117,7 @@ public readonly record struct TagBuilderLink(
 public sealed class TagBuilder
 {
     public required string Name { get; init; }
-    public List<TagBuilderLink> OverlapsWith { get; } = new();
+    public List<TagBuilderLink> _OverlapsWithArray { get; } = new();
 
     // a.Overlaps(b).By(0.9f) means 10% of a is not in b, 90% is
     public TagBuilderOverlapClause Overlaps(TagBuilder other)
@@ -286,7 +286,7 @@ public sealed class TagsDatabaseBuilder
 
         foreach (var a in context.AllKeys)
         {
-            var value = _allTags[a].OverlapsWith;
+            var value = _allTags[a]._OverlapsWithArray;
             var dict = new OverlapDict(value.Count);
             context.Overlaps.Add(a, dict);
 

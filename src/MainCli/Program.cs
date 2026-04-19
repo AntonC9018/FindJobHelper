@@ -30,22 +30,23 @@ if (isDebug)
 
 var configFullPath = Path.GetFullPath("data/cv_template_config.tex");
 var location = new Location(City: "Chișinău", Country: "Moldova");
-var experienceDatabase = ExperienceDatabaseFactory.Create();
+var (tags, tagsDatabase) = TagDatabaseFactory.Create();
+_ = tagsDatabase;
+var experienceDatabase = ExperienceDatabaseFactory.Create(tags);
 
-var tags = experienceDatabase.WeightedTasks([
+var weightedTags = tagsDatabase.WeightedTasks([
     (".NET", 1.0f),
     ("ASP.NET Core", 1.0f),
     ("TypeScript", 0.5f),
     ("JavaScript", 0.5f),
     ("Unit Tests", 0.8f),
     ("Tailwind", 0.2f),
-    ("frontend", 0.5f),
     ("git", 0.2f),
     ("SqlServer", 0.8f),
     ("Java", 1.0f),
 ]);
 var searchParams = new SearchParams(
-    Tags: tags,
+    Tags: weightedTags,
     TotalItemBudget: 8,
     ScoreLowerBound: 4);
 
