@@ -7,8 +7,8 @@ public sealed class TagsTests
     {
         var (tags, db) = CreateOkTags(tags =>
         {
-            tags.b.OverlapsWith(tags.a).By(0.9f).WhichOverlaps().By(0.9f);
-            tags.c.OverlapsWith(tags.b).By(0.9f).WhichOverlaps().By(0.9f);
+            tags.b.IsIncludedIn(tags.a).By(0.9f).WhichIsIncludedInIt().By(0.9f);
+            tags.c.IsIncludedIn(tags.b).By(0.9f).WhichIsIncludedInIt().By(0.9f);
         });
         _ = db;
 
@@ -20,7 +20,7 @@ public sealed class TagsTests
     {
         var (tags, errors) = Errors(tags =>
         {
-            tags.a.OverlapsWith(tags.b).By(0.9f);
+            tags.a.IsIncludedIn(tags.b).By(0.9f);
         });
         var err = Assert.Single(errors);
         Assert.Equal(new NotEnoughInformationToImplyInclusionTransitively

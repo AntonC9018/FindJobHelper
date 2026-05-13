@@ -18,8 +18,9 @@ _ = serviceProvider;
 
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
 // ReSharper disable once RedundantAssignment
-bool isDebug = true;
-// isDebug = false;
+bool isDebug;
+// isDebug = true;
+isDebug = false;
 if (isDebug)
 {
     personalInfo.Phone = Miscellanious.BlurPhone(new()
@@ -51,6 +52,7 @@ var searchParams = new SearchParams(
     Tags: weightedTags,
     TotalItemBudget: 8,
     ScoreLowerBound: 4);
+_ = searchParams;
 
 await CvTemplate.Generate(new()
 {
@@ -129,13 +131,17 @@ await CvTemplate.Generate(new()
         Summary = NullableLatexString.Null,
         WorkExperiences = experienceDatabase.Experiences
             .Where(x => x.IsJob)
-            .SelectEvents(searchParams),
+            .AllEvents()
+            // .SelectEvents(searchParams)
+        ,
         PersonalProjects = experienceDatabase.Experiences
             .Where(x => !x.IsJob)
-            .SelectEvents(searchParams with
-            {
-                // TotalItemBudget = 5,
-            }),
+            .AllEvents()
+            // .SelectEvents(searchParams with
+            // {
+            //     // TotalItemBudget = 5,
+            // })
+        ,
         SectionOrder = [
             Section.WorkExperience,
             Section.Education,

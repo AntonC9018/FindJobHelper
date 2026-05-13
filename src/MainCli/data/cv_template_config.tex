@@ -196,10 +196,7 @@
   \def\temp{#1}%
   \ifx\temp\empty
   \else
-    \noindent
-    \begin{minipage}{\dimexpr\linewidth-1em}
-      \hspace{1.5em}#1
-    \end{minipage}
+    \par\hspace{1.5em}#1\par
   \fi
 }
 
@@ -265,8 +262,11 @@
 \usepackage{environ}
 
 \NewEnviron{flowblock}{%
-    \begin{varwidth}[t]{\linewidth}
-        \BODY
-    \end{varwidth}%
-    \hspace{1em plus 1fill}\allowbreak
+    \BODY\par
 }
+% \NewEnviron{flowblock}{%
+%     \begin{varwidth}[t]{\linewidth}
+%         \BODY
+%     \end{varwidth}%
+%     \hspace{1em plus 1fill}\allowbreak
+% }

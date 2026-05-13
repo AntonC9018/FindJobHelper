@@ -25,6 +25,8 @@ public readonly record struct Tag : IEquatable<Tag>
     {
         return Name.Equals(other.Name, StringComparison.OrdinalIgnoreCase);
     }
+
+    public override string ToString() => Name;
 }
 
 public readonly record struct TagRelation(
@@ -59,7 +61,7 @@ public readonly struct TagBuilderOverlapClause(Builders b)
 
 public readonly struct TagBuilderOtherClauseStart(Builders b)
 {
-    public TagBuilderOtherClause WhichOverlaps()
+    public TagBuilderOtherClause WhichIsIncludedInIt()
     {
         return new(b);
     }
@@ -74,7 +76,7 @@ public readonly struct TagBuilderOtherClause(Builders b)
 
     public void By(float score)
     {
-        b.Other.OverlapsWith(b.Self).By(score);
+        b.Other.IsIncludedIn(b.Self).By(score);
     }
 }
 
@@ -121,14 +123,14 @@ public sealed class TagBuilder
     public List<TagBuilderLink> _OverlapsWithArray { get; } = new();
 
     // a.Overlaps(b).By(0.9f) means 10% of a is not in b, 90% is
-    public TagBuilderOverlapClause OverlapsWith(TagBuilder other)
+    public TagBuilderOverlapClause IsIncludedIn(TagBuilder other)
     {
         return new(new(this, other));
     }
 
     public void SameAs(TagBuilder other)
     {
-        OverlapsWith(other).Fully().WhichOverlaps().Fully();
+        IsIncludedIn(other).Fully().WhichIsIncludedInIt().Fully();
     }
 }
 
@@ -441,20 +443,20 @@ public sealed class TagsDatabaseBuilder
         }
 
         // Make sure if a is connected to b, b is connected to a.
-        foreach (var (a, anodes) in context.Overlaps)
-        {
-            foreach (var b in anodes.Keys)
-            {
-                if (!context.Overlaps[b].ContainsKey(a))
-                {
-                    context.AddError(new NotEnoughInformationToImplyInclusionTransitively
-                    {
-                        TagA = a,
-                        TagB = b,
-                    });
-                }
-            }
-        }
+        // foreach (var (a, anodes) in context.Overlaps)
+        // {
+        //     foreach (var b in anodes.Keys)
+        //     {
+        //         if (!context.Overlaps[b].ContainsKey(a))
+        //         {
+        //             context.AddError(new NotEnoughInformationToImplyInclusionTransitively
+        //             {
+        //                 TagA = a,
+        //                 TagB = b,
+        //             });
+        //         }
+        //     }
+        // }
 
         {
             if (context.ErrorReturn() is { } e)
@@ -492,11 +494,21 @@ public sealed class TagsDatabaseBuilder
                 return;
             }
 
+            bool Less(OverlapScore a, OverlapScore b)
+            {
+                float err = 0.0001f;
+                if (a.Value + err < b.Value)
+                {
+                    return true;
+                }
+                return false;
+            }
+
             switch (missingBehavior)
             {
                 case MissingOverlapBehavior.Error:
                 {
-                    if (x.AC.Value < minac.Value)
+                    if (Less(x.AC, minac))
                     {
                         TransitivityError();
                     }
@@ -512,7 +524,7 @@ public sealed class TagsDatabaseBuilder
                             v = minac;
                         }
                     }
-                    else if (x.AC.Value < minac.Value)
+                    else if (Less(x.AC, minac))
                     {
                         TransitivityError();
                     }
