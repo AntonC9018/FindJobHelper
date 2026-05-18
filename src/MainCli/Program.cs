@@ -38,21 +38,42 @@ _ = tagsDatabase;
 var experienceDatabase = ExperienceDatabaseFactory.Create(tags);
 
 var weightedTags = tagsDatabase.Weighted([
-    (".NET", 1.0f),
-    ("ASP.NET Core", 1.0f),
-    ("TypeScript", 0.5f),
-    ("JavaScript", 0.5f),
-    ("Unit Tests", 0.8f),
-    ("Tailwind", 0.2f),
-    ("git", 0.2f),
-    ("SqlServer", 0.8f),
-    ("Java", 1.0f),
+    (tags.dotnet, 1.0f),
+    (tags.restApi, 1.0f),
+    (tags.xml, 1.0f),
+    (tags.json, 1.0f),
+    (tags.sql, 1.0f),
+    (tags.designPatterns, 1.0f),
+    (tags.blazor, 0.5f),
+    (tags.webforms, 0.5f),
+    (tags.efCore, 0.5f),
+    (tags.docker, 0.5f),
 ]);
 var searchParams = new SearchParams(
     Tags: weightedTags,
-    TotalItemBudget: 8,
-    ScoreLowerBound: 4);
+    TotalItemBudget: 10,
+    ScoreLowerBound: 4f);
+var searchParamsPersonal = searchParams with
+{
+    TotalItemBudget = 10,
+};
+string[] technologies = [
+    ".NET",
+    "ASP.NET Core",
+    "SQL",
+    "EF Core",
+    "Docker",
+    // "SQL Server",
+    // "TypeScript",
+    // "Git",
+    // "Blazor",
+    // "EF Core",
+    // "ESB",
+    // "AWS",
+];
+
 _ = searchParams;
+_ = searchParamsPersonal;
 
 await CvTemplate.Generate(new()
 {
@@ -65,17 +86,7 @@ await CvTemplate.Generate(new()
             Last = "Curmanschii",
         },
         CategorizedInfoLists = [
-            new(Category.Technologies, [
-                ".NET",
-                "ASP.NET Core",
-                "SQL Server",
-                "TypeScript",
-                "Git",
-                // "Blazor",
-                // "EF Core",
-                // "ESB",
-                // "AWS",
-            ]),
+            new(Category.Technologies, [.. technologies]),
             new(Category.GitHub, [
                 "https://github.com/AntonC9018",
             ]),
@@ -131,21 +142,18 @@ await CvTemplate.Generate(new()
         Summary = NullableLatexString.Null,
         WorkExperiences = experienceDatabase.Experiences
             .Where(x => x.IsJob)
-            .AllEvents()
-            // .SelectEvents(searchParams)
+            // .AllEvents()
+            .SelectEvents(searchParams)
         ,
         PersonalProjects = experienceDatabase.Experiences
             .Where(x => !x.IsJob)
-            .AllEvents()
-            // .SelectEvents(searchParams with
-            // {
-            //     // TotalItemBudget = 5,
-            // })
+            // .AllEvents()
+            .SelectEvents(searchParamsPersonal)
         ,
         SectionOrder = [
+            Section.Languages,
             Section.WorkExperience,
             Section.Education,
-            Section.Languages,
             Section.PersonalProjects,
         ],
     },

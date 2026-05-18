@@ -210,9 +210,14 @@
 %
 \newcommand{\cvevent}[5]
 {
-
 \begin{tabular*}{1\textwidth}{p{13.6cm}  x{3.9cm}}
-	\textbf{#2} - \textcolor{bgcol}{#3} &   \vspace{2.5pt}\textcolor{sectcol}{#1}
+    \textbf{#2}%
+    \if\relax\detokenize{#3}\relax
+    \else
+        \ - \textcolor{bgcol}{#3}%
+    \fi
+    &
+    \vspace{2.5pt}\textcolor{sectcol}{#1}
 \end{tabular*}
 
 \vspace{-8pt}
@@ -258,15 +263,59 @@
 \usepackage{xcolor}
 \newcommand{\debugscore}[1]{\textcolor{red}{#1}}
 
-\usepackage{varwidth}
-\usepackage{environ}
-
-\NewEnviron{flowblock}{%
-    \BODY\par
-}
+% \usepackage{varwidth}
+% \usepackage{environ}
+%
+% \NewEnviron{flowblock}{%
+%     \BODY\par
+% }
 % \NewEnviron{flowblock}{%
 %     \begin{varwidth}[t]{\linewidth}
 %         \BODY
 %     \end{varwidth}%
 %     \hspace{1em plus 1fill}\allowbreak
 % }
+\usepackage{varwidth}
+\usepackage{needspace}
+\usepackage{environ}
+\newsavebox{\flowbox}
+\newlength{\flowheight}
+
+\NewEnviron{flowblock}{%
+    \par
+
+    % Measure content
+    \sbox{\flowbox}{%
+        \begin{varwidth}{\linewidth}
+            \BODY
+        \end{varwidth}
+    }%
+
+    \setlength{\flowheight}{%
+        \dimexpr\ht\flowbox+\dp\flowbox\relax
+    }
+
+    % Remaining vertical space on current page
+    \dimen0=\dimexpr\pagegoal-\pagetotal\relax
+
+    % If it fits here:
+    \ifdim\flowheight<\dimen0
+        \addvspace{\dimexpr\parskip + 1\baselineskip\relax}
+    \else
+        % If moving to next page, add larger top spacing
+        \newpage
+        \vspace*{1.5\baselineskip}
+    \fi
+
+    % Large blocks become breakable
+    \ifdim\flowheight>\textheight
+        \BODY
+    \else
+        \usebox{\flowbox}
+    \fi
+
+    \par
+
+    \hspace{1em plus 1fill}\allowbreak
+}
+

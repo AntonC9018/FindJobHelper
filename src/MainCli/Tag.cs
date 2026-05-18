@@ -693,6 +693,16 @@ public static class TagsDatabaseExtensions
     {
         public WeightedTags Weighted(ReadOnlySpan<(string Tag, float Weight)> inputs)
         {
+            var converted = new(Tag Tag, float Weight)[inputs.Length];
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                converted[i] = (new Tag(inputs[i].Tag), inputs[i].Weight);
+            }
+            return self.Weighted(converted);
+        }
+
+        public WeightedTags Weighted(ReadOnlySpan<(Tag Tag, float Weight)> inputs)
+        {
             var ret = new WeightedTags();
             foreach (var t in inputs)
             {
@@ -702,8 +712,7 @@ public static class TagsDatabaseExtensions
             // explore connections
             foreach (var t in inputs)
             {
-                var tag = new Tag(t.Tag);
-                foreach (var link in self.RelationsOf(tag))
+                foreach (var link in self.RelationsOf(t.Tag))
                 {
                     var ab = link.PercentageOfSelfIncludedInTheOtherTag.Value;
                     var candidate = ab * t.Weight;
@@ -726,14 +735,19 @@ public static class TagsDatabaseExtensions
             return x;
         }
 
+        public TagNode Find(Tag tag)
+        {
+            if (!self.TagsGraph.TryGetValue(tag, out var x))
+            {
+                throw new InvalidOperationException($"Not found tag {tag.Name}");
+            }
+            return new(tag, x);
+        }
+
         public TagNode Find(string text)
         {
             var tag = new Tag(text);
-            if (!self.TagsGraph.TryGetValue(tag, out var x))
-            {
-                throw new InvalidOperationException($"Not found tag {text}");
-            }
-            return new(tag, x);
+            return self.Find(tag);
         }
     }
 

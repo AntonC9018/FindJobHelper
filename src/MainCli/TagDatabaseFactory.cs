@@ -14,6 +14,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T cpp { get; init; }
     public required T python { get; init; }
     public required T designPatterns { get; init; }
+    public required T xml { get; init; }
     public required T webScraping { get; init; }
     public required T teachingSkill { get; init; }
     public required T openApi { get; init; }
@@ -40,6 +41,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T mysql { get; init; }
     public required T aws { get; init; }
     public required T docker { get; init; }
+    public required T cicd { get; init; }
     public required T openGl { get; init; }
     public required T graphics { get; init; }
     public required T linux { get; init; }
@@ -67,6 +69,15 @@ public sealed class Tags<T> : KnownTags<T>
     public required T ugui { get; init; }
     public required T grpc { get; init; }
     public required T protobuf { get; init; }
+    public required T azure { get; init; }
+    public required T neon { get; init; }
+    public required T backend { get; init; }
+    public required T microservices { get; init; }
+    public required T json { get; init; }
+    public required T docx { get; init; }
+    public required T blazor { get; init; }
+    public required T webforms { get; init; }
+    public required T aspnetmvc { get; init; }
 }
 
 public static class TagsDatabaseFactory
@@ -138,6 +149,17 @@ public static class TagsDatabaseFactory
             uiToolkit = db.Tag("UI Toolkit"),
             grpc = db.Tag("GRPC"),
             protobuf = db.Tag("protobuf"),
+            azure = db.Tag("Azure"),
+            neon = db.Tag("Neon"),
+            backend = db.Tag("Backend"),
+            microservices = db.Tag("microservices"),
+            cicd = db.Tag("CI/CD"),
+            xml = db.Tag("XML"),
+            json = db.Tag("JSON"),
+            docx = db.Tag("DOCX"),
+            blazor = db.Tag("Blazor"),
+            webforms = db.Tag("WebForms"),
+            aspnetmvc = db.Tag("ASP.NET MVC"),
         };
 
         t.dotnet.IsIncludedIn(t.nswag).By(0.05f).WhichIsIncludedInIt().By(0.4f);
@@ -160,6 +182,7 @@ public static class TagsDatabaseFactory
         t.javaScript.IsIncludedIn(t.programming).By(0.4f).WhichIsIncludedInIt().Fully();
         t.d.IsIncludedIn(t.programming).By(0.25f).WhichIsIncludedInIt().Fully();
         t.python.IsIncludedIn(t.programming).By(0.3f).WhichIsIncludedInIt().Fully();
+        t.go.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().Fully();
 
         t.javaScript.IsIncludedIn(t.typeScript).Fully().WhichIsIncludedInIt().By(0.3f);
 
@@ -192,6 +215,41 @@ public static class TagsDatabaseFactory
 
         t.grpc.IsIncludedIn(t.protobuf).By(0.2f).WhichIsIncludedInIt().Fully();
 
+        t.azure.IsIncludedIn(t.aws).By(0.8f).WhichIsIncludedInIt().By(0.8f);
+
+        t.sql.IsIncludedIn(t.sqlServer).Fully().WhichIsIncludedInIt().By(0.4f);
+        t.sql.IsIncludedIn(t.postgres).Fully().WhichIsIncludedInIt().By(0.3f);
+        t.sql.IsIncludedIn(t.mysql).Fully().WhichIsIncludedInIt().By(0.5f);
+
+        t.sqlServer.IsIncludedIn(t.postgres).By(0.5f).WhichIsIncludedInIt().By(0.35f);
+        t.sqlServer.IsIncludedIn(t.mysql).By(0.5f).WhichIsIncludedInIt().By(0.5f);
+        t.sql.IsIncludedIn(t.efCore).By(0.7f).WhichIsIncludedInIt().By(0.3f);
+
+        t.backend.IsIncludedIn(t.go).By(0.2f).WhichIsIncludedInIt().By(0.2f);
+        t.backend.IsIncludedIn(t.grpc).By(0.05f).WhichIsIncludedInIt().By(0.35f);
+        t.backend.IsIncludedIn(t.aspnet).By(0.2f).WhichIsIncludedInIt().By(0.6f);
+        t.backend.IsIncludedIn(t.sql).By(0.15f).WhichIsIncludedInIt().By(0.9f);
+        t.backend.IsIncludedIn(t.restApi).By(0.21f).WhichIsIncludedInIt().By(0.5f);
+        t.backend.IsIncludedIn(t.graphql).By(0.15f).WhichIsIncludedInIt().By(0.2f);
+        t.backend.IsIncludedIn(t.openApi).By(0.10f).WhichIsIncludedInIt().By(0.8f);
+        t.backend.IsIncludedIn(t.nodejs).By(0.10f).WhichIsIncludedInIt().By(0.45f);
+
+        t.backend.IsIncludedIn(t.microservices).By(0.1f).WhichIsIncludedInIt().By(0.8f);
+
+        foreach (var cloudProvider in new[] { t.aws, t.azure })
+        {
+            t.cicd.IsIncludedIn(cloudProvider).By(0.9f).WhichIsIncludedInIt().By(0.2f);
+        }
+
+        t.json.IsIncludedIn(t.javaScript).Fully().WhichIsIncludedInIt().By(0.1f);
+        t.json.IsIncludedIn(t.typeScript).Fully().WhichIsIncludedInIt().By(0.05f);
+        t.json.IsIncludedIn(t.xml).By(0.2f).WhichIsIncludedInIt().By(0.1f);
+        t.xml.IsIncludedIn(t.msBuild).Fully().WhichIsIncludedInIt().By(0.1f);
+        t.xml.IsIncludedIn(t.docx).Fully().WhichIsIncludedInIt().By(0.05f);
+        t.xml.IsIncludedIn(t.excel).Fully().WhichIsIncludedInIt().By(0.08f);
+
+        t.aspnetmvc.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.10f);
+        // avalonia
 
         var r = db.Build();
         if (r.Errors != null)
