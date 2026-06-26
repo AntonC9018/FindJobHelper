@@ -30,6 +30,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T security { get; init; }
     public required T fluentValidation { get; init; }
     public required T excel { get; init; }
+    public required T csv { get; init; }
     public required T mediator { get; init; }
     public required T unitTests { get; init; }
     public required T linq2db { get; init; }
@@ -160,6 +161,7 @@ public static class TagsDatabaseFactory
             blazor = db.Tag("Blazor"),
             webforms = db.Tag("WebForms"),
             aspnetmvc = db.Tag("ASP.NET MVC"),
+            csv = db.Tag("CSV"),
         };
 
         t.dotnet.IsIncludedIn(t.nswag).By(0.05f).WhichIsIncludedInIt().By(0.4f);

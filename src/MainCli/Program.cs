@@ -39,31 +39,29 @@ var experienceDatabase = ExperienceDatabaseFactory.Create(tags);
 
 var weightedTags = tagsDatabase.Weighted([
     (tags.dotnet, 1.0f),
-    (tags.restApi, 1.0f),
-    (tags.xml, 1.0f),
-    (tags.json, 1.0f),
+    (tags.restApi, 0.6f),
     (tags.sql, 1.0f),
-    (tags.designPatterns, 1.0f),
-    (tags.blazor, 0.5f),
-    (tags.webforms, 0.5f),
-    (tags.efCore, 0.5f),
-    (tags.docker, 0.5f),
+    (tags.sqlServer, 0.8f),
+    (tags.aws, 0.2f),
+    (tags.azure, 0.2f),
 ]);
 var searchParams = new SearchParams(
     Tags: weightedTags,
-    TotalItemBudget: 10,
-    ScoreLowerBound: 4f);
+    TotalItemBudget: 8,
+    ScoreLowerBound: 4.5f);
 var searchParamsPersonal = searchParams with
 {
-    TotalItemBudget = 10,
+    TotalItemBudget = 3,
+    ScoreLowerBound = 1f,
 };
 string[] technologies = [
     ".NET",
     "ASP.NET Core",
-    "SQL",
-    "EF Core",
-    "Docker",
-    // "SQL Server",
+    // "SQL",
+    // "EF Core",
+    // "Docker",
+    "SQL Server",
+    // "ADO.NET",
     // "TypeScript",
     // "Git",
     // "Blazor",
@@ -147,14 +145,15 @@ await CvTemplate.Generate(new()
         ,
         PersonalProjects = experienceDatabase.Experiences
             .Where(x => !x.IsJob)
+            .Where(x => x.Title == "Dual-database full-stack app in Go")
             // .AllEvents()
             .SelectEvents(searchParamsPersonal)
         ,
         SectionOrder = [
-            Section.Languages,
+            // Section.Languages,
             Section.WorkExperience,
-            Section.Education,
             Section.PersonalProjects,
+            Section.Education,
         ],
     },
     CancellationToken = cancellationToken,
