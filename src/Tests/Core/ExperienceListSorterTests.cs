@@ -55,9 +55,26 @@ public sealed class ExperienceListSorterTests
             selectedText);
     }
 
+    [Fact]
+    public void SelectEvents_DoesNotDiversifyToItemsBelowLowerBound()
+    {
+        var selectedText = SelectTexts(
+            budget: 2,
+            scoreLowerBound: 6,
+            mmr: new(
+                RelevanceWeight: 0.9f,
+                SaturationQuota: 1,
+                SaturationPenalty: 0.5f));
+
+        // ScoreLowerBound filters out "different" before MMR runs because its
+        // raw score is 5, so the selector must keep the next eligible repeat.
+        Assert.Equal(new[] { "repeated-best", "repeated-second" }, selectedText);
+    }
+
     private static string[] SelectTexts(
         int budget,
-        MmrOptions mmr)
+        MmrOptions mmr,
+        float scoreLowerBound = 0)
     {
         var tagA = new Tag("a");
         var tagB = new Tag("b");
@@ -88,7 +105,7 @@ public sealed class ExperienceListSorterTests
                 [tagB] = 1,
             },
             TotalItemBudget: budget,
-            ScoreLowerBound: 0)
+            ScoreLowerBound: scoreLowerBound)
         {
             Mmr = mmr,
         });
