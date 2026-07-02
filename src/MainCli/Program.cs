@@ -19,8 +19,8 @@ _ = serviceProvider;
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
 // ReSharper disable once RedundantAssignment
 bool isDebug;
-// isDebug = true;
-isDebug = false;
+isDebug = true;
+// isDebug = false;
 if (isDebug)
 {
     personalInfo.Phone = Miscellanious.BlurPhone(new()
@@ -45,15 +45,6 @@ var weightedTags = tagsDatabase.Weighted([
     (tags.aws, 0.2f),
     (tags.azure, 0.2f),
 ]);
-var searchParams = new SearchParams(
-    Tags: weightedTags,
-    TotalItemBudget: 8,
-    ScoreLowerBound: 4.5f);
-var searchParamsPersonal = searchParams with
-{
-    TotalItemBudget = 3,
-    ScoreLowerBound = 1f,
-};
 string[] technologies = [
     ".NET",
     "ASP.NET Core",
@@ -70,8 +61,54 @@ string[] technologies = [
     // "AWS",
 ];
 
-_ = searchParams;
-_ = searchParamsPersonal;
+
+var educationKey = new ExperienceKey("Education");
+var workKey = new ExperienceKey("Work");
+var personalProjectsKey = new ExperienceKey("PersonalProjects");
+
+var searchBuilder = new SearchBuilder();
+searchBuilder.Tags(weightedTags);
+// Also allow it through an extension
+// searchBuilder.WeightedTags(tagsDatabase, [
+//     (tags.dotnet, 1.0f),
+//     (tags.restApi, 0.6f),
+//     (tags.sql, 1.0f),
+//     (tags.sqlServer, 0.8f),
+//     (tags.aws, 0.2f),
+//     (tags.azure, 0.2f),
+// ]);
+
+searchBuilder.ConfigureDefaults(opts =>
+{
+    opts.TotalItemBudget = 3;
+    opts.ScoreLowerBound = 1f;
+});
+searchBuilder.Configure(
+    educationKey,
+    predicate: e => e.Type.IsDegree(),
+    opts =>
+    {
+        opts.TotalItemBudget = 3;
+        opts.ScoreLowerBound = 1;
+    });
+searchBuilder.Configure(
+    workKey,
+    predicate: e => e.Type == ExperienceType.Job,
+    opts =>
+    {
+        opts.TotalItemBudget = 6;
+        opts.ScoreLowerBound = 1;
+    });
+searchBuilder.Configure(
+    personalProjectsKey,
+    predicate: e => e.Type == ExperienceType.Project,
+    opts =>
+    {
+        opts.TotalItemBudget = 6;
+        opts.ScoreLowerBound = 1;
+    });
+var search = searchBuilder.Build();
+var searchResult = search.Run(experienceDatabase.Experiences);
 
 await CvTemplate.Generate(new()
 {
@@ -98,11 +135,7 @@ await CvTemplate.Generate(new()
             new(Category.Phone, personalInfo.Phone),
         ],
         Profession = new("Software Developer"),
-        Educations = [
-            .. experienceDatabase.Experiences
-                .Where(x => x.Type.IsDegree())
-                .SelectEvents(searchParams),
-        ],
+        Educations = searchResult.Get(educationKey),
         Languages = [
             new(
                 Language.Russian,
@@ -124,17 +157,8 @@ await CvTemplate.Generate(new()
         ],
         Location = location,
         Summary = NullableLatexString.Null,
-        WorkExperiences = experienceDatabase.Experiences
-            .Where(x => x.Type == ExperienceType.Job)
-            // .AllEvents()
-            .SelectEvents(searchParams)
-        ,
-        PersonalProjects = experienceDatabase.Experiences
-            .Where(x => x.Type == ExperienceType.Project)
-            // .Where(x => x.Title == "Dual-database full-stack app in Go")
-            // .AllEvents()
-            .SelectEvents(searchParamsPersonal)
-        ,
+        WorkExperiences = searchResult.Get(workKey),
+        PersonalProjects = searchResult.Get(personalProjectsKey),
         SectionOrder = [
             // Section.Languages,
             Section.WorkExperience,
@@ -148,46 +172,3 @@ await CvTemplate.Generate(new()
 });
 
 return;
-
-async Task SearchJobs(CancellationToken cancellationToken1)
-{
-    var theirStackClient = serviceProvider.GetRequiredService<TheirStackClient>();
-    var result = await theirStackClient.JobsSearch_SearchJobs_V1Async(Format.Json, new()
-    {
-        // Eats up api tokens if this is not set.
-        BlurCompanyData = true,
-
-        Limit = 3,
-        // Page = 1,
-        Remote = true,
-        MinSalaryUsd = 3000,
-        JobSeniorityOr = [
-            JobSeniorityOr.Junior,
-            JobSeniorityOr.MidLevel,
-        ],
-        JobTitleOr = [
-            // "('C#' | '.NET' | 'Unity' | 'C++') & (software | game) & (developer | engineer)",
-            "Software Engineer",
-            "Software Developer",
-            "Game Developer",
-            "DevOps Engineer",
-            "Backend Engineer",
-            "Backend Developer",
-        ],
-        PostedAtMaxAgeDays = 7,
-    }, cancellationToken1);
-
-    _ = result;
-}
-
-async Task GetModels(CancellationToken cancellationToken1)
-{
-    var modelClient = serviceProvider.GetRequiredService<OpenAIModelClient>();
-    var models = await modelClient.GetModelsAsync(cancellationToken1);
-    await using var file = File.Open("models", FileMode.Create, FileAccess.Write);
-    await using var jsonWriter = new Utf8JsonWriter(file, new()
-    {
-        Indented = true,
-    });
-    ((IJsonModel<OpenAIModelCollection>) models.Value).Write(jsonWriter, ModelReaderWriterOptions.Json);
-}
