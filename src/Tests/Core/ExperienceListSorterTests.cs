@@ -71,6 +71,61 @@ public sealed class ExperienceListSorterTests
         Assert.Equal(new[] { "repeated-best", "repeated-second" }, selectedText);
     }
 
+    [Fact]
+    public void SelectEvents_MatchesItemsRelatedToQueryThroughAnotherTag()
+    {
+        var query = new Tag("query");
+        var related = new Tag("related");
+        var tags = BuildTagsDatabase(tags =>
+        {
+            tags.Query.IsIncludedIn(tags.Bridge).By(0.8f).WhichIsIncludedInIt().By(0.8f);
+            tags.Bridge.IsIncludedIn(tags.Related).By(0.8f).WhichIsIncludedInIt().By(0.8f);
+        });
+
+        var selectedText = SelectTexts(
+            tags: tags.Weighted([(query, 1f)]),
+            budget: 1,
+            scoreLowerBound: 5,
+            mmr: MmrOptions.Default,
+            items: [
+                Item(Text("related-item"), (related, 10)),
+            ]);
+
+        // TagsDatabase.Weighted is the parameter source that expands "query"
+        // through "bridge" into "related", so this non-exact item still passes.
+        Assert.Equal(new[] { "related-item" }, selectedText);
+    }
+
+    [Fact]
+    public void SelectEvents_CanSelectItemThatAlsoOverlapsSelectedTags()
+    {
+        var selectedTag = new Tag("selected");
+        var newTag = new Tag("new");
+
+        var selectedText = SelectTexts(
+            tags: new WeightedTags
+            {
+                [selectedTag] = 1,
+                [newTag] = 1,
+            },
+            budget: 2,
+            scoreLowerBound: 0,
+            mmr: new(
+                RelevanceWeight: 0.6f,
+                SaturationQuota: 1,
+                SaturationPenalty: 0.2f),
+            items: [
+                Item(Text("selected-best"), (selectedTag, 10)),
+                Item(Text("overlap-plus-new"), (selectedTag, 1), (newTag, 8)),
+                Item(Text("only-new-weaker"), (newTag, 4)),
+            ]);
+
+        // "overlap-plus-new" shares an already-selected tag, so redundancy and
+        // saturation lower its MMR score. They do not exclude it, and its high
+        // new-tag score still beats the weaker clean alternative.
+        Assert.Equal(new[] { "selected-best", "overlap-plus-new" }, selectedText);
+    }
+
     private static string[] SelectTexts(
         int budget,
         MmrOptions mmr,
@@ -84,26 +139,41 @@ public sealed class ExperienceListSorterTests
         var repeatedThird = Item(Text("repeated-third"), (tagA, 8));
         var different = Item(Text("different"), (tagB, 5));
 
+        return SelectTexts(
+            tags: new WeightedTags
+            {
+                [tagA] = 1,
+                [tagB] = 1,
+            },
+            budget: budget,
+            scoreLowerBound: scoreLowerBound,
+            mmr: mmr,
+            items: [
+                repeatedBest,
+                repeatedSecond,
+                repeatedThird,
+                different,
+            ]);
+    }
+
+    private static string[] SelectTexts(
+        WeightedTags tags,
+        int budget,
+        float scoreLowerBound,
+        MmrOptions mmr,
+        params ExperienceListItem[] items)
+    {
         var list = new ExperienceList
         {
             Title = "test",
             Place = new("test"),
             DateRange = DateRange.Completed(new(Year: 2024), new(Year: 2025)),
-            IsJob = true,
-            Items = [
-                repeatedBest,
-                repeatedSecond,
-                repeatedThird,
-                different,
-            ],
+            Items = items.ToImmutableArray(),
+            Type = ExperienceType.Job,
         };
 
         var events = new[] { list }.SelectEvents(new(
-            Tags: new WeightedTags
-            {
-                [tagA] = 1,
-                [tagB] = 1,
-            },
+            Tags: tags,
             TotalItemBudget: budget,
             ScoreLowerBound: scoreLowerBound)
         {
@@ -115,6 +185,25 @@ public sealed class ExperienceListSorterTests
             .Select(x => x.String.ToString())
             .ToArray();
     }
+
+    private static TagsDatabase BuildTagsDatabase(Action<TestTagBuilders> configure)
+    {
+        var builder = new TagsDatabaseBuilder();
+        var tags = new TestTagBuilders(
+            builder.Tag("query"),
+            builder.Tag("bridge"),
+            builder.Tag("related"));
+
+        configure(tags);
+        var result = builder.Build();
+        Assert.Empty(result.Errors ?? []);
+        return result.Database!;
+    }
+
+    private readonly record struct TestTagBuilders(
+        TagBuilder Query,
+        TagBuilder Bridge,
+        TagBuilder Related);
 
     private static ExperienceListItem Item(
         IRichTextNode text,

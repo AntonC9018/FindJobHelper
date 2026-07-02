@@ -9,6 +9,7 @@ namespace FindJobHelper.Core;
 
 public readonly record struct Tag : IEquatable<Tag>
 {
+    [JsonConstructor]
     public Tag(string name)
     {
         Name = name;

@@ -79,6 +79,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T blazor { get; init; }
     public required T webforms { get; init; }
     public required T aspnetmvc { get; init; }
+    public required T thesis { get; init; }
 }
 
 public static class TagsDatabaseFactory
@@ -162,6 +163,7 @@ public static class TagsDatabaseFactory
             webforms = db.Tag("WebForms"),
             aspnetmvc = db.Tag("ASP.NET MVC"),
             csv = db.Tag("CSV"),
+            thesis = db.Tag("Thesis"),
         };
 
         t.dotnet.IsIncludedIn(t.nswag).By(0.05f).WhichIsIncludedInIt().By(0.4f);

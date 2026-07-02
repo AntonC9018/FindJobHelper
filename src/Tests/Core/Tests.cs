@@ -64,7 +64,7 @@ public sealed class SomeTests
             TotalItemBudget: 20,
             ScoreLowerBound: 0.0f);
 
-        var ev = db.Experiences.Where(x => x.IsJob).SelectEvents(searchParams);
+        var ev = db.Experiences.Where(x => x.Type == ExperienceType.Job).SelectEvents(searchParams);
         await Verify(ev);
     }
 

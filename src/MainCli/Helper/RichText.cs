@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace FindJobHelper.Core.Helper;
 using static RichTextFactory;
@@ -65,6 +66,11 @@ public sealed class RichTextFactory
     }
 }
 
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(RichText), "richText")]
+[JsonDerivedType(typeof(PlainText), "plainText")]
+[JsonDerivedType(typeof(StyledText), "styledText")]
+[JsonDerivedType(typeof(Href), "href")]
 public interface IRichTextNode
 {
 }
@@ -204,7 +210,16 @@ public sealed class RichTextVisitationMapBuilder
 
     public RichTextVisitationMapBuilder(RichTextVisitationMapBuilder other)
     {
-        _impls = other._impls.ToDictionary();
+        _unhandled = other._unhandled;
+        _each = other._each;
+        _impls = other._impls.ToDictionary(
+            static x => x.Key,
+            static x => new Impl
+            {
+                Default = x.Value.Default,
+                GetChildren = x.Value.GetChildren,
+                List = [.. x.Value.List],
+            });
     }
 
     public RichTextVisitationMapBuilder()

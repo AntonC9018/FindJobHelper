@@ -97,26 +97,12 @@ await CvTemplate.Generate(new()
             new(Category.Email, personalInfo.Email),
             new(Category.Phone, personalInfo.Phone),
         ],
-        Profession = new("Backend Software Developer"),
+        Profession = new("Software Developer"),
         Educations = [
-            new()
-            {
-                Place = new("Example University"),
-                Title = "Master of Applied Informatics",
-                DateRange = DateRange.Completed(
-                    start: new(Year: 2022),
-                    end: new(Year: 2024)),
-                Text = new("""Thesis: \href{https://github.com/AntonC9018/thesis-png}{\textit{PNG File Format}}"""),
-            },
-            new()
-            {
-                Place = new("Example University"),
-                Title = "Bachelor of Applied Informatics",
-                DateRange = DateRange.Completed(
-                    start: new(Year: 2019),
-                    end: new(Year: 2022)),
-                Text = new("""Thesis: \href{https://github.com/AntonC9018/uni_thesis}{\textit{Roslyn Code Generators}}"""),
-            }],
+            .. experienceDatabase.Experiences
+                .Where(x => x.Type.IsDegree())
+                .SelectEvents(searchParams),
+        ],
         Languages = [
             new(
                 Language.Russian,
@@ -139,13 +125,13 @@ await CvTemplate.Generate(new()
         Location = location,
         Summary = NullableLatexString.Null,
         WorkExperiences = experienceDatabase.Experiences
-            .Where(x => x.IsJob)
+            .Where(x => x.Type == ExperienceType.Job)
             // .AllEvents()
             .SelectEvents(searchParams)
         ,
         PersonalProjects = experienceDatabase.Experiences
-            .Where(x => !x.IsJob)
-            .Where(x => x.Title == "Dual-database full-stack app in Go")
+            .Where(x => x.Type == ExperienceType.Project)
+            // .Where(x => x.Title == "Dual-database full-stack app in Go")
             // .AllEvents()
             .SelectEvents(searchParamsPersonal)
         ,
