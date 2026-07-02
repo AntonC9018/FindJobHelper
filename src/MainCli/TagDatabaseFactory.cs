@@ -20,6 +20,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T openApi { get; init; }
     public required T restApi { get; init; }
     public required T roslyn { get; init; }
+    public required T sourceGeneration { get; init; }
     public required T postman { get; init; }
     public required T nswag { get; init; }
     public required T sql { get; init; }
@@ -36,6 +37,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T linq2db { get; init; }
     public required T parser { get; init; }
     public required T msBuild { get; init; }
+    public required T nuget { get; init; }
     public required T github { get; init; }
     public required T git { get; init; }
     public required T java { get; init; }
@@ -57,7 +59,9 @@ public sealed class Tags<T> : KnownTags<T>
     public required T nodejs { get; init; }
     public required T shaders { get; init; }
     public required T imageProcessing { get; init; }
+    public required T compression { get; init; }
     public required T d { get; init; }
+    public required T zig { get; init; }
     public required T postgres { get; init; }
     public required T vue { get; init; }
     public required T css { get; init; }
@@ -67,6 +71,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T blender { get; init; }
     public required T uiToolkit { get; init; }
     public required T imgui { get; init; }
+    public required T raylib { get; init; }
     public required T ugui { get; init; }
     public required T grpc { get; init; }
     public required T protobuf { get; init; }
@@ -76,10 +81,12 @@ public sealed class Tags<T> : KnownTags<T>
     public required T microservices { get; init; }
     public required T json { get; init; }
     public required T docx { get; init; }
+    public required T latex { get; init; }
     public required T blazor { get; init; }
     public required T webforms { get; init; }
     public required T aspnetmvc { get; init; }
     public required T thesis { get; init; }
+    public required T apiDesign { get; init; }
 }
 
 public static class TagsDatabaseFactory
@@ -103,6 +110,7 @@ public static class TagsDatabaseFactory
             openApi = db.Tag("OpenAPI"),
             restApi = db.Tag("REST API", "REST"),
             roslyn = db.Tag("Roslyn"),
+            sourceGeneration = db.Tag("Source Generation", "Source Generators", ".NET Source Generators", "Code Generation"),
             postman = db.Tag("Postman"),
             nswag = db.Tag("NSwag"),
             sql = db.Tag("SQL"),
@@ -117,6 +125,7 @@ public static class TagsDatabaseFactory
             linq2db = db.Tag("Linq2db"),
             parser = db.Tag("Parser"),
             msBuild = db.Tag("MSBuild"),
+            nuget = db.Tag("NuGet"),
             github = db.Tag("GitHub"),
             git = db.Tag("Git"),
             java = db.Tag("Java"),
@@ -138,7 +147,9 @@ public static class TagsDatabaseFactory
             nodejs = db.Tag("NodeJS"),
             shaders = db.Tag("Shaders"),
             imageProcessing = db.Tag("Image Processing"),
+            compression = db.Tag("Compression", "Zlib", "DEFLATE", "Huffman", "Checksum", "CRC", "Adler32"),
             d = db.Tag("D"),
+            zig = db.Tag("Zig"),
             postgres = db.Tag("PostgreSQL"),
             vue = db.Tag("Vue", "VueJS"),
             css = db.Tag("CSS"),
@@ -147,6 +158,7 @@ public static class TagsDatabaseFactory
             unity = db.Tag("Unity", "Unity3D"),
             blender = db.Tag("Blender"),
             imgui = db.Tag("IMGUI"),
+            raylib = db.Tag("Raylib"),
             ugui = db.Tag("ugui"),
             uiToolkit = db.Tag("UI Toolkit"),
             grpc = db.Tag("GRPC"),
@@ -159,11 +171,13 @@ public static class TagsDatabaseFactory
             xml = db.Tag("XML"),
             json = db.Tag("JSON"),
             docx = db.Tag("DOCX"),
+            latex = db.Tag("LaTeX"),
             blazor = db.Tag("Blazor"),
             webforms = db.Tag("WebForms"),
             aspnetmvc = db.Tag("ASP.NET MVC"),
             csv = db.Tag("CSV"),
             thesis = db.Tag("Thesis"),
+            apiDesign = db.Tag("API Design"),
         };
 
         t.dotnet.IsIncludedIn(t.nswag).By(0.05f).WhichIsIncludedInIt().By(0.4f);
@@ -179,12 +193,18 @@ public static class TagsDatabaseFactory
         t.dotnet.IsIncludedIn(t.mediator).By(0.1f).WhichIsIncludedInIt().By(0.95f);
         // t.dotnet.OverlapsWith(t.typeScript).By(0.2f).WhichOverlaps().By(0.25f);
 
+        t.sourceGeneration.IsIncludedIn(t.roslyn).By(0.8f).WhichIsIncludedInIt().By(0.6f);
+        t.sourceGeneration.IsIncludedIn(t.dotnet).By(0.5f).WhichIsIncludedInIt().By(0.2f);
+        t.nuget.IsIncludedIn(t.dotnet).By(0.4f).WhichIsIncludedInIt().By(0.15f);
+        t.nuget.IsIncludedIn(t.msBuild).By(0.3f).WhichIsIncludedInIt().By(0.2f);
+
         t.dotnet.IsIncludedIn(t.programming).By(0.25f).WhichIsIncludedInIt().Fully();
         t.cpp.IsIncludedIn(t.programming).By(0.2f).WhichIsIncludedInIt().Fully();
         t.typeScript.IsIncludedIn(t.programming).By(0.3f).WhichIsIncludedInIt().Fully();
         t.java.IsIncludedIn(t.programming).By(0.3f).WhichIsIncludedInIt().Fully();
         t.javaScript.IsIncludedIn(t.programming).By(0.4f).WhichIsIncludedInIt().Fully();
         t.d.IsIncludedIn(t.programming).By(0.25f).WhichIsIncludedInIt().Fully();
+        t.zig.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().Fully();
         t.python.IsIncludedIn(t.programming).By(0.3f).WhichIsIncludedInIt().Fully();
         t.go.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().Fully();
 
@@ -216,6 +236,11 @@ public static class TagsDatabaseFactory
         t.unity.IsIncludedIn(t.gameProgramming).By(0.5f).WhichIsIncludedInIt().By(0.4f);
         t.graphics.IsIncludedIn(t.shaders).By(0.1f).WhichIsIncludedInIt().Fully();
         t.unity.IsIncludedIn(t.shaders).By(0.05f).WhichIsIncludedInIt().By(0.9f);
+        t.raylib.IsIncludedIn(t.graphics).By(0.8f).WhichIsIncludedInIt().By(0.2f);
+        t.compression.IsIncludedIn(t.programming).By(0.2f).WhichIsIncludedInIt().By(0.1f);
+        t.compression.IsIncludedIn(t.imageProcessing).By(0.35f).WhichIsIncludedInIt().By(0.2f);
+        t.apiDesign.IsIncludedIn(t.designPatterns).By(0.5f).WhichIsIncludedInIt().By(0.2f);
+        t.apiDesign.IsIncludedIn(t.programming).By(0.2f).WhichIsIncludedInIt().By(0.1f);
 
         t.grpc.IsIncludedIn(t.protobuf).By(0.2f).WhichIsIncludedInIt().Fully();
 
