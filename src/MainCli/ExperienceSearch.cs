@@ -716,13 +716,13 @@ internal static class ExperienceSelectionEngine
                     float totalScore = 0;
                     foreach (var item in items)
                     {
-                        totalScore += ScoreOf(item);
+                        totalScore += MatchesOf(item).Sum;
                     }
 
                     return new OutputEvent(
                         list,
                         totalScore,
-                        items.Select(item => (item, ScoreOf(item))));
+                        items.Select(item => (item, MatchesOf(item))));
                 }));
             }
 
@@ -730,11 +730,11 @@ internal static class ExperienceSelectionEngine
                 _groups.Select(x => x.Key),
                 results);
 
-            float ScoreOf(ExperienceListItem item)
+            ScoredTags MatchesOf(ExperienceListItem item)
             {
                 return Scores.TryGetValue(item, out var score)
-                    ? score.Sum
-                    : 0;
+                    ? score
+                    : EmptyScoredTags.Instance;
             }
         }
 
@@ -766,7 +766,7 @@ internal static class ExperienceSelectionEngine
         float TotalScore,
         IEnumerable<(
             ExperienceListItem Item,
-            float Score)> Items);
+            ScoredTags Matches)> Items);
 
     private static ImmutableArray<Event> ToOutput(IEnumerable<OutputEvent> s)
     {
@@ -775,10 +775,14 @@ internal static class ExperienceSelectionEngine
 
         foreach (var t in s)
         {
-            foreach (var x in t.Items)
+            var items = t.Items.ToList();
+            foreach (var x in items)
             {
                 var latexStr = x.Item.Text.ToLatexString();
-                subBuilder.Add(new(x.Score, latexStr));
+                subBuilder.Add(new(
+                    x.Matches.Sum,
+                    latexStr,
+                    ToDebugTagScores(x.Matches)));
             }
 
             builder.Add(new()
@@ -788,6 +792,7 @@ internal static class ExperienceSelectionEngine
                 Title = t.List.Title,
                 Text = t.List.Description,
                 DebugScore = t.TotalScore,
+                DebugTagScores = ToDebugTagScores(items.Select(x => x.Matches)),
                 SubItems = subBuilder.ToImmutable(),
                 Urls = t.List.Urls,
             });
@@ -795,5 +800,47 @@ internal static class ExperienceSelectionEngine
         }
 
         return builder.DrainToImmutable();
+    }
+
+    private static ImmutableArray<DebugTagScore> ToDebugTagScores(ScoredTags matches)
+    {
+        if (matches.IsEmpty)
+        {
+            return [];
+        }
+
+        return matches
+            .OrderByDescending(x => x.Value)
+            .ThenBy(x => x.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new DebugTagScore(x.Key.Name, x.Value))
+            .ToImmutableArray();
+    }
+
+    private static ImmutableArray<DebugTagScore> ToDebugTagScores(IEnumerable<ScoredTags> matches)
+    {
+        var totals = new Dictionary<Tag, float>();
+        foreach (var scoredTags in matches)
+        {
+            foreach (var (tag, score) in scoredTags)
+            {
+                totals[tag] = totals.GetValueOrDefault(tag) + score;
+            }
+        }
+
+        if (totals.Count == 0)
+        {
+            return [];
+        }
+
+        return totals
+            .OrderByDescending(x => x.Value)
+            .ThenBy(x => x.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new DebugTagScore(x.Key.Name, x.Value))
+            .ToImmutableArray();
+    }
+
+    private static class EmptyScoredTags
+    {
+        public static readonly ScoredTags Instance = new([]);
     }
 }

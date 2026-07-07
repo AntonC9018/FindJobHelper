@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Serialization;
 using CliWrap;
@@ -258,7 +259,7 @@ public static class CvTemplate
         var items = events.Select(e =>
         {
             var subItemsE = e.SubItems
-                .Select(x => (FormattableString) $$"""{{ Score(x.DebugScore) }}{{ x.String }}""");
+                .Select(x => (FormattableString) $$"""{{ DebugScore(x.DebugScore, x.DebugTagScores) }}{{ x.String }}""");
 
             if (!e.Urls.IsEmpty)
             {
@@ -280,9 +281,10 @@ public static class CvTemplate
                 ? ""
                 : e.Place.Name;
 
+            var title = (FormattableString) $$"""{{ DebugScore(e.DebugScore, e.DebugTagScores) }}{{ e.Title }}""";
+
             return (FormattableString) $$"""
-            {{{ Score(e.DebugScore) }}}
-            \cvevent{{{ e.DateRange }}}{{{ e.Title }}}{{{ place }}}{
+            \cvevent{{{ e.DateRange }}}{{{ title }}}{{{ place }}}{
                 {{ subItems }}}{{{ e.Text }}}
             """;
         });
@@ -295,19 +297,54 @@ public static class CvTemplate
             \end{flowblock}
         """;
 
-        FormattableString Score(float score)
+        FormattableString DebugScore(
+            float score,
+            ImmutableArray<DebugTagScore> tagScores = default)
         {
-            FormattableString ret;
             if (!isDebug)
             {
-                ret = $"";
+                return $"";
             }
-            else
-            {
-                ret = $$"""\debugscore{{{score:0.##}}} """;
-            }
-            return ret;
+
+            var text = FormatDebugScore(score, tagScores);
+            return $$"""\debugscore{{{ new LatexEscapedString(text) }}}""";
         }
+    }
+
+    private static string FormatDebugScore(
+        float score,
+        ImmutableArray<DebugTagScore> tagScores)
+    {
+        var ret = new StringBuilder();
+        ret.Append(FormatFloat(score));
+
+        if (!tagScores.IsDefaultOrEmpty)
+        {
+            ret.Append(" (");
+            for (var i = 0; i < tagScores.Length; i++)
+            {
+                if (i > 0)
+                {
+                    ret.Append(", ");
+                }
+
+                var tagScore = tagScores[i];
+                ret.Append(tagScore.Tag.Value);
+                ret.Append(':');
+                ret.Append(FormatFloat(tagScore.Score));
+            }
+
+            ret.Append(')');
+        }
+
+        return ret.ToString();
+    }
+
+    private static string FormatFloat(float value)
+    {
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{value:0.##}");
     }
 
 
@@ -393,12 +430,38 @@ public record struct Event()
     public required Place Place;
     public required DateRange DateRange;
     public float DebugScore;
+    public ImmutableArray<DebugTagScore> DebugTagScores = [];
     public NullableLatexString Text = NullableLatexString.Null;
     public ImmutableArray<SubEvent> SubItems = [];
     public ImmutableArray<RegularString> Urls = [];
 }
 
-public readonly record struct SubEvent(float DebugScore, LatexString String);
+public readonly record struct DebugTagScore(RegularString Tag, float Score);
+
+public readonly record struct SubEvent
+{
+    public SubEvent(
+        float debugScore,
+        LatexString @string) : this(debugScore, @string, [])
+    {
+    }
+
+    public SubEvent(
+        float debugScore,
+        LatexString @string,
+        ImmutableArray<DebugTagScore> debugTagScores)
+    {
+        DebugScore = debugScore;
+        String = @string;
+        DebugTagScores = debugTagScores.IsDefault
+            ? []
+            : debugTagScores;
+    }
+
+    public float DebugScore { get; }
+    public LatexString String { get; }
+    public ImmutableArray<DebugTagScore> DebugTagScores { get; }
+}
 
 // public record struct EducationItem()
 // {
@@ -997,4 +1060,3 @@ public static class LatexConverter
     }
 
 }
-

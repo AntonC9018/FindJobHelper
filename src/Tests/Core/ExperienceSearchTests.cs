@@ -141,6 +141,57 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_ReportsMatchedDebugTagsAndTotals()
+    {
+        var tagA = new Tag("a");
+        var tagB = new Tag("b");
+        var unmatched = new Tag("unmatched");
+        var builder = NewBuilder(new()
+        {
+            [tagA] = 0.5f,
+            [tagB] = 2f,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.TotalItemBudget = 1;
+                opts.ScoreLowerBound = 0;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item(
+                    "work-a",
+                    (tagA, 8),
+                    (tagB, 3),
+                    (unmatched, 10))),
+        ]);
+
+        var @event = Assert.Single(result.Get(WorkKey));
+        var subItem = Assert.Single(@event.SubItems);
+        var eventDebugTags = @event.DebugTagScores
+            .Select(x => (Tag: x.Tag.Value, x.Score))
+            .ToArray();
+        var debugTags = subItem.DebugTagScores
+            .Select(x => (Tag: x.Tag.Value, x.Score))
+            .ToArray();
+
+        Assert.Equal(10f, @event.DebugScore);
+        Assert.Equal(10f, subItem.DebugScore);
+        Assert.Equal(
+            new[] { (Tag: "b", Score: 6f), (Tag: "a", Score: 4f) },
+            eventDebugTags);
+        Assert.Equal(
+            new[] { (Tag: "b", Score: 6f), (Tag: "a", Score: 4f) },
+            debugTags);
+    }
+
+    [Fact]
     public void Search_KnownKeyWithNoCandidatesReturnsEmpty()
     {
         var tag = new Tag("a");
