@@ -90,6 +90,10 @@ public sealed class Tags<T> : KnownTags<T>
     public required T aspnetmvc { get; init; }
     public required T thesis { get; init; }
     public required T apiDesign { get; init; }
+    public required T png { get; init; }
+    public required T jpeg { get; init; }
+    public required T tiff { get; init; }
+    public required T _3d { get; init; }
 }
 
 public static class TagsDatabaseFactory
@@ -184,6 +188,10 @@ public static class TagsDatabaseFactory
             csv = db.Tag("CSV"),
             thesis = db.Tag("Thesis"),
             apiDesign = db.Tag("API Design"),
+            _3d = db.Tag("3D"),
+            jpeg = db.Tag("JPEG"),
+            png = db.Tag("PNG"),
+            tiff = db.Tag("TIFF"),
         };
 
         t.dotnet.IsIncludedIn(t.nswag).By(0.05f).WhichIsIncludedInIt().By(0.4f);
@@ -287,6 +295,13 @@ public static class TagsDatabaseFactory
 
         t.aspnetmvc.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.10f);
         // avalonia
+
+        t._3d.IsIncludedIn(t.graphics).Fully().WhichIsIncludedInIt().By(0.3f);
+        t.png.IsIncludedIn(t.jpeg).By(0.3f).WhichIsIncludedInIt().By(0.3f);
+        t.png.IsIncludedIn(t.tiff).By(0.3f).WhichIsIncludedInIt().By(0.3f);
+        t.png.IsIncludedIn(t.parser).By(0.2f).WhichIsIncludedInIt().By(0.1f);
+        t.jpeg.IsIncludedIn(t.parser).By(0.2f).WhichIsIncludedInIt().By(0.1f);
+        t.tiff.IsIncludedIn(t.parser).By(0.2f).WhichIsIncludedInIt().By(0.1f);
 
         var r = db.Build();
         if (r.Errors != null)

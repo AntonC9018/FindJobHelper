@@ -11,6 +11,7 @@ public readonly record struct ExperienceKey(string Value)
 
 public sealed class SearchPredicateOptions
 {
+    // TODO: Make Min and Max budgets
     public int TotalItemBudget { get; set; }
     public float ScoreLowerBound { get; set; }
 
@@ -391,6 +392,7 @@ internal static class ExperienceSelectionEngine
                 {
                     if (context.Scores.TryGetValue(added, out var matches))
                     {
+                        context.DebugScores[added] = ranker.RawEquivalentScore(matches);
                         ranker.AddSelected(matches);
                     }
                 });
@@ -510,6 +512,17 @@ internal static class ExperienceSelectionEngine
                     out _);
                 count += 1;
             }
+        }
+
+        public float RawEquivalentScore(ScoredTags matches)
+        {
+            var score = Score(matches);
+            if (options.RelevanceWeight <= 0 || maxRelevance <= 0)
+            {
+                return Math.Max(0, score);
+            }
+
+            return Math.Max(0, score * maxRelevance / options.RelevanceWeight);
         }
 
         private float Score(ScoredTags matches)
@@ -653,6 +666,7 @@ internal static class ExperienceSelectionEngine
         public readonly HashSet<ExperienceListItem> Added = new();
         public readonly Dictionary<ExperienceKey, Dictionary<ExperienceList, List<ExperienceListItem>>> Results = new();
         public readonly Dictionary<ExperienceListItem, ScoredTags> Scores = new();
+        public readonly Dictionary<ExperienceListItem, float> DebugScores = new();
 
         public SelectionContext(ImmutableArray<ExperienceSelectionGroup> groups)
         {
@@ -716,13 +730,16 @@ internal static class ExperienceSelectionEngine
                     float totalScore = 0;
                     foreach (var item in items)
                     {
-                        totalScore += MatchesOf(item).Sum;
+                        totalScore += DebugScoreOf(item);
                     }
 
                     return new OutputEvent(
                         list,
                         totalScore,
-                        items.Select(item => (item, MatchesOf(item))));
+                        items.Select(item => new OutputItem(
+                            item,
+                            MatchesOf(item),
+                            DebugScoreOf(item))));
                 }));
             }
 
@@ -735,6 +752,13 @@ internal static class ExperienceSelectionEngine
                 return Scores.TryGetValue(item, out var score)
                     ? score
                     : EmptyScoredTags.Instance;
+            }
+
+            float DebugScoreOf(ExperienceListItem item)
+            {
+                return DebugScores.TryGetValue(item, out var score)
+                    ? score
+                    : MatchesOf(item).Sum;
             }
         }
 
@@ -764,9 +788,12 @@ internal static class ExperienceSelectionEngine
     private readonly record struct OutputEvent(
         ExperienceList List,
         float TotalScore,
-        IEnumerable<(
-            ExperienceListItem Item,
-            ScoredTags Matches)> Items);
+        IEnumerable<OutputItem> Items);
+
+    private readonly record struct OutputItem(
+        ExperienceListItem Item,
+        ScoredTags Matches,
+        float DebugScore);
 
     private static ImmutableArray<Event> ToOutput(IEnumerable<OutputEvent> s)
     {
@@ -780,9 +807,9 @@ internal static class ExperienceSelectionEngine
             {
                 var latexStr = x.Item.Text.ToLatexString();
                 subBuilder.Add(new(
-                    x.Matches.Sum,
+                    x.DebugScore,
                     latexStr,
-                    ToDebugTagScores(x.Matches)));
+                    ToDebugTagScores(x.Matches, x.DebugScore)));
             }
 
             builder.Add(new()
@@ -792,7 +819,7 @@ internal static class ExperienceSelectionEngine
                 Title = t.List.Title,
                 Text = t.List.Description,
                 DebugScore = t.TotalScore,
-                DebugTagScores = ToDebugTagScores(items.Select(x => x.Matches)),
+                DebugTagScores = ToDebugTagScores(items.Select(x => (x.Matches, x.DebugScore))),
                 SubItems = subBuilder.ToImmutable(),
                 Urls = t.List.Urls,
             });
@@ -802,28 +829,39 @@ internal static class ExperienceSelectionEngine
         return builder.DrainToImmutable();
     }
 
-    private static ImmutableArray<DebugTagScore> ToDebugTagScores(ScoredTags matches)
+    private static ImmutableArray<DebugTagScore> ToDebugTagScores(
+        ScoredTags matches,
+        float debugScore)
     {
         if (matches.IsEmpty)
         {
             return [];
         }
 
+        var scale = matches.Sum <= 0
+            ? 0
+            : debugScore / matches.Sum;
+
         return matches
-            .OrderByDescending(x => x.Value)
-            .ThenBy(x => x.Key.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(x => new DebugTagScore(x.Key.Name, x.Value))
+            .Select(x => new DebugTagScore(x.Key.Name, x.Value * scale))
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Tag.Value, StringComparer.OrdinalIgnoreCase)
             .ToImmutableArray();
     }
 
-    private static ImmutableArray<DebugTagScore> ToDebugTagScores(IEnumerable<ScoredTags> matches)
+    private static ImmutableArray<DebugTagScore> ToDebugTagScores(
+        IEnumerable<(ScoredTags Matches, float DebugScore)> matches)
     {
         var totals = new Dictionary<Tag, float>();
-        foreach (var scoredTags in matches)
+        foreach (var (scoredTags, debugScore) in matches)
         {
+            var scale = scoredTags.Sum <= 0
+                ? 0
+                : debugScore / scoredTags.Sum;
+
             foreach (var (tag, score) in scoredTags)
             {
-                totals[tag] = totals.GetValueOrDefault(tag) + score;
+                totals[tag] = totals.GetValueOrDefault(tag) + score * scale;
             }
         }
 
@@ -833,10 +871,16 @@ internal static class ExperienceSelectionEngine
         }
 
         return totals
+            .Where(x => IsMeaningfulScore(x.Value))
             .OrderByDescending(x => x.Value)
             .ThenBy(x => x.Key.Name, StringComparer.OrdinalIgnoreCase)
             .Select(x => new DebugTagScore(x.Key.Name, x.Value))
             .ToImmutableArray();
+    }
+
+    private static bool IsMeaningfulScore(float score)
+    {
+        return MathF.Abs(score) >= 0.0001f;
     }
 
     private static class EmptyScoredTags

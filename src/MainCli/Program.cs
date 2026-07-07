@@ -1,13 +1,9 @@
-﻿using System.ClientModel.Primitives;
-using System.Text.Json;
-using FindJobHelper.Core;
+﻿using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 using MainCli;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using OpenAI.Models;
-using TheirStack;
 using Location = FindJobHelper.CVGeneration.Location;
 
 #pragma warning disable CS8321 // Local function is declared but never used
@@ -19,8 +15,8 @@ _ = serviceProvider;
 var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
 // ReSharper disable once RedundantAssignment
 bool isDebug;
-isDebug = true;
-// isDebug = false;
+// isDebug = true;
+isDebug = false;
 if (isDebug)
 {
     personalInfo.Phone = Miscellanious.BlurPhone(new()
@@ -39,28 +35,44 @@ var experienceDatabase = ExperienceDatabaseFactory.Create(tags);
 
 var weightedTags = tagsDatabase.Weighted([
     (tags.dotnet, 1.0f),
-    (tags.restApi, 0.6f),
-    (tags.sql, 1.0f),
+    (tags.thesis, 0.01f),
+
+    (tags.imageProcessing, 1.0f),
+
+    (tags.multithreading, 1.0f),
+    (tags.concurrency, 0.8f),
+
+    (tags.sql, 0.9f),
     (tags.sqlServer, 0.8f),
-    (tags.aws, 0.2f),
-    (tags.azure, 0.2f),
+    (tags.postgres, 0.6f),
+    (tags.efCore, 0.5f),
+    // (tags.dapper, 0.5f),
+    (tags.png, 1.0f),
+    (tags.tiff, 1.0f),
+    (tags._3d, 0.5f),
+    (tags.jpeg, 0.5f),
+
+    (tags.grpc, 0.9f),
 ]);
+
 string[] technologies = [
     ".NET",
-    "ASP.NET Core",
+    // "C#",
+    "Image Processing",
+    // "Raster Image Processing",
+    // "Multithreading",
+    "Parallel Processing",
     // "SQL",
-    // "EF Core",
-    // "Docker",
     "SQL Server",
-    // "ADO.NET",
-    // "TypeScript",
-    // "Git",
-    // "Blazor",
-    // "EF Core",
-    // "ESB",
-    // "AWS",
+    "PostgreSQL",
+    "Entity Framework",
+    "ADO.NET",
+    // "Dapper",
+    "gRPC",
+    // "Protocol Buffers",
+    // "OpenCV",
+    // "ImageMagick",
 ];
-
 
 var educationKey = new ExperienceKey("Education");
 var workKey = new ExperienceKey("Work");
@@ -68,44 +80,35 @@ var personalProjectsKey = new ExperienceKey("PersonalProjects");
 
 var searchBuilder = new SearchBuilder();
 searchBuilder.Tags(weightedTags);
-// Also allow it through an extension
-// searchBuilder.WeightedTags(tagsDatabase, [
-//     (tags.dotnet, 1.0f),
-//     (tags.restApi, 0.6f),
-//     (tags.sql, 1.0f),
-//     (tags.sqlServer, 0.8f),
-//     (tags.aws, 0.2f),
-//     (tags.azure, 0.2f),
-// ]);
 
 searchBuilder.ConfigureDefaults(opts =>
 {
     opts.TotalItemBudget = 3;
-    opts.ScoreLowerBound = 1f;
+    opts.ScoreLowerBound = 0f;
 });
 searchBuilder.Configure(
     educationKey,
     predicate: e => e.Type.IsDegree(),
     opts =>
     {
-        opts.TotalItemBudget = 3;
-        opts.ScoreLowerBound = 1;
+        opts.TotalItemBudget = 2;
+        opts.ScoreLowerBound = 0;
     });
 searchBuilder.Configure(
     workKey,
     predicate: e => e.Type == ExperienceType.Job,
     opts =>
     {
-        opts.TotalItemBudget = 6;
-        opts.ScoreLowerBound = 1;
+        opts.TotalItemBudget = 8;
+        opts.ScoreLowerBound = 5;
     });
 searchBuilder.Configure(
     personalProjectsKey,
     predicate: e => e.Type == ExperienceType.Project,
     opts =>
     {
-        opts.TotalItemBudget = 6;
-        opts.ScoreLowerBound = 1;
+        opts.TotalItemBudget = 1;
+        opts.ScoreLowerBound = 5;
     });
 var search = searchBuilder.Build();
 var searchResult = search.Run(experienceDatabase.Experiences);

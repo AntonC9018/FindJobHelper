@@ -192,6 +192,46 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_DebugScoreReflectsMmrPenalties()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0.9f,
+            SaturationQuota: 1,
+            SaturationPenalty: 0.5f));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.TotalItemBudget = 2;
+                opts.ScoreLowerBound = 0;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("first", (tag, 10)),
+                Item("second", (tag, 9))),
+        ]);
+
+        var subItems = Assert.Single(result.Get(WorkKey)).SubItems;
+        Assert.Equal(2, subItems.Length);
+        Assert.Equal(10f, subItems[0].DebugScore);
+        Assert.InRange(subItems[1].DebugScore, 2.33f, 2.34f);
+        Assert.InRange(
+            Assert.Single(subItems[1].DebugTagScores).Score,
+            2.33f,
+            2.34f);
+    }
+
+    [Fact]
     public void Search_KnownKeyWithNoCandidatesReturnsEmpty()
     {
         var tag = new Tag("a");
