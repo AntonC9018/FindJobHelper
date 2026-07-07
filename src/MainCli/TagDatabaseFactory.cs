@@ -7,7 +7,10 @@ public sealed class Tags<T> : KnownTags<T>
     public Tags<U> Map<U>(Func<T, U> f) => (Tags<U>) MapImpl(f);
 
     public required T programming { get; init; }
+    public required T concurrency { get; init; }
+    public required T multithreading { get; init; }
     public required T dotnet { get; init; }
+    public required T googleApi { get; init; }
     public required T go { get; init; }
     public required T aspnet { get; init; }
     public required T htmx { get; init; }
@@ -98,6 +101,7 @@ public static class TagsDatabaseFactory
         var t = new Tags<TagBuilder>
         {
             dotnet = db.Tag(".NET", "DotNet", "C#"),
+            googleApi = db.Tag("Google API"),
             graphql = db.Tag("GraphQL"),
             aspnet = db.Tag("ASP.NET Core", "ASP.NET"),
             go = db.Tag("Go"),
@@ -154,6 +158,8 @@ public static class TagsDatabaseFactory
             vue = db.Tag("Vue", "VueJS"),
             css = db.Tag("CSS"),
             programming = db.Tag("Programming"),
+            concurrency = db.Tag("Concurrency", "Concurrency Programming", "Concurrent Programming", "Parallel Programming"),
+            multithreading = db.Tag("Multithreading", "Multi-threading", "Threading"),
             dotween = db.Tag("DOTween"),
             unity = db.Tag("Unity", "Unity3D"),
             blender = db.Tag("Blender"),
@@ -207,6 +213,8 @@ public static class TagsDatabaseFactory
         t.zig.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().Fully();
         t.python.IsIncludedIn(t.programming).By(0.3f).WhichIsIncludedInIt().Fully();
         t.go.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().Fully();
+        t.concurrency.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().By(0.1f);
+        t.multithreading.IsIncludedIn(t.concurrency).By(0.85f).WhichIsIncludedInIt().By(0.55f);
 
         t.javaScript.IsIncludedIn(t.typeScript).Fully().WhichIsIncludedInIt().By(0.3f);
 
