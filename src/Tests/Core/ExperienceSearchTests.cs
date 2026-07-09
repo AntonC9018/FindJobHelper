@@ -320,6 +320,188 @@ public sealed class ExperienceSearchTests
         Assert.Contains(ProjectKey.Value, exception.Message);
     }
 
+    [Fact]
+    public void Search_SelectedDependentIncludesUnmatchedDependency()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency");
+        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                dependent,
+                dependency),
+        ]);
+
+        Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(
+            new[]
+            {
+                SelectionItemReason.Dependency,
+                SelectionItemReason.Direct,
+            },
+            result.Diagnostics.Items.Select(x => x.Reason).ToArray());
+    }
+
+    [Fact]
+    public void Search_DependencyAppearsBeforeDependent()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency", (tag, 1));
+        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                dependent,
+                dependency),
+        ]);
+
+        Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_DependencyClosureCanExceedBudget()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency");
+        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                dependent,
+                dependency),
+        ]);
+
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(1, budget.RequestedBudget);
+        Assert.Equal(2, budget.ActualCount);
+        Assert.Equal(-1, budget.RemainingBudget);
+    }
+
+    [Fact]
+    public void Search_DependencyCycleThrows()
+    {
+        var tag = new Tag("a");
+        var first = Item("first", (tag, 10));
+        var second = ItemAfter("second", [first], (tag, 9));
+        SetDependencies(first, second);
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 2);
+
+        var search = builder.Build();
+
+        var exception = Assert.Throws<InvalidOperationException>(() => search.Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                first,
+                second),
+        ]));
+        Assert.Contains("Cycle detected in MustBeAfter", exception.Message);
+    }
+
+    [Fact]
+    public void Search_SharedDependenciesAreIncludedOnce()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency");
+        var first = ItemAfter("first", [dependency], (tag, 10));
+        var second = ItemAfter("second", [dependency], (tag, 9));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 3);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                first,
+                second,
+                dependency),
+        ]);
+
+        Assert.Equal(
+            new[] { "dependency", "first", "second" },
+            Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_LowerBoundDoesNotRemoveRequiredDependencies()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency", (tag, 1));
+        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.TotalItemBudget = 1;
+                opts.ScoreLowerBound = 5;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                dependency,
+                dependent),
+        ]);
+
+        Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
+    }
+
     private static SearchBuilder NewBuilder(WeightedTags tags)
     {
         var builder = new SearchBuilder();
@@ -355,12 +537,30 @@ public sealed class ExperienceSearchTests
         string text,
         params (Tag Tag, int Score)[] tags)
     {
+        return ItemAfter(text, [], tags);
+    }
+
+    private static ExperienceListItem ItemAfter(
+        string text,
+        ExperienceListItem[] dependencies,
+        params (Tag Tag, int Score)[] tags)
+    {
         return new()
         {
             Text = RichText.Create($"{new PlainText { Text = text }}"),
             Tags = tags
                 .Select(x => new TagReference(x.Tag, x.Score))
                 .ToImmutableArray(),
+            MustBeAfter = dependencies.ToImmutableArray(),
         };
+    }
+
+    private static void SetDependencies(
+        ExperienceListItem item,
+        params ExperienceListItem[] dependencies)
+    {
+        typeof(ExperienceListItem)
+            .GetProperty(nameof(ExperienceListItem.MustBeAfter))!
+            .SetValue(item, dependencies.ToImmutableArray());
     }
 }

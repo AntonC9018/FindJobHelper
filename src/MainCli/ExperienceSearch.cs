@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using FindJobHelper.CVGeneration;
 
@@ -222,8 +223,10 @@ public sealed class SearchResult
 
     internal SearchResult(
         IEnumerable<ExperienceKey> keys,
-        IReadOnlyDictionary<ExperienceKey, ImmutableArray<Event>> results)
+        IReadOnlyDictionary<ExperienceKey, ImmutableArray<Event>> results,
+        SelectionDiagnostics? diagnostics = null)
     {
+        Diagnostics = diagnostics ?? SelectionDiagnostics.Empty;
         _results = new();
         foreach (var key in keys)
         {
@@ -242,6 +245,8 @@ public sealed class SearchResult
 
         return value;
     }
+
+    internal SelectionDiagnostics Diagnostics { get; }
 }
 
 public static class SearchBuilderExtensions
@@ -275,6 +280,49 @@ internal sealed record ExperienceSelectionGroup(
     Func<ExperienceList, bool> Predicate,
     ExperienceSelectionOptions Options,
     int Order);
+
+internal enum SelectionItemReason
+{
+    Direct,
+    Dependency,
+}
+
+internal sealed record SelectionItemTrace(
+    ExperienceKey Section,
+    ExperienceList Event,
+    ExperienceListItem Item,
+    SelectionItemReason Reason,
+    float RawScore,
+    float DebugScore,
+    ImmutableArray<DebugTagScore> DebugTagScores,
+    ExperienceListItem? DependencyOf);
+
+internal sealed record SelectionBudgetTrace(
+    ExperienceKey Section,
+    int RequestedBudget,
+    int ActualCount,
+    int RemainingBudget);
+
+internal sealed record SelectionDiagnostics(
+    ImmutableArray<SelectionItemTrace> Items,
+    ImmutableArray<SelectionBudgetTrace> Budgets)
+{
+    public static SelectionDiagnostics Empty { get; } = new([], []);
+
+    public static SelectionDiagnostics CreateEmpty(
+        ImmutableArray<ExperienceSelectionGroup> groups)
+    {
+        return new(
+            [],
+            groups
+                .Select(x => new SelectionBudgetTrace(
+                    x.Key,
+                    x.Options.TotalItemBudget,
+                    ActualCount: 0,
+                    RemainingBudget: x.Options.TotalItemBudget))
+                .ToImmutableArray());
+    }
+}
 
 internal static class ExperienceSelectionEngine
 {
@@ -336,7 +384,8 @@ internal static class ExperienceSelectionEngine
         {
             return new(
                 groups.Select(x => x.Key),
-                new Dictionary<ExperienceKey, ImmutableArray<Event>>());
+                new Dictionary<ExperienceKey, ImmutableArray<Event>>(),
+                SelectionDiagnostics.CreateEmpty(groups));
         }
 
         var ranker = new MmrRanker(
@@ -367,7 +416,7 @@ internal static class ExperienceSelectionEngine
             }
         }
 
-        var rejected = new HashSet<ExperienceListItem>();
+        var rejected = new HashSet<ExperienceListItem>(ItemReferenceComparer.Instance);
         while (context.HasRemainingBudget)
         {
             var next = ranker.BestCandidate(candidates, context.Added, rejected);
@@ -657,16 +706,40 @@ internal static class ExperienceSelectionEngine
         }
     }
 
+    private sealed class ItemReferenceComparer : IEqualityComparer<ExperienceListItem>
+    {
+        public static readonly ItemReferenceComparer Instance = new();
+
+        private ItemReferenceComparer()
+        {
+        }
+
+        public bool Equals(ExperienceListItem? x, ExperienceListItem? y)
+            => ReferenceEquals(x, y);
+
+        public int GetHashCode(ExperienceListItem obj)
+            => RuntimeHelpers.GetHashCode(obj);
+    }
+
+    private readonly record struct PendingSelectedItem(
+        ExperienceListItem Item,
+        SelectionItemReason Reason);
+
     private sealed class SelectionContext
     {
         private readonly ImmutableArray<ExperienceSelectionGroup> _groups;
         private readonly Dictionary<ExperienceKey, int> _remainingBudgets = new();
-        private readonly List<ExperienceListItem> _temp = new();
+        private readonly List<PendingSelectedItem> _temp = new();
+        private readonly HashSet<ExperienceListItem> _tempVisited = new(ItemReferenceComparer.Instance);
+        private readonly HashSet<ExperienceListItem> _tempVisiting = new(ItemReferenceComparer.Instance);
+        private readonly Dictionary<ExperienceList, int> _listOrders = new();
 
-        public readonly HashSet<ExperienceListItem> Added = new();
+        public readonly HashSet<ExperienceListItem> Added = new(ItemReferenceComparer.Instance);
         public readonly Dictionary<ExperienceKey, Dictionary<ExperienceList, List<ExperienceListItem>>> Results = new();
         public readonly Dictionary<ExperienceListItem, ScoredTags> Scores = new();
         public readonly Dictionary<ExperienceListItem, float> DebugScores = new();
+        public readonly Dictionary<ExperienceListItem, SelectionItemReason> Reasons = new(ItemReferenceComparer.Instance);
+        public readonly Dictionary<ExperienceListItem, ExperienceListItem> DependencyTargets = new(ItemReferenceComparer.Instance);
 
         public SelectionContext(ImmutableArray<ExperienceSelectionGroup> groups)
         {
@@ -683,10 +756,15 @@ internal static class ExperienceSelectionEngine
             MmrCandidate candidate,
             Action<ExperienceListItem>? onAdded = null)
         {
-            _temp.Clear();
-            SimulateAdd(candidate.Item, _temp);
+            if (_remainingBudgets[candidate.Group.Key] <= 0)
+            {
+                return false;
+            }
 
-            if (_temp.Count > _remainingBudgets[candidate.Group.Key])
+            _temp.Clear();
+            CollectDependencyClosure(candidate.Item);
+
+            if (_temp.Count == 0)
             {
                 return false;
             }
@@ -697,18 +775,27 @@ internal static class ExperienceSelectionEngine
                 out _);
             groupResults ??= new();
 
-            foreach (var item in _temp)
+            ref var listItems = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                groupResults,
+                candidate.List,
+                out _);
+            listItems ??= new();
+            _listOrders.TryAdd(candidate.List, candidate.ListIndex);
+
+            foreach (var pending in _temp)
             {
-                ref var list = ref CollectionsMarshal.GetValueRefOrAddDefault(
-                    groupResults,
-                    candidate.List,
-                    out _);
-                list ??= new();
-                list.Add(item);
+                var item = pending.Item;
+                listItems.Add(item);
+                Added.Add(item);
+                Reasons.TryAdd(item, pending.Reason);
+                if (pending.Reason == SelectionItemReason.Dependency)
+                {
+                    DependencyTargets.TryAdd(item, candidate.Item);
+                }
+
                 onAdded?.Invoke(item);
             }
 
-            Added.UnionWith(_temp);
             _remainingBudgets[candidate.Group.Key] -= _temp.Count;
             return true;
         }
@@ -716,36 +803,69 @@ internal static class ExperienceSelectionEngine
         public SearchResult Output()
         {
             var results = new Dictionary<ExperienceKey, ImmutableArray<Event>>();
+            var itemTraces = ImmutableArray.CreateBuilder<SelectionItemTrace>();
+            var budgetTraces = ImmutableArray.CreateBuilder<SelectionBudgetTrace>();
+
             foreach (var group in _groups)
             {
-                if (!Results.TryGetValue(group.Key, out var groupResults))
+                var actualCount = 0;
+                if (Results.TryGetValue(group.Key, out var groupResults))
                 {
-                    continue;
-                }
-
-                results[group.Key] = ToOutput(groupResults.Select(x =>
-                {
-                    var (list, items) = x;
-
-                    float totalScore = 0;
-                    foreach (var item in items)
+                    var outputEvents = ImmutableArray.CreateBuilder<OutputEvent>();
+                    foreach (var (list, items) in groupResults
+                        .OrderBy(x => _listOrders.GetValueOrDefault(x.Key, int.MaxValue)))
                     {
-                        totalScore += DebugScoreOf(item);
+                        var sortedItems = items
+                            .TopologicalSort(x => x.MustBeAfter)
+                            .ToImmutableArray();
+
+                        actualCount += sortedItems.Length;
+
+                        float totalScore = 0;
+                        var outputItems = ImmutableArray.CreateBuilder<OutputItem>(sortedItems.Length);
+                        foreach (var item in sortedItems)
+                        {
+                            var matches = MatchesOf(item);
+                            var debugScore = DebugScoreOf(item);
+                            totalScore += debugScore;
+                            outputItems.Add(new(
+                                item,
+                                matches,
+                                debugScore));
+
+                            itemTraces.Add(new(
+                                group.Key,
+                                list,
+                                item,
+                                Reasons.GetValueOrDefault(item, SelectionItemReason.Direct),
+                                matches.Sum,
+                                debugScore,
+                                ToDebugTagScores(matches, debugScore),
+                                DependencyTargets.GetValueOrDefault(item)));
+                        }
+
+                        outputEvents.Add(new(
+                            list,
+                            totalScore,
+                            outputItems.DrainToImmutable()));
                     }
 
-                    return new OutputEvent(
-                        list,
-                        totalScore,
-                        items.Select(item => new OutputItem(
-                            item,
-                            MatchesOf(item),
-                            DebugScoreOf(item))));
-                }));
+                    results[group.Key] = ToOutput(outputEvents);
+                }
+
+                budgetTraces.Add(new(
+                    group.Key,
+                    group.Options.TotalItemBudget,
+                    actualCount,
+                    _remainingBudgets[group.Key]));
             }
 
             return new(
                 _groups.Select(x => x.Key),
-                results);
+                results,
+                new(
+                    itemTraces.DrainToImmutable(),
+                    budgetTraces.DrainToImmutable()));
 
             ScoredTags MatchesOf(ExperienceListItem item)
             {
@@ -762,26 +882,42 @@ internal static class ExperienceSelectionEngine
             }
         }
 
-        private void SimulateAdd(
-            ExperienceListItem item,
-            List<ExperienceListItem> outThingsToAdd)
+        private void CollectDependencyClosure(ExperienceListItem item)
         {
-            if (Added.Contains(item))
+            _tempVisited.Clear();
+            _tempVisiting.Clear();
+            Visit(item, SelectionItemReason.Direct);
+        }
+
+        private void Visit(
+            ExperienceListItem item,
+            SelectionItemReason reason)
+        {
+            if (Added.Contains(item) ||
+                _tempVisited.Contains(item))
             {
                 return;
             }
 
-            if (outThingsToAdd.Contains(item))
+            if (!_tempVisiting.Add(item))
             {
-                return;
+                throw new InvalidOperationException(
+                    "Cycle detected in MustBeAfter relationships while collecting dependency closure.");
             }
 
             foreach (var dependency in item.MustBeAfter)
             {
-                SimulateAdd(dependency, outThingsToAdd);
+                if (dependency is null)
+                {
+                    continue;
+                }
+
+                Visit(dependency, SelectionItemReason.Dependency);
             }
 
-            outThingsToAdd.Add(item);
+            _tempVisiting.Remove(item);
+            _tempVisited.Add(item);
+            _temp.Add(new(item, reason));
         }
     }
 
