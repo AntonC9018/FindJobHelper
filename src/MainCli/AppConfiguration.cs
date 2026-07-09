@@ -16,6 +16,7 @@ internal static class AppConfiguration
         _ = cancellationToken;
         var configBuilder = new ConfigurationBuilder();
         configBuilder.AddUserSecrets(typeof(Program).Assembly);
+        configBuilder.AddEnvironmentVariables();
 
         var config = configBuilder.Build();
 

@@ -1,0 +1,155 @@
+using MainCli;
+using FindJobHelper.CVGeneration;
+
+namespace FindJobHelper.Core.Tests;
+
+public sealed class CvSelectionConfigurationTests
+{
+    [Fact]
+    public async Task LoadAsync_MapsSelectionConfiguration()
+    {
+        var configuration = await CvSelectionConfiguration.LoadAsync(
+            FixturePath,
+            CancellationToken.None);
+        var tagsDatabase = TagsDatabaseFactory.Create().TagsDatabase;
+
+        var search = configuration.BuildSearch(tagsDatabase);
+
+        Assert.Equal(new[] { "E2E JSON Configuration" }, search.Technologies.Select(x => x.Value));
+        Assert.Equal(
+            new[]
+            {
+                Section.WorkExperience,
+                Section.PersonalProjects,
+                Section.Education,
+            },
+            search.SectionOrder);
+        Assert.Equal("Education", search.EducationKey.Value);
+        Assert.Equal("Work", search.WorkKey.Value);
+        Assert.Equal("PersonalProjects", search.PersonalProjectsKey.Value);
+    }
+
+    [Theory]
+    [InlineData("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", "mmr.relevanceWeight")]
+    [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", "must be non-negative")]
+    public async Task LoadAsync_RejectsInvalidSelectionValues(
+        string oldValue,
+        string newValue,
+        string expectedMessage)
+    {
+        var json = await ReadFixtureAsync();
+        var mutated = json.Replace(oldValue, newValue, StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(mutated, buildSearch: true);
+
+        Assert.Contains(expectedMessage, exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsDuplicateSections()
+    {
+        var json = await ReadFixtureAsync();
+        var duplicateSection = json.Replace(
+            "\"PersonalProjects\"",
+            "\"WorkExperience\"",
+            StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(duplicateSection, buildSearch: false);
+
+        Assert.Contains("occurs more than once", exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_ReportsAllShapeErrorsTogether()
+    {
+        var json = await ReadFixtureAsync();
+        var invalidJson = json
+            .Replace("\"weight\": 1.0", "\"weight\": 0", StringComparison.Ordinal)
+            .Replace("E2E JSON Configuration", " ", StringComparison.Ordinal)
+            .Replace("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", StringComparison.Ordinal)
+            .Replace("\"saturationQuota\": 2", "\"saturationQuota\": 0", StringComparison.Ordinal)
+            .Replace("\"saturationPenalty\": 0.18", "\"saturationPenalty\": -1", StringComparison.Ordinal)
+            .Replace("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", StringComparison.Ordinal)
+            .Replace("\"scoreLowerBound\": 0", "\"scoreLowerBound\": -1", StringComparison.Ordinal)
+            .Replace("\"PersonalProjects\"", "\"WorkExperience\"", StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(invalidJson, buildSearch: false);
+
+        Assert.Equal(14, exception.Errors.Length);
+        Assert.Contains(exception.Errors, error => error.Contains("required tag", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(exception.Errors, error => error.Contains("technologies", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(exception.Errors, error => error.Contains("mmr.relevanceWeight", StringComparison.Ordinal));
+        Assert.Contains(exception.Errors, error => error.Contains("selection.workExperience.totalItemBudget", StringComparison.Ordinal));
+        Assert.Contains(exception.Errors, error => error.Contains("occurs more than once", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsUnknownAndDuplicateTags()
+    {
+        var json = await ReadFixtureAsync();
+        var duplicateTag = json.Replace(
+            "{ \"name\": \".NET\", \"weight\": 1.0 }",
+            "{ \"name\": \".NET\", \"weight\": 1.0 },\r\n    { \"name\": \".net\", \"weight\": 1.0 }");
+        var duplicateException = await LoadInvalidAsync(duplicateTag, buildSearch: false);
+        Assert.Contains("more than once", duplicateException.Message);
+
+        var unknownTag = json.Replace(".NET", "No Such Tag", StringComparison.Ordinal);
+        var unknownException = await LoadInvalidAsync(unknownTag, buildSearch: true);
+        Assert.Contains("was not found", unknownException.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsUnknownOrMissingJsonMembers()
+    {
+        var unknownPropertyException = await LoadInvalidAsync(
+            """
+            {
+              "requiredTags": [{ "name": ".NET", "weight": 1 }],
+              "technologies": [".NET"],
+              "mmr": { "relevanceWeight": 0.72, "saturationQuota": 2, "saturationPenalty": 0.18 },
+              "selection": {
+                "default": { "totalItemBudget": 1, "scoreLowerBound": 0 },
+                "education": { "totalItemBudget": 1, "scoreLowerBound": 0 },
+                "workExperience": { "totalItemBudget": 1, "scoreLowerBound": 0 },
+                "personalProjects": { "totalItemBudget": 1, "scoreLowerBound": 0 }
+              },
+              "sectionOrder": ["WorkExperience"],
+              "unexpected": true
+            }
+            """,
+            buildSearch: false);
+        Assert.Contains("could not be mapped", unknownPropertyException.Message, StringComparison.OrdinalIgnoreCase);
+
+        var missingMemberException = await LoadInvalidAsync("{}", buildSearch: false);
+        Assert.Contains("required properties", missingMemberException.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<CvConfigurationException> LoadInvalidAsync(string json, bool buildSearch)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"FindJobHelper-config-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(path, json);
+            var exception = await Assert.ThrowsAsync<CvConfigurationException>(async () =>
+            {
+                var configuration = await CvSelectionConfiguration.LoadAsync(path, CancellationToken.None);
+                if (buildSearch)
+                {
+                    configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
+                }
+            });
+            return exception;
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static Task<string> ReadFixtureAsync() => File.ReadAllTextAsync(FixturePath);
+
+    private static string FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-config.json");
+}

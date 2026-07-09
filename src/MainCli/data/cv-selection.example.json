@@ -1,0 +1,56 @@
+{
+  "requiredTags": [
+    { "name": ".NET", "weight": 1.0 },
+    { "name": "Thesis", "weight": 0.01 },
+    { "name": "Image Processing", "weight": 1.0 },
+    { "name": "Multithreading", "weight": 1.0 },
+    { "name": "Concurrency", "weight": 0.8 },
+    { "name": "SQL", "weight": 0.9 },
+    { "name": "SQL Server", "weight": 0.8 },
+    { "name": "PostgreSQL", "weight": 0.6 },
+    { "name": "EF Core", "weight": 0.5 },
+    { "name": "PNG", "weight": 1.0 },
+    { "name": "TIFF", "weight": 1.0 },
+    { "name": "3D", "weight": 0.5 },
+    { "name": "JPEG", "weight": 0.5 },
+    { "name": "GRPC", "weight": 0.9 }
+  ],
+  "technologies": [
+    ".NET",
+    "Image Processing",
+    "Parallel Processing",
+    "SQL Server",
+    "PostgreSQL",
+    "Entity Framework",
+    "ADO.NET",
+    "gRPC"
+  ],
+  "mmr": {
+    "relevanceWeight": 0.72,
+    "saturationQuota": 2,
+    "saturationPenalty": 0.18
+  },
+  "selection": {
+    "default": {
+      "totalItemBudget": 3,
+      "scoreLowerBound": 0
+    },
+    "education": {
+      "totalItemBudget": 2,
+      "scoreLowerBound": 0
+    },
+    "workExperience": {
+      "totalItemBudget": 8,
+      "scoreLowerBound": 5
+    },
+    "personalProjects": {
+      "totalItemBudget": 1,
+      "scoreLowerBound": 5
+    }
+  },
+  "sectionOrder": [
+    "WorkExperience",
+    "PersonalProjects",
+    "Education"
+  ]
+}

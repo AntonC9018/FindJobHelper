@@ -1,0 +1,36 @@
+{
+  "requiredTags": [
+    { "name": ".NET", "weight": 1.0 }
+  ],
+  "technologies": [
+    "E2E JSON Configuration"
+  ],
+  "mmr": {
+    "relevanceWeight": 0.72,
+    "saturationQuota": 2,
+    "saturationPenalty": 0.18
+  },
+  "selection": {
+    "default": {
+      "totalItemBudget": 1,
+      "scoreLowerBound": 0
+    },
+    "education": {
+      "totalItemBudget": 1,
+      "scoreLowerBound": 0
+    },
+    "workExperience": {
+      "totalItemBudget": 1,
+      "scoreLowerBound": 0
+    },
+    "personalProjects": {
+      "totalItemBudget": 1,
+      "scoreLowerBound": 0
+    }
+  },
+  "sectionOrder": [
+    "WorkExperience",
+    "PersonalProjects",
+    "Education"
+  ]
+}

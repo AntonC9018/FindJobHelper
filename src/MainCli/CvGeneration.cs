@@ -13,18 +13,23 @@ namespace FindJobHelper.CVGeneration;
 public record struct GenerateParams()
 {
     public required string ConfigFilePath;
+    public required string OutputDirectory;
     public required CvDataModel Model;
     public required CancellationToken CancellationToken;
-    public bool OpenInOs = false;
     public bool IsDebug = false;
 }
 
+public sealed record GeneratedCvArtifacts(string PdfPath);
+
 public static class CvTemplate
 {
-    public static async Task Generate(GenerateParams p)
+    public static async Task<GeneratedCvArtifacts> Generate(GenerateParams p)
     {
-        var guid = Guid.NewGuid();
-        var tempDir = new DirectoryInfo($"cv_gen_{guid}");
+        ArgumentException.ThrowIfNullOrWhiteSpace(p.ConfigFilePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(p.OutputDirectory);
+
+        var outputDirectory = new DirectoryInfo(p.OutputDirectory);
+        outputDirectory.Create();
 
         var codegenContext = new CodegenContext();
         const string latexFileName = "main.tex";
@@ -94,43 +99,39 @@ public static class CvTemplate
         \end{document}
         """);
 
-        codegenContext.SaveToFolder(tempDir.FullName);
+        codegenContext.SaveToFolder(outputDirectory.FullName);
 
         // run latex
         var latexmk = Cli.Wrap("latexmk");
         latexmk = latexmk.WithArguments(["-xelatex", latexFileName]);
 
         {
-            var logFile = Path.Join(tempDir.FullName, "log-stdout.txt");
+            var logFile = Path.Join(outputDirectory.FullName, "log-stdout.txt");
             latexmk = latexmk.WithStandardOutputPipe(PipeTarget.ToFile(logFile));
         }
         {
-            var logFile = Path.Join(tempDir.FullName, "log-stderr.txt");
+            var logFile = Path.Join(outputDirectory.FullName, "log-stderr.txt");
             latexmk = latexmk.WithStandardErrorPipe(PipeTarget.ToFile(logFile));
         }
 
-        latexmk = latexmk.WithWorkingDirectory(tempDir.FullName);
+        latexmk = latexmk.WithWorkingDirectory(outputDirectory.FullName);
         latexmk = latexmk.WithValidation(CommandResultValidation.None);
 
         var result = await latexmk.ExecuteAsync(p.CancellationToken);
 
         if (!result.IsSuccess)
         {
-            if (p.OpenInOs)
-            {
-                var outputPath = Path.Join(tempDir.FullName, latexFileName);
-                ExplorerHelper.OpenFolderAndSelectFile(outputPath);
-            }
-
             throw new InvalidOperationException("Latex execution failure");
         }
 
-        if (p.OpenInOs)
+        var pdfOutputName = ReplaceExtension(latexFileName, ".pdf");
+        var pdfOutputPath = Path.Join(outputDirectory.FullName, pdfOutputName);
+        if (!File.Exists(pdfOutputPath))
         {
-            var pdfOutputName = ReplaceExtension(latexFileName, ".pdf");
-            var pdfOutputPath = Path.Join(tempDir.FullName, pdfOutputName);
-            ExplorerHelper.OpenFolderAndSelectFile(pdfOutputPath);
+            throw new InvalidOperationException("Latex completed without creating a PDF.");
         }
+
+        return new(pdfOutputPath);
     }
 
     private static FormattableString Languages(
