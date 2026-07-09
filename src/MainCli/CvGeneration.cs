@@ -192,7 +192,7 @@ public static class CvTemplate
                 {
                     return $$"""\url{{{ str.Value }}}""";
                 }
-                return $"{str.Value}";
+                return $"{new LatexEscapedString(str.Value)}";
             }
 
             var list = Item(p.CategorizedInfoLists);
@@ -733,7 +733,12 @@ public readonly record struct LanguageSkill(RegularString Text)
 // for some reason ref struct is not supported in interpolation?
 public readonly record struct LatexEscapedString(string Value) : ISpanFormattable
 {
-    public override string ToString() => $"{this}";
+    public override string ToString()
+    {
+        var builder = new StringBuilder(Value.Length);
+        AppendEscaped(builder, Value);
+        return builder.ToString();
+    }
 
     public string ToString(string? format, IFormatProvider? formatProvider)
     {
@@ -748,43 +753,38 @@ public readonly record struct LatexEscapedString(string Value) : ISpanFormattabl
         ReadOnlySpan<char> format,
         IFormatProvider? provider)
     {
+        _ = format;
+        _ = provider;
         charsWritten = 0;
-        if (destination.Length < Value.Length)
+        var escaped = ToString();
+        if (!escaped.AsSpan().TryCopyTo(destination))
         {
             return false;
         }
 
-        var helper = new WriteHelper(destination, ref charsWritten);
-        foreach (var ch in Value)
+        charsWritten = escaped.Length;
+        return true;
+    }
+
+    private static void AppendEscaped(StringBuilder builder, string value)
+    {
+        foreach (var ch in value)
         {
-            string? appendContent = ch switch
+            switch (ch)
             {
-                '\\' => @"\textbackslash{}",
-                '{' => @"\{",
-                '}' => @"\}",
-                '#' => @"\#",
-                '$' => @"\$",
-                '%' => @"\%",
-                '&' => @"\&",
-                '_' => @"\_",
-                '^' => @"\^{}",
-                '~' => @"\~{}",
-                _ => null,
-            };
-            if (appendContent is null)
-            {
-                if (!helper.Append(ch))
-                {
-                    return false;
-                }
-                continue;
-            }
-            if (!helper.Append(appendContent))
-            {
-                return false;
+                case '\\': builder.Append(@"\textbackslash{}"); break;
+                case '{': builder.Append(@"\{"); break;
+                case '}': builder.Append(@"\}"); break;
+                case '#': builder.Append(@"\#"); break;
+                case '$': builder.Append(@"\$"); break;
+                case '%': builder.Append(@"\%"); break;
+                case '&': builder.Append(@"\&"); break;
+                case '_': builder.Append(@"\_"); break;
+                case '^': builder.Append(@"\^{}"); break;
+                case '~': builder.Append(@"\~{}"); break;
+                default: builder.Append(ch); break;
             }
         }
-        return true;
     }
 }
 
@@ -874,7 +874,7 @@ public readonly record struct RegularString(string Value) : ISpanFormattable
             provider);
     }
 
-    public override string ToString() => $"{this}";
+    public override string ToString() => new LatexEscapedString(Value).ToString();
 
     public static implicit operator RegularString(string s)
     {
