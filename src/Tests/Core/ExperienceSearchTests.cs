@@ -633,7 +633,7 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_IncludedExperienceAlwaysIncludesThesisTenItem()
+    public void Search_EnabledGroupAlwaysIncludesEveryThesisTenItem()
     {
         var matchingTag = new Tag("matching");
         var thesisTag = new Tag("thesis");
@@ -649,25 +649,27 @@ public sealed class ExperienceSearchTests
 
         var result = builder.Build().Run([
             Experience(
-                "included",
+                "master",
                 ExperienceType.Job,
                 2025,
                 Item("selected", (matchingTag, 10)),
-                Item("thesis", (thesisTag, 10)),
+                Item("master thesis", (thesisTag, 10)),
                 Item("lower-scored thesis", (thesisTag, 9)),
                 Item("different tag", (otherTag, 10))),
             Experience(
-                "not included",
+                "bachelor",
                 ExperienceType.Job,
                 2024,
-                Item("unselected thesis", (thesisTag, 10))),
+                Item("bachelor thesis", (thesisTag, 10))),
         ]);
 
-        Assert.Equal(new[] { "thesis", "selected" }, Texts(result.Get(WorkKey)));
+        var events = result.Get(WorkKey);
+        Assert.Equal(new[] { "master", "bachelor" }, events.Select(x => x.Title.ToString()));
+        Assert.Equal(new[] { "master thesis", "bachelor thesis" }, Texts(events));
         Assert.Equal(
             new[]
             {
-                SelectionItemReason.Dependency,
+                SelectionItemReason.Direct,
                 SelectionItemReason.Direct,
             },
             result.Diagnostics.Items.Select(x => x.Reason).ToArray());
@@ -676,6 +678,31 @@ public sealed class ExperienceSearchTests
         Assert.Equal(1, budget.RequestedMaximum);
         Assert.Equal(2, budget.ActualCount);
         Assert.Equal(-1, budget.RemainingMaximumBudget);
+    }
+
+    [Fact]
+    public void Search_ZeroBudgetGroupDoesNotIncludeThesisItems()
+    {
+        var matchingTag = new Tag("matching");
+        var thesisTag = new Tag("thesis");
+        var builder = NewBuilder(new()
+        {
+            [matchingTag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 0);
+
+        var result = builder.Build().Run([
+            Experience(
+                "disabled",
+                ExperienceType.Job,
+                2025,
+                Item("thesis", (thesisTag, 10))),
+        ]);
+
+        Assert.Empty(result.Get(WorkKey));
     }
 
     [Fact]

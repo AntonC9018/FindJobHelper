@@ -424,7 +424,7 @@ internal static class ExperienceSelectionEngine
 
         mmr.Validate();
 
-        var scoredLists = lists
+        var groupedLists = lists
             .OrderByDescending(x => x.DateRange, DateRangeComparer.ByEnd)
             .Select((list, listIndex) => CreateScoredList(
                 list,
@@ -433,6 +433,9 @@ internal static class ExperienceSelectionEngine
                 tags))
             .Where(x => x is not null)
             .Select(x => x!)
+            .ToList();
+
+        var scoredLists = groupedLists
             .Where(x => x.ScoredItems.Count > 0)
             .ToList();
 
@@ -446,7 +449,21 @@ internal static class ExperienceSelectionEngine
                 itemIndex)))
             .ToList();
 
-        if (candidates.Count == 0)
+        var requiredThesisCandidates = groupedLists
+            .Where(x => x.Group.Options.MaxTotalItemBudget > 0)
+            .SelectMany(x => x.List.Items
+                .Select((item, itemIndex) => (Item: item, ItemIndex: itemIndex))
+                .Where(x => IsRequiredThesisItem(x.Item))
+                .Select(i => new MmrCandidate(
+                    x.Group,
+                    x.List,
+                    i.Item,
+                    tags.Match(i.Item.Tags),
+                    x.ListIndex,
+                    i.ItemIndex)))
+            .ToList();
+
+        if (candidates.Count == 0 && requiredThesisCandidates.Count == 0)
         {
             return new(
                 groups.Select(x => x.Key),
@@ -456,12 +473,19 @@ internal static class ExperienceSelectionEngine
 
         var ranker = new MmrRanker(
             mmr,
-            candidates.Max(x => x.Matches.Sum));
+            candidates
+                .Concat(requiredThesisCandidates)
+                .Max(x => x.Matches.Sum));
 
         var context = new SelectionContext(groups);
-        foreach (var x in candidates)
+        foreach (var x in candidates.Concat(requiredThesisCandidates))
         {
             context.Scores.TryAdd(x.Item, x.Matches);
+        }
+
+        foreach (var candidate in requiredThesisCandidates)
+        {
+            TryAddAndRegister(candidate, allowExceedingBudget: true);
         }
 
         foreach (var scoredList in scoredLists)
@@ -516,10 +540,13 @@ internal static class ExperienceSelectionEngine
 
         return context.Output();
 
-        bool TryAddAndRegister(MmrCandidate candidate)
+        bool TryAddAndRegister(
+            MmrCandidate candidate,
+            bool allowExceedingBudget = false)
         {
             return context.TryAdd(
                 candidate,
+                allowExceedingBudget,
                 added =>
                 {
                     if (context.Scores.TryGetValue(added, out var matches))
@@ -816,6 +843,7 @@ internal static class ExperienceSelectionEngine
         private readonly HashSet<ExperienceListItem> _tempVisited = new(ItemReferenceComparer.Instance);
         private readonly HashSet<ExperienceListItem> _tempVisiting = new(ItemReferenceComparer.Instance);
         private readonly Dictionary<ExperienceList, int> _listOrders = new();
+        private ExperienceListItem? _selectionRoot;
 
         public readonly HashSet<ExperienceListItem> Added = new(ItemReferenceComparer.Instance);
         public readonly Dictionary<ExperienceKey, Dictionary<ExperienceList, List<ExperienceListItem>>> Results = new();
@@ -841,9 +869,11 @@ internal static class ExperienceSelectionEngine
 
         public bool TryAdd(
             MmrCandidate candidate,
+            bool allowExceedingBudget = false,
             Action<ExperienceListItem>? onAdded = null)
         {
-            if (_remainingMaximumBudgets[candidate.Group.Key] <= 0)
+            if (!allowExceedingBudget &&
+                _remainingMaximumBudgets[candidate.Group.Key] <= 0)
             {
                 return false;
             }
@@ -982,6 +1012,7 @@ internal static class ExperienceSelectionEngine
         {
             _tempVisited.Clear();
             _tempVisiting.Clear();
+            _selectionRoot = item;
 
             foreach (var requiredItem in list.Items.Where(IsRequiredThesisItem))
             {
@@ -996,19 +1027,25 @@ internal static class ExperienceSelectionEngine
             Visit(item, SelectionItemReason.Direct);
         }
 
-        private static bool IsRequiredThesisItem(ExperienceListItem item)
-        {
-            return item.Tags.Any(tag =>
-                tag.Score == 10 &&
-                tag.Tag.Name.Equals("Thesis", StringComparison.OrdinalIgnoreCase));
-        }
-
         private void Visit(
             ExperienceListItem item,
             SelectionItemReason reason)
         {
-            if (Added.Contains(item) ||
-                _tempVisited.Contains(item))
+            if (Added.Contains(item))
+            {
+                if (reason == SelectionItemReason.Dependency &&
+                    IsRequiredThesisItem(item) &&
+                    _selectionRoot is not null &&
+                    !ReferenceEquals(item, _selectionRoot))
+                {
+                    Reasons[item] = SelectionItemReason.Dependency;
+                    DependencyTargets[item] = _selectionRoot;
+                }
+
+                return;
+            }
+
+            if (_tempVisited.Contains(item))
             {
                 return;
             }
@@ -1033,6 +1070,13 @@ internal static class ExperienceSelectionEngine
             _tempVisited.Add(item);
             _temp.Add(new(item, reason));
         }
+    }
+
+    private static bool IsRequiredThesisItem(ExperienceListItem item)
+    {
+        return item.Tags.Any(tag =>
+            tag.Score == 10 &&
+            tag.Tag.Name.Equals("Thesis", StringComparison.OrdinalIgnoreCase));
     }
 
     private readonly record struct OutputEvent(
