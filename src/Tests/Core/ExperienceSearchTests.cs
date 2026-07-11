@@ -633,6 +633,52 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_IncludedExperienceAlwaysIncludesThesisTenItem()
+    {
+        var matchingTag = new Tag("matching");
+        var thesisTag = new Tag("thesis");
+        var otherTag = new Tag("other");
+        var builder = NewBuilder(new()
+        {
+            [matchingTag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "included",
+                ExperienceType.Job,
+                2025,
+                Item("selected", (matchingTag, 10)),
+                Item("thesis", (thesisTag, 10)),
+                Item("lower-scored thesis", (thesisTag, 9)),
+                Item("different tag", (otherTag, 10))),
+            Experience(
+                "not included",
+                ExperienceType.Job,
+                2024,
+                Item("unselected thesis", (thesisTag, 10))),
+        ]);
+
+        Assert.Equal(new[] { "thesis", "selected" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(
+            new[]
+            {
+                SelectionItemReason.Dependency,
+                SelectionItemReason.Direct,
+            },
+            result.Diagnostics.Items.Select(x => x.Reason).ToArray());
+
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(1, budget.RequestedMaximum);
+        Assert.Equal(2, budget.ActualCount);
+        Assert.Equal(-1, budget.RemainingMaximumBudget);
+    }
+
+    [Fact]
     public void Search_DependencyCycleThrows()
     {
         var tag = new Tag("a");

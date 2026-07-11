@@ -849,7 +849,7 @@ internal static class ExperienceSelectionEngine
             }
 
             _temp.Clear();
-            CollectDependencyClosure(candidate.Item);
+            CollectSelectionClosure(candidate.List, candidate.Item);
 
             if (_temp.Count == 0)
             {
@@ -976,11 +976,31 @@ internal static class ExperienceSelectionEngine
             return actualCount < group.Options.MinTotalItemBudget;
         }
 
-        private void CollectDependencyClosure(ExperienceListItem item)
+        private void CollectSelectionClosure(
+            ExperienceList list,
+            ExperienceListItem item)
         {
             _tempVisited.Clear();
             _tempVisiting.Clear();
+
+            foreach (var requiredItem in list.Items.Where(IsRequiredThesisItem))
+            {
+                if (ReferenceEquals(requiredItem, item))
+                {
+                    continue;
+                }
+
+                Visit(requiredItem, SelectionItemReason.Dependency);
+            }
+
             Visit(item, SelectionItemReason.Direct);
+        }
+
+        private static bool IsRequiredThesisItem(ExperienceListItem item)
+        {
+            return item.Tags.Any(tag =>
+                tag.Score == 10 &&
+                tag.Tag.Name.Equals("Thesis", StringComparison.OrdinalIgnoreCase));
         }
 
         private void Visit(
