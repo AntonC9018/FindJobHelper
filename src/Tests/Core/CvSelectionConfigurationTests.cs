@@ -27,11 +27,18 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal("Education", search.EducationKey.Value);
         Assert.Equal("Work", search.WorkKey.Value);
         Assert.Equal("PersonalProjects", search.PersonalProjectsKey.Value);
+        Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
+        Assert.Null(configuration.Selection.Education.MaxTotalItemBudget);
+        Assert.Equal(1, configuration.Selection.Education.TotalItemBudget);
     }
 
     [Theory]
     [InlineData("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", "mmr.relevanceWeight")]
     [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", "must be non-negative")]
+    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": -1, \"maxTotalItemBudget\": 1", "minTotalItemBudget")]
+    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 0, \"maxTotalItemBudget\": -1", "maxTotalItemBudget")]
+    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 2, \"maxTotalItemBudget\": 1", "must not exceed")]
+    [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": 1, \"maxTotalItemBudget\": 1", "not both")]
     public async Task LoadAsync_RejectsInvalidSelectionValues(
         string oldValue,
         string newValue,
@@ -43,6 +50,33 @@ public sealed class CvSelectionConfigurationTests
         var exception = await LoadInvalidAsync(mutated, buildSearch: true);
 
         Assert.Contains(expectedMessage, exception.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MapsMinimumAndMaximumSelectionBudgets()
+    {
+        var json = (await ReadFixtureAsync()).Replace(
+            "\"totalItemBudget\": 1",
+            "\"minTotalItemBudget\": 1, \"maxTotalItemBudget\": 2",
+            StringComparison.Ordinal);
+
+        var configuration = await LoadAsync(json);
+
+        Assert.Equal(1, configuration.Selection.Education.MinTotalItemBudget);
+        Assert.Equal(2, configuration.Selection.Education.MaxTotalItemBudget);
+        Assert.Null(configuration.Selection.Education.TotalItemBudget);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsMissingMaximumSelectionBudget()
+    {
+        var json = await ReadFixtureAsync();
+        var budgetIndex = json.IndexOf("\"totalItemBudget\": 1,", StringComparison.Ordinal);
+        json = json.Remove(budgetIndex, "\"totalItemBudget\": 1,".Length);
+
+        var exception = await LoadInvalidAsync(json, buildSearch: false);
+
+        Assert.Contains("either 'totalItemBudget' or 'maxTotalItemBudget'", exception.Message);
     }
 
     [Fact]
@@ -75,7 +109,7 @@ public sealed class CvSelectionConfigurationTests
 
         var exception = await LoadInvalidAsync(invalidJson, buildSearch: false);
 
-        Assert.Equal(14, exception.Errors.Length);
+        Assert.Equal(12, exception.Errors.Length);
         Assert.Contains(exception.Errors, error => error.Contains("required tag", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(exception.Errors, error => error.Contains("technologies", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(exception.Errors, error => error.Contains("mmr.relevanceWeight", StringComparison.Ordinal));
@@ -108,7 +142,6 @@ public sealed class CvSelectionConfigurationTests
               "technologies": [".NET"],
               "mmr": { "relevanceWeight": 0.72, "saturationQuota": 2, "saturationPenalty": 0.18 },
               "selection": {
-                "default": { "totalItemBudget": 1, "scoreLowerBound": 0 },
                 "education": { "totalItemBudget": 1, "scoreLowerBound": 0 },
                 "workExperience": { "totalItemBudget": 1, "scoreLowerBound": 0 },
                 "personalProjects": { "totalItemBudget": 1, "scoreLowerBound": 0 }
@@ -139,6 +172,20 @@ public sealed class CvSelectionConfigurationTests
                 }
             });
             return exception;
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static async Task<CvSelectionConfiguration> LoadAsync(string json)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"FindJobHelper-config-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(path, json);
+            return await CvSelectionConfiguration.LoadAsync(path, CancellationToken.None);
         }
         finally
         {

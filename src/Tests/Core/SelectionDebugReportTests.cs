@@ -11,7 +11,7 @@ public sealed class SelectionDebugReportTests
         var report = SelectionDebugReport.ToMarkdown(runs);
 
         AssertSelectionInvariants(runs);
-        Assert.Contains("budget requested vs actual", report);
+        Assert.Contains("budget minimum/maximum vs actual", report);
         Assert.Contains("over +", report);
 
         await Verify(report);

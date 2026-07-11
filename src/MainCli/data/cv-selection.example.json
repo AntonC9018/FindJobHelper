@@ -31,20 +31,19 @@
     "saturationPenalty": 0.18
   },
   "selection": {
-    "default": {
-      "totalItemBudget": 3,
-      "scoreLowerBound": 0
-    },
     "education": {
-      "totalItemBudget": 2,
+      "minTotalItemBudget": 0,
+      "maxTotalItemBudget": 2,
       "scoreLowerBound": 0
     },
     "workExperience": {
-      "totalItemBudget": 8,
+      "minTotalItemBudget": 2,
+      "maxTotalItemBudget": 8,
       "scoreLowerBound": 5
     },
     "personalProjects": {
-      "totalItemBudget": 1,
+      "minTotalItemBudget": 0,
+      "maxTotalItemBudget": 1,
       "scoreLowerBound": 5
     }
   },

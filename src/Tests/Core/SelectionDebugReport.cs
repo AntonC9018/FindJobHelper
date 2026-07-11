@@ -7,6 +7,8 @@ using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
+#pragma warning disable CS0618 // Frozen report intentionally exercises the legacy budget alias.
+
 internal static class SelectionDebugReport
 {
     private static readonly ExperienceKey EducationKey = new("Education");
@@ -43,7 +45,7 @@ internal static class SelectionDebugReport
     public static string ToMarkdown(ImmutableArray<SelectionDebugRun> runs)
     {
         var ret = new StringBuilder();
-        ret.AppendLine("| scenario | preset | section | event | selected item | reason | raw | mmr/debug | tags | dependency notes | budget requested vs actual |");
+        ret.AppendLine("| scenario | preset | section | event | selected item | reason | raw | mmr/debug | tags | dependency notes | budget minimum/maximum vs actual |");
         ret.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- |");
 
         foreach (var run in runs)
@@ -232,10 +234,11 @@ internal static class SelectionDebugReport
 
     private static string FormatBudget(SelectionBudgetTrace budget)
     {
-        var over = Math.Max(0, budget.ActualCount - budget.RequestedBudget);
+        var over = Math.Max(0, budget.ActualCount - budget.RequestedMaximum);
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"requested {budget.RequestedBudget}, actual {budget.ActualCount}, over +{over}");
+            $"minimum {budget.RequestedMinimum}, maximum {budget.RequestedMaximum}, " +
+            $"actual {budget.ActualCount}, remaining {budget.RemainingMaximumBudget}, over +{over}");
     }
 
     private static string EscapeCell(string value)

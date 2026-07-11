@@ -143,7 +143,7 @@ public sealed class CvSelectionConfiguration
         var builder = new SearchBuilder();
         builder.Tags(weightedTags);
         builder.Mmr(mmr);
-        builder.ConfigureDefaults(Selection.Default.Apply);
+        // builder.ConfigureDefaults(Selection.Default.Apply);
         builder.Configure(
             educationKey,
             predicate: static experience => experience.Type.IsDegree(),
@@ -310,19 +310,17 @@ public sealed class MmrConfiguration
 
 public sealed class SelectionConfiguration
 {
-    public required SelectionOptionsConfiguration Default { get; init; }
     public required SelectionOptionsConfiguration Education { get; init; }
     public required SelectionOptionsConfiguration WorkExperience { get; init; }
     public required SelectionOptionsConfiguration PersonalProjects { get; init; }
 
     public void CollectValidationErrors(List<string> errors)
     {
-        if (Default is null || Education is null || WorkExperience is null || PersonalProjects is null)
+        if (Education is null || WorkExperience is null || PersonalProjects is null)
         {
-            errors.Add("'selection' must contain 'default', 'education', 'workExperience', and 'personalProjects'.");
+            errors.Add("'selection' must contain 'education', 'workExperience', and 'personalProjects'.");
         }
 
-        Default?.CollectValidationErrors("selection.default", errors);
         Education?.CollectValidationErrors("selection.education", errors);
         WorkExperience?.CollectValidationErrors("selection.workExperience", errors);
         PersonalProjects?.CollectValidationErrors("selection.personalProjects", errors);
@@ -331,20 +329,47 @@ public sealed class SelectionConfiguration
 
 public sealed class SelectionOptionsConfiguration
 {
-    public required int TotalItemBudget { get; init; }
+    public int MinTotalItemBudget { get; init; }
+    public int? MaxTotalItemBudget { get; init; }
+    public int? TotalItemBudget { get; init; }
     public required float ScoreLowerBound { get; init; }
 
     public void Apply(SearchPredicateOptions options)
     {
-        options.TotalItemBudget = TotalItemBudget;
+        options.MinTotalItemBudget = MinTotalItemBudget;
+        options.MaxTotalItemBudget = EffectiveMaxTotalItemBudget;
         options.ScoreLowerBound = ScoreLowerBound;
     }
 
     public void CollectValidationErrors(string path, List<string> errors)
     {
-        if (TotalItemBudget < 0)
+        if (MinTotalItemBudget < 0)
         {
-            errors.Add($"'{path}.totalItemBudget' must be non-negative.");
+            errors.Add($"'{path}.minTotalItemBudget' must be non-negative.");
+        }
+
+        if (MaxTotalItemBudget.HasValue && TotalItemBudget.HasValue)
+        {
+            errors.Add($"'{path}' must contain either 'totalItemBudget' or 'maxTotalItemBudget', not both.");
+        }
+        else if (!MaxTotalItemBudget.HasValue && !TotalItemBudget.HasValue)
+        {
+            errors.Add($"'{path}' must contain either 'totalItemBudget' or 'maxTotalItemBudget'.");
+        }
+        else
+        {
+            var max = EffectiveMaxTotalItemBudget;
+            if (max < 0)
+            {
+                var maximumPath = MaxTotalItemBudget.HasValue
+                    ? "maxTotalItemBudget"
+                    : "totalItemBudget";
+                errors.Add($"'{path}.{maximumPath}' must be non-negative.");
+            }
+            else if (MinTotalItemBudget > max)
+            {
+                errors.Add($"'{path}.minTotalItemBudget' must not exceed the maximum total item budget.");
+            }
         }
 
         if (!float.IsFinite(ScoreLowerBound) || ScoreLowerBound < 0)
@@ -352,6 +377,8 @@ public sealed class SelectionOptionsConfiguration
             errors.Add($"'{path}.scoreLowerBound' must be finite and non-negative.");
         }
     }
+
+    private int EffectiveMaxTotalItemBudget => MaxTotalItemBudget ?? TotalItemBudget!.Value;
 }
 
 public sealed record ConfiguredCvSearch(

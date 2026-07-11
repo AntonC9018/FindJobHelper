@@ -4,6 +4,8 @@ using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core.Tests;
 
+#pragma warning disable CS0618 // Legacy budget alias compatibility coverage.
+
 public sealed class ExperienceSearchTests
 {
     private static readonly ExperienceKey WorkKey = new("Work");
@@ -96,6 +98,224 @@ public sealed class ExperienceSearchTests
         Assert.Equal(
             new[] { "project-b", "project-c" },
             Texts(result.Get(ProjectKey)));
+    }
+
+    [Fact]
+    public void Search_AppliesMaximumBudgetOption()
+    {
+        var tagA = new Tag("a");
+        var tagB = new Tag("b");
+        var builder = NewBuilder(new()
+        {
+            [tagA] = 1,
+            [tagB] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.MinTotalItemBudget = 0;
+                opts.MaxTotalItemBudget = 2;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("first", (tagA, 10)),
+                Item("second", (tagB, 9))),
+        ]);
+
+        Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(0, budget.RequestedMinimum);
+        Assert.Equal(2, budget.RequestedMaximum);
+        Assert.Equal(0, budget.RemainingMaximumBudget);
+    }
+
+    [Fact]
+    public void Search_PreservesOneSeedPerListWhenMmrScoreIsZero()
+    {
+        var tagA = new Tag("a");
+        var tagB = new Tag("b");
+        var builder = NewBuilder(new()
+        {
+            [tagA] = 1,
+            [tagB] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.MaxTotalItemBudget = 2);
+
+        var result = builder.Build().Run([
+            Experience("first", ExperienceType.Job, 2025, Item("first", (tagA, 10))),
+            Experience("second", ExperienceType.Job, 2024, Item("second", (tagB, 9))),
+        ]);
+
+        Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_SkipsNonSeedZeroScoreCandidatesAfterMinimumIsMet()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.MaxTotalItemBudget = 2);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("seed", (tag, 10)),
+                Item("skipped", (tag, 9))),
+        ]);
+
+        Assert.Equal(new[] { "seed" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_UsesZeroScoreCandidateToMeetMinimum()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.MinTotalItemBudget = 2;
+                opts.MaxTotalItemBudget = 2;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("seed", (tag, 10)),
+                Item("minimum", (tag, 9))),
+        ]);
+
+        Assert.Equal(new[] { "seed", "minimum" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_DoesNotUseLowerBoundRejectedCandidateToMeetMinimum()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.MinTotalItemBudget = 2;
+                opts.MaxTotalItemBudget = 2;
+                opts.ScoreLowerBound = 5;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("seed", (tag, 10)),
+                Item("rejected", (tag, 4))),
+        ]);
+
+        Assert.Equal(new[] { "seed" }, Texts(result.Get(WorkKey)));
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(2, budget.RequestedMinimum);
+        Assert.Equal(1, budget.ActualCount);
+    }
+
+    [Fact]
+    public void Search_RejectsMinimumBudgetAboveMaximum()
+    {
+        var builder = NewBuilder(new()
+        {
+            [new("a")] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            opts =>
+            {
+                opts.MinTotalItemBudget = 2;
+                opts.MaxTotalItemBudget = 1;
+            });
+
+        var exception = Assert.Throws<ArgumentException>(() => builder.Build());
+
+        Assert.Contains("must not exceed", exception.Message);
+    }
+
+    [Fact]
+    public void SelectEvents_UsesNewSearchParameterBudgets()
+    {
+        var tag = new Tag("a");
+        var tags = new WeightedTags
+        {
+            [tag] = 1,
+        };
+        var parameters = new SearchParams(
+            Tags: tags,
+            MinTotalItemBudget: 2,
+            MaxTotalItemBudget: 2,
+            ScoreLowerBound: 0)
+        {
+            Mmr = new(
+                RelevanceWeight: 0,
+                SaturationQuota: 1,
+                SaturationPenalty: 0),
+        };
+
+        var result = ExperienceSelectionEngine.SelectEvents([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("seed", (tag, 10)),
+                Item("minimum", (tag, 9))),
+        ], parameters);
+
+        Assert.Equal(new[] { "seed", "minimum" }, Texts(result));
     }
 
     [Fact]
@@ -406,9 +626,10 @@ public sealed class ExperienceSearchTests
         ]);
 
         var budget = Assert.Single(result.Diagnostics.Budgets);
-        Assert.Equal(1, budget.RequestedBudget);
+        Assert.Equal(0, budget.RequestedMinimum);
+        Assert.Equal(1, budget.RequestedMaximum);
         Assert.Equal(2, budget.ActualCount);
-        Assert.Equal(-1, budget.RemainingBudget);
+        Assert.Equal(-1, budget.RemainingMaximumBudget);
     }
 
     [Fact]

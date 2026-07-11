@@ -12,15 +12,27 @@ public readonly record struct ExperienceKey(string Value)
 
 public sealed class SearchPredicateOptions
 {
-    // TODO: Make Min and Max budgets
-    public int TotalItemBudget { get; set; }
+    public int MinTotalItemBudget { get; set; }
+    public int MaxTotalItemBudget { get; set; }
+
+    /// <summary>
+    /// Legacy alias for <see cref="MaxTotalItemBudget"/>. New callers should use the maximum-specific name.
+    /// </summary>
+    [Obsolete("Use MaxTotalItemBudget instead.")]
+    public int TotalItemBudget
+    {
+        get => MaxTotalItemBudget;
+        set => MaxTotalItemBudget = value;
+    }
+
     public float ScoreLowerBound { get; set; }
 
     internal SearchPredicateOptions Copy()
     {
         return new()
         {
-            TotalItemBudget = TotalItemBudget,
+            MinTotalItemBudget = MinTotalItemBudget,
+            MaxTotalItemBudget = MaxTotalItemBudget,
             ScoreLowerBound = ScoreLowerBound,
         };
     }
@@ -135,7 +147,8 @@ public sealed class SearchBuilder
                 predicate.Key,
                 predicate.Predicate,
                 new(
-                    predicate.Options.TotalItemBudget,
+                    predicate.Options.MinTotalItemBudget,
+                    predicate.Options.MaxTotalItemBudget,
                     predicate.Options.ScoreLowerBound),
                 i));
         }
@@ -156,12 +169,27 @@ public sealed class SearchBuilder
 
     private static void ValidateOptions(SearchPredicateOptions options)
     {
-        if (options.TotalItemBudget < 0)
+        if (options.MinTotalItemBudget < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.TotalItemBudget),
-                options.TotalItemBudget,
-                "Total item budget must be non-negative.");
+                nameof(options.MinTotalItemBudget),
+                options.MinTotalItemBudget,
+                "Minimum total item budget must be non-negative.");
+        }
+
+        if (options.MaxTotalItemBudget < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.MaxTotalItemBudget),
+                options.MaxTotalItemBudget,
+                "Maximum total item budget must be non-negative.");
+        }
+
+        if (options.MinTotalItemBudget > options.MaxTotalItemBudget)
+        {
+            throw new ArgumentException(
+                "Minimum total item budget must not exceed maximum total item budget.",
+                nameof(options.MinTotalItemBudget));
         }
 
         if (float.IsNaN(options.ScoreLowerBound) || options.ScoreLowerBound < 0)
@@ -272,7 +300,8 @@ public static class SearchBuilderExtensions
 }
 
 internal readonly record struct ExperienceSelectionOptions(
-    int TotalItemBudget,
+    int MinTotalItemBudget,
+    int MaxTotalItemBudget,
     float ScoreLowerBound);
 
 internal sealed record ExperienceSelectionGroup(
@@ -299,9 +328,10 @@ internal sealed record SelectionItemTrace(
 
 internal sealed record SelectionBudgetTrace(
     ExperienceKey Section,
-    int RequestedBudget,
+    int RequestedMinimum,
+    int RequestedMaximum,
     int ActualCount,
-    int RemainingBudget);
+    int RemainingMaximumBudget);
 
 internal sealed record SelectionDiagnostics(
     ImmutableArray<SelectionItemTrace> Items,
@@ -317,9 +347,10 @@ internal sealed record SelectionDiagnostics(
             groups
                 .Select(x => new SelectionBudgetTrace(
                     x.Key,
-                    x.Options.TotalItemBudget,
+                    x.Options.MinTotalItemBudget,
+                    x.Options.MaxTotalItemBudget,
                     ActualCount: 0,
-                    RemainingBudget: x.Options.TotalItemBudget))
+                    RemainingMaximumBudget: x.Options.MaxTotalItemBudget))
                 .ToImmutableArray());
     }
 }
@@ -335,16 +366,51 @@ internal static class ExperienceSelectionEngine
         ArgumentNullException.ThrowIfNull(p.Tags);
 
         p.Mmr.Validate();
+        ValidateSearchParams(p);
 
         var key = new ExperienceKey("Default");
         var groups = ImmutableArray.Create(new ExperienceSelectionGroup(
             key,
             static _ => true,
-            new(p.TotalItemBudget, p.ScoreLowerBound),
+            new(p.MinTotalItemBudget, p.EffectiveMaxTotalItemBudget, p.ScoreLowerBound),
             Order: 0));
 
         var result = Select(lists, p.Tags, p.Mmr, groups);
         return result.Get(key);
+    }
+
+    private static void ValidateSearchParams(SearchParams p)
+    {
+        if (p.MinTotalItemBudget < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(p.MinTotalItemBudget),
+                p.MinTotalItemBudget,
+                "Minimum total item budget must be non-negative.");
+        }
+
+        if (p.EffectiveMaxTotalItemBudget < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(p.MaxTotalItemBudget),
+                p.EffectiveMaxTotalItemBudget,
+                "Maximum total item budget must be non-negative.");
+        }
+
+        if (p.MinTotalItemBudget > p.EffectiveMaxTotalItemBudget)
+        {
+            throw new ArgumentException(
+                "Minimum total item budget must not exceed maximum total item budget.",
+                nameof(p.MinTotalItemBudget));
+        }
+
+        if (float.IsNaN(p.ScoreLowerBound) || p.ScoreLowerBound < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(p.ScoreLowerBound),
+                p.ScoreLowerBound,
+                "Score lower bound must be non-negative.");
+        }
     }
 
     public static SearchResult Select(
@@ -420,6 +486,23 @@ internal static class ExperienceSelectionEngine
         while (context.HasRemainingBudget)
         {
             var next = ranker.BestCandidate(candidates, context.Added, rejected);
+            if (next is null || ranker.Score(next.Value.Matches) <= 0)
+            {
+                break;
+            }
+
+            if (!TryAddAndRegister(next.Value))
+            {
+                rejected.Add(next.Value.Item);
+            }
+        }
+
+        while (context.HasUnmetMinimum)
+        {
+            var next = ranker.BestCandidate(
+                candidates.Where(context.IsBelowMinimum),
+                context.Added,
+                rejected);
             if (next is null)
             {
                 break;
@@ -574,7 +657,7 @@ internal static class ExperienceSelectionEngine
             return Math.Max(0, score * maxRelevance / options.RelevanceWeight);
         }
 
-        private float Score(ScoredTags matches)
+        public float Score(ScoredTags matches)
         {
             var relevance = maxRelevance <= 0
                 ? 0
@@ -728,7 +811,7 @@ internal static class ExperienceSelectionEngine
     private sealed class SelectionContext
     {
         private readonly ImmutableArray<ExperienceSelectionGroup> _groups;
-        private readonly Dictionary<ExperienceKey, int> _remainingBudgets = new();
+        private readonly Dictionary<ExperienceKey, int> _remainingMaximumBudgets = new();
         private readonly List<PendingSelectedItem> _temp = new();
         private readonly HashSet<ExperienceListItem> _tempVisited = new(ItemReferenceComparer.Instance);
         private readonly HashSet<ExperienceListItem> _tempVisiting = new(ItemReferenceComparer.Instance);
@@ -746,17 +829,21 @@ internal static class ExperienceSelectionEngine
             _groups = groups;
             foreach (var group in groups)
             {
-                _remainingBudgets.Add(group.Key, group.Options.TotalItemBudget);
+                _remainingMaximumBudgets.Add(group.Key, group.Options.MaxTotalItemBudget);
             }
         }
 
-        public bool HasRemainingBudget => _remainingBudgets.Values.Any(x => x > 0);
+        public bool HasRemainingBudget => _remainingMaximumBudgets.Values.Any(x => x > 0);
+
+        public bool HasUnmetMinimum => _groups.Any(IsBelowMinimum);
+
+        public bool IsBelowMinimum(MmrCandidate candidate) => IsBelowMinimum(candidate.Group);
 
         public bool TryAdd(
             MmrCandidate candidate,
             Action<ExperienceListItem>? onAdded = null)
         {
-            if (_remainingBudgets[candidate.Group.Key] <= 0)
+            if (_remainingMaximumBudgets[candidate.Group.Key] <= 0)
             {
                 return false;
             }
@@ -796,7 +883,7 @@ internal static class ExperienceSelectionEngine
                 onAdded?.Invoke(item);
             }
 
-            _remainingBudgets[candidate.Group.Key] -= _temp.Count;
+            _remainingMaximumBudgets[candidate.Group.Key] -= _temp.Count;
             return true;
         }
 
@@ -855,9 +942,10 @@ internal static class ExperienceSelectionEngine
 
                 budgetTraces.Add(new(
                     group.Key,
-                    group.Options.TotalItemBudget,
+                    group.Options.MinTotalItemBudget,
+                    group.Options.MaxTotalItemBudget,
                     actualCount,
-                    _remainingBudgets[group.Key]));
+                    _remainingMaximumBudgets[group.Key]));
             }
 
             return new(
@@ -880,6 +968,12 @@ internal static class ExperienceSelectionEngine
                     ? score
                     : MatchesOf(item).Sum;
             }
+        }
+
+        private bool IsBelowMinimum(ExperienceSelectionGroup group)
+        {
+            var actualCount = group.Options.MaxTotalItemBudget - _remainingMaximumBudgets[group.Key];
+            return actualCount < group.Options.MinTotalItemBudget;
         }
 
         private void CollectDependencyClosure(ExperienceListItem item)

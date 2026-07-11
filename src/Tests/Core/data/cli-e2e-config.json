@@ -11,10 +11,6 @@
     "saturationPenalty": 0.18
   },
   "selection": {
-    "default": {
-      "totalItemBudget": 1,
-      "scoreLowerBound": 0
-    },
     "education": {
       "totalItemBudget": 1,
       "scoreLowerBound": 0
