@@ -32,7 +32,6 @@ public sealed class Tags<T> : KnownTags<T>
     public required T hotChocolate { get; init; }
     public required T graphql { get; init; }
     public required T security { get; init; }
-    public required T securityBasics { get; init; }
     public required T fluentValidation { get; init; }
     public required T excel { get; init; }
     public required T csv { get; init; }
@@ -127,7 +126,6 @@ public static class TagsDatabaseFactory
             sqlServer = db.Tag("SQL Server", "SQLServer"),
             hotChocolate = db.Tag("HotChocolate"),
             security = db.Tag("Security"),
-            securityBasics = db.Tag("Security Basics", "Security basics"),
             fluentValidation = db.Tag("FluentValidation"),
             excel = db.Tag("Excel"),
             mediator = db.Tag("Mediator", "CQRS"),
