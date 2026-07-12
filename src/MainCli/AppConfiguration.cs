@@ -2,6 +2,7 @@ using System.ClientModel;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Text.Json;
+using FindJobHelper.CVGeneration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -91,6 +92,8 @@ internal static class AppConfiguration
         services.Configure<PersonalInfoOptions>(p =>
         {
         });
+
+        services.AddSingleton<LatexMeasurementService>();
 
         var ret = services.BuildServiceProvider();
         return ValueTask.FromResult(ret);

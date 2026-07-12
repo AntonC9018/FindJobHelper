@@ -37,23 +37,13 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public void SectionIds_HaveTheFixedMapping()
-    {
-        Assert.Equal(SectionId.Languages, Section.Languages.ToSectionId());
-        Assert.Equal(SectionId.WorkExperience, Section.WorkExperience.ToSectionId());
-        Assert.Equal(SectionId.Education, Section.Education.ToSectionId());
-        Assert.Equal(SectionId.PersonalProjects, Section.PersonalProjects.ToSectionId());
-        Assert.Equal(Enum.GetValues<Section>(), SectionId.All.Select(static id => id.ToSection()));
-    }
-
-    [Fact]
     public void SnapshotCheckedAccessors_ReportTheMissingTypedId()
     {
         var snapshot = new CvMeasurementSnapshot(
             new Dictionary<ExperienceItemId, LatexHeight>(),
             new Dictionary<ExperienceListId, LatexHeight>(),
-            new Dictionary<SectionId, LatexHeight>(),
-            new Dictionary<SectionId, LatexHeight>(),
+            new Dictionary<Section, LatexHeight>(),
+            new Dictionary<Section, LatexHeight>(),
             LatexHeight.Zero);
         var missing = new ExperienceItemId(new ExperienceListId(3), 4);
 

@@ -123,7 +123,8 @@ public sealed class CvGenerationCommand
             SectionOrder = searchConfiguration.SectionOrder,
         };
 
-        var measurementSnapshot = await new LatexMeasurementService().MeasureAsync(
+        var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
+        var measurementSnapshot = await measurementService.MeasureAsync(
             experienceDatabase,
             currentModel,
             templatePath,

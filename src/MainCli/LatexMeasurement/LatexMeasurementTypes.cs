@@ -7,40 +7,6 @@ using FindJobHelper.Core.Helper;
 
 namespace FindJobHelper.CVGeneration;
 
-public readonly record struct SectionId(int Value)
-{
-    public static SectionId Languages { get; } = new(0);
-    public static SectionId WorkExperience { get; } = new(1);
-    public static SectionId Education { get; } = new(2);
-    public static SectionId PersonalProjects { get; } = new(3);
-
-    public static SectionId FromSection(Section section) => section switch
-    {
-        Section.Languages => Languages,
-        Section.WorkExperience => WorkExperience,
-        Section.Education => Education,
-        Section.PersonalProjects => PersonalProjects,
-        _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
-    };
-
-    public Section ToSection() => Value switch
-    {
-        0 => Section.Languages,
-        1 => Section.WorkExperience,
-        2 => Section.Education,
-        3 => Section.PersonalProjects,
-        _ => throw new InvalidOperationException($"Unknown section ID '{Value}'."),
-    };
-
-    public static IReadOnlyList<SectionId> All { get; } =
-        new[] { Languages, WorkExperience, Education, PersonalProjects };
-}
-
-public static class SectionIdExtensions
-{
-    public static SectionId ToSectionId(this Section section) => SectionId.FromSection(section);
-}
-
 public readonly record struct LatexHeight(long ScaledPoints)
 {
     public static LatexHeight Zero { get; } = new(0);
@@ -49,8 +15,8 @@ public readonly record struct LatexHeight(long ScaledPoints)
 public sealed record CvMeasurementSnapshot(
     IReadOnlyDictionary<ExperienceItemId, LatexHeight> ExperienceItems,
     IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceChrome,
-    IReadOnlyDictionary<SectionId, LatexHeight> CompleteSections,
-    IReadOnlyDictionary<SectionId, LatexHeight> SectionChrome,
+    IReadOnlyDictionary<Section, LatexHeight> CompleteSections,
+    IReadOnlyDictionary<Section, LatexHeight> SectionChrome,
     LatexHeight DocumentChrome)
 {
     public LatexHeight GetExperienceItemHeight(ExperienceItemId id)
@@ -59,17 +25,17 @@ public sealed record CvMeasurementSnapshot(
     public LatexHeight GetExperienceChromeHeight(ExperienceListId id)
         => GetRequired(ExperienceChrome, id, "experience list chrome");
 
-    public LatexHeight GetCompleteSectionHeight(SectionId id)
-        => GetRequired(CompleteSections, id, "complete section");
+    public LatexHeight GetCompleteSectionHeight(Section section)
+        => GetRequired(CompleteSections, section, "complete section");
 
-    public LatexHeight GetSectionChromeHeight(SectionId id)
-        => GetRequired(SectionChrome, id, "section chrome");
+    public LatexHeight GetSectionChromeHeight(Section section)
+        => GetRequired(SectionChrome, section, "section chrome");
 
     internal static CvMeasurementSnapshot CreateFrozen(
         IDictionary<ExperienceItemId, LatexHeight> experienceItems,
         IDictionary<ExperienceListId, LatexHeight> experienceChrome,
-        IDictionary<SectionId, LatexHeight> completeSections,
-        IDictionary<SectionId, LatexHeight> sectionChrome,
+        IDictionary<Section, LatexHeight> completeSections,
+        IDictionary<Section, LatexHeight> sectionChrome,
         LatexHeight documentChrome)
         => new(
             experienceItems.ToFrozenDictionary(),
@@ -92,12 +58,6 @@ public sealed record CvMeasurementSnapshot(
         throw new KeyNotFoundException(
             $"The CV measurement snapshot does not contain {description} ID '{id}'.");
     }
-}
-
-public static class LatexMeasurementRules
-{
-    // Increment when template layout or measurement semantics change.
-    public const int CurrentVersion = 1;
 }
 
 internal readonly record struct MeasurementCorrelationId(int Value)
@@ -197,13 +157,13 @@ internal static class LatexFragmentHasher
     public static string Compute(
         LatexMeasurementKind kind,
         string renderedLatex,
-        SectionId? sectionId = null)
+        Section? section = null)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Append(hash, kind.ToString());
-        if (sectionId is { } id)
+        if (section is { } sectionValue)
         {
-            Append(hash, id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(hash, ((int)sectionValue).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
         Append(hash, renderedLatex);
         return Convert.ToHexStringLower(hash.GetHashAndReset());

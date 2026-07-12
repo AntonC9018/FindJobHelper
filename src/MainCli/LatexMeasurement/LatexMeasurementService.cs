@@ -131,19 +131,18 @@ public sealed class LatexMeasurementService
                 MeasurementDestination.ForExperienceChrome(identified.Id));
         }
 
-        foreach (var sectionId in SectionId.All)
+        foreach (var section in Enum.GetValues<Section>())
         {
-            var section = sectionId.ToSection();
             var chrome = CvLatexFragmentRenderer.RenderSectionChrome(section);
             graph.Add(
-                CreateFragmentKey(LatexMeasurementKind.SectionChrome, chrome, sectionId),
+                CreateFragmentKey(LatexMeasurementKind.SectionChrome, chrome, section),
                 chrome,
                 includeFlowBlockFitSpacing: true,
-                MeasurementDestination.ForSectionChrome(sectionId));
+                MeasurementDestination.ForSectionChrome(section));
 
             if (CvLatexFragmentRenderer.IsSectionEmpty(section, currentModel))
             {
-                graph.CompleteSections.Add(sectionId, LatexHeight.Zero);
+                graph.CompleteSections.Add(section, LatexHeight.Zero);
                 continue;
             }
 
@@ -155,10 +154,10 @@ public sealed class LatexMeasurementService
                 ? LatexMeasurementKind.StaticSection
                 : LatexMeasurementKind.CompleteSection;
             graph.Add(
-                CreateFragmentKey(kind, complete, sectionId),
+                CreateFragmentKey(kind, complete, section),
                 complete,
                 includeFlowBlockFitSpacing: true,
-                MeasurementDestination.ForCompleteSection(sectionId));
+                MeasurementDestination.ForCompleteSection(section));
         }
 
         var documentChrome = CvLatexFragmentRenderer.RenderDocumentChrome(currentModel);
@@ -173,8 +172,8 @@ public sealed class LatexMeasurementService
     private LatexMeasurementCacheKey CreateFragmentKey(
         LatexMeasurementKind kind,
         string fragment,
-        SectionId? sectionId = null)
-        => new(_ruleVersion, kind, LatexFragmentHasher.Compute(kind, fragment, sectionId));
+        Section? section = null)
+        => new(_ruleVersion, kind, LatexFragmentHasher.Compute(kind, fragment, section));
 
     private static void ValidateRunnerResults(
         IReadOnlyList<LatexMeasurementRequest> requests,
@@ -206,8 +205,8 @@ public sealed class LatexMeasurementService
         public Dictionary<LatexMeasurementCacheKey, MeasurementWorkItem> WorkItems { get; } = new();
         public Dictionary<ExperienceItemId, LatexHeight> ExperienceItems { get; } = new();
         public Dictionary<ExperienceListId, LatexHeight> ExperienceChrome { get; } = new();
-        public Dictionary<SectionId, LatexHeight> CompleteSections { get; } = new();
-        public Dictionary<SectionId, LatexHeight> SectionChrome { get; } = new();
+        public Dictionary<Section, LatexHeight> CompleteSections { get; } = new();
+        public Dictionary<Section, LatexHeight> SectionChrome { get; } = new();
         public LatexHeight? DocumentChrome { get; private set; }
 
         public void Add(
@@ -251,10 +250,10 @@ public sealed class LatexMeasurementService
                         ExperienceChrome[destination.ExperienceListId] = height;
                         break;
                     case MeasurementDestinationKind.CompleteSection:
-                        CompleteSections[destination.SectionId] = height;
+                        CompleteSections[destination.Section] = height;
                         break;
                     case MeasurementDestinationKind.SectionChrome:
-                        SectionChrome[destination.SectionId] = height;
+                        SectionChrome[destination.Section] = height;
                         break;
                     case MeasurementDestinationKind.DocumentChrome:
                         DocumentChrome = height;
@@ -277,11 +276,11 @@ public sealed class LatexMeasurementService
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: experience chrome is missing.");
             }
-            if (CompleteSections.Count != SectionId.All.Count)
+            if (CompleteSections.Count != Enum.GetValues<Section>().Length)
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: complete sections are missing.");
             }
-            if (SectionChrome.Count != SectionId.All.Count)
+            if (SectionChrome.Count != Enum.GetValues<Section>().Length)
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: section chrome is missing.");
             }
@@ -316,7 +315,7 @@ public sealed class LatexMeasurementService
         MeasurementDestinationKind Kind,
         ExperienceItemId ExperienceItemId,
         ExperienceListId ExperienceListId,
-        SectionId SectionId)
+        Section Section)
     {
         public static MeasurementDestination ForExperienceItem(ExperienceItemId id)
             => new(MeasurementDestinationKind.ExperienceItem, id, default, default);
@@ -324,11 +323,11 @@ public sealed class LatexMeasurementService
         public static MeasurementDestination ForExperienceChrome(ExperienceListId id)
             => new(MeasurementDestinationKind.ExperienceChrome, default, id, default);
 
-        public static MeasurementDestination ForCompleteSection(SectionId id)
-            => new(MeasurementDestinationKind.CompleteSection, default, default, id);
+        public static MeasurementDestination ForCompleteSection(Section section)
+            => new(MeasurementDestinationKind.CompleteSection, default, default, section);
 
-        public static MeasurementDestination ForSectionChrome(SectionId id)
-            => new(MeasurementDestinationKind.SectionChrome, default, default, id);
+        public static MeasurementDestination ForSectionChrome(Section section)
+            => new(MeasurementDestinationKind.SectionChrome, default, default, section);
 
         public static MeasurementDestination ForDocumentChrome()
             => new(MeasurementDestinationKind.DocumentChrome, default, default, default);

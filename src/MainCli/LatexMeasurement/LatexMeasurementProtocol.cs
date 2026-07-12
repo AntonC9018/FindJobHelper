@@ -103,22 +103,21 @@ internal static class LatexMeasurementDocument
 
         foreach (var request in requests)
         {
-            source.AppendLine(@"\begingroup");
-            source.AppendLine(@"\fjhmeasurementpage=\value{page}");
-            source.AppendLine(@"\fjhmeasurementpagetotal=\pagetotal");
-            source.Append(request.IncludeFlowBlockFitSpacing
-                ? @"\cvsetmeasurementsectionbox{"
-                : @"\cvsetmeasurementbox{");
-            source.Append(request.RenderedFragment).AppendLine("}");
-            source.AppendLine(@"\ifnum\value{page}=\fjhmeasurementpage\else\errmessage{FJH measurement changed page counter}\fi");
-            source.AppendLine(@"\ifdim\pagetotal=\fjhmeasurementpagetotal\else\errmessage{FJH measurement changed pagetotal}\fi");
-            source.Append(@"\immediate\write\fjhmeasurementresults{");
-            source.Append("FJH1|corr=").Append(request.CorrelationId);
-            source.Append("|rule=").Append(request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture));
-            source.Append("|kind=").Append(request.CacheKey.Kind);
-            source.Append("|sha256=").Append(request.CacheKey.ContentHash);
-            source.AppendLine(@"|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}");
-            source.AppendLine(@"\endgroup");
+            var setBoxCommand = request.IncludeFlowBlockFitSpacing
+                ? @"\cvsetmeasurementsectionbox"
+                : @"\cvsetmeasurementbox";
+            source.AppendLine($$"""
+                \begingroup
+                \fjhmeasurementpage=\value{page}
+                \fjhmeasurementpagetotal=\pagetotal
+                {{setBoxCommand}}{
+                {{request.RenderedFragment}}
+                }
+                \ifnum\value{page}=\fjhmeasurementpage\else\errmessage{FJH measurement changed page counter}\fi
+                \ifdim\pagetotal=\fjhmeasurementpagetotal\else\errmessage{FJH measurement changed pagetotal}\fi
+                \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
+                \endgroup
+                """);
         }
 
         source.AppendLine(@"\immediate\closeout\fjhmeasurementresults");
