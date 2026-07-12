@@ -115,7 +115,7 @@ public sealed class PageHeightSelectionTests
         var exception = Assert.Throws<InvalidOperationException>(() => new PageHeightSelectionAdmissionPolicy(
             database,
             snapshot,
-            new Dictionary<ExperienceKey, Section> { [WorkKey] = Section.WorkExperience },
+            new CvExperienceSectionBindings(new("UnusedEducation"), WorkKey, new("UnusedProjects")),
             [Section.Languages, Section.WorkExperience]));
 
         Assert.Contains("Fixed CV content", exception.Message, StringComparison.Ordinal);
@@ -164,8 +164,20 @@ public sealed class PageHeightSelectionTests
         return new(
             database,
             snapshot,
-            groups.ToDictionary(static group => group.Key, static group => group.Section),
+            Bindings(groups),
             groups.Select(static group => group.Section).ToImmutableArray());
+    }
+
+    private static CvExperienceSectionBindings Bindings(
+        IReadOnlyCollection<(ExperienceKey Key, Section Section)> groups)
+    {
+        var education = groups.FirstOrDefault(static group => group.Section == Section.Education).Key;
+        var work = groups.FirstOrDefault(static group => group.Section == Section.WorkExperience).Key;
+        var projects = groups.FirstOrDefault(static group => group.Section == Section.PersonalProjects).Key;
+        return new(
+            education.Value is null ? new("UnusedEducation") : education,
+            work.Value is null ? new("UnusedWork") : work,
+            projects.Value is null ? new("UnusedProjects") : projects);
     }
 
     private static ExperienceDatabase Database(params ExperienceList[] lists)

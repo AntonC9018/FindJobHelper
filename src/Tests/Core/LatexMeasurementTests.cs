@@ -302,17 +302,12 @@ public sealed class LatexMeasurementTests
             documentModel.WorkExperiences,
             "Experience",
             false);
-        var completeDocument = CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)
-            + CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)
-            + CvLatexFragmentRenderer.RenderDocumentFooter(documentModel);
+        FormattableString completeDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var completeProjectSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
             [@event],
             "Personal Projects",
             false);
-        var twoSectionDocument = CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)
-            + CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)
-            + CvLatexFragmentRenderer.RenderProductionSection(completeProjectSection)
-            + CvLatexFragmentRenderer.RenderDocumentFooter(documentModel);
+        FormattableString twoSectionDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)}{CvLatexFragmentRenderer.RenderProductionSection(completeProjectSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var requests = new[]
         {
             Request(1, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(list), LatexMeasurementMode.ExperienceChromeWithoutPermanentItems),
@@ -436,6 +431,13 @@ public sealed class LatexMeasurementTests
                 LatexMeasurementMode.FlowBlock),
         ];
     }
+
+    private static LatexMeasurementRequest Request(
+        int id,
+        LatexMeasurementKind kind,
+        FormattableString fragment,
+        LatexMeasurementMode mode)
+        => Request(id, kind, CvLatexFragmentRenderer.Materialize(fragment), mode);
 
     private static LatexMeasurementRequest Request(
         int id,

@@ -132,12 +132,7 @@ public sealed class CvGenerationCommand
             var admissionPolicy = new PageHeightSelectionAdmissionPolicy(
                 experienceDatabase,
                 measurementSnapshot,
-                new Dictionary<ExperienceKey, Section>
-                {
-                    [searchConfiguration.EducationKey] = Section.Education,
-                    [searchConfiguration.WorkKey] = Section.WorkExperience,
-                    [searchConfiguration.PersonalProjectsKey] = Section.PersonalProjects,
-                },
+                searchConfiguration.Sections,
                 searchConfiguration.SectionOrder);
             searchResult = searchConfiguration.Search.Run(experienceDatabase, admissionPolicy);
         }
@@ -146,9 +141,7 @@ public sealed class CvGenerationCommand
             searchResult = searchConfiguration.Search.Run(experienceDatabase.Experiences);
         }
 
-        currentModel.Educations = searchResult.Get(searchConfiguration.EducationKey);
-        currentModel.WorkExperiences = searchResult.Get(searchConfiguration.WorkKey);
-        currentModel.PersonalProjects = searchResult.Get(searchConfiguration.PersonalProjectsKey);
+        searchConfiguration.Sections.Apply(searchResult, currentModel);
 
         var stagingDirectory = Path.Combine(
             Path.GetTempPath(),

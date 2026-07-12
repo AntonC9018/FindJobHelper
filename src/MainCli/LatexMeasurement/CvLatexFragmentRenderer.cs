@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using FindJobHelper.Core;
 
@@ -11,7 +12,9 @@ namespace FindJobHelper.CVGeneration;
 /// </summary>
 internal static class CvLatexFragmentRenderer
 {
-    public static string RenderSectionInner(
+    private static FormattableString Empty { get; } = FormattableStringFactory.Create(string.Empty);
+
+    public static FormattableString RenderSectionInner(
         Section section,
         CvDataModel model,
         bool isDebug = false)
@@ -47,11 +50,11 @@ internal static class CvLatexFragmentRenderer
         };
     }
 
-    public static string RenderProductionSection(string innerLatex)
+    public static FormattableString RenderProductionSection(FormattableString innerLatex)
     {
-        if (string.IsNullOrWhiteSpace(innerLatex))
+        if (innerLatex.Format.Length == 0)
         {
-            return string.Empty;
+            return Empty;
         }
 
         return $$"""
@@ -61,50 +64,47 @@ internal static class CvLatexFragmentRenderer
             """;
     }
 
-    public static string RenderLanguagesSectionInner(
+    public static FormattableString RenderLanguagesSectionInner(
         ImmutableArray<LanguageProficiencyInfo> languages)
     {
         if (languages.IsEmpty)
         {
-            return string.Empty;
+            return Empty;
         }
 
-        var rows = languages.Select(static language =>
-        {
-            var skills = string.Join(", ", language.Skills.Select(static skill => skill.Text.ToString()));
-            return $"{language.Language.Name} & {language.GeneralProficiencyLevel.Value} & {skills} \\\\";
-        });
+        var rows = languages.Select(static language => (FormattableString)
+            $"{language.Language.Name} & {language.GeneralProficiencyLevel.Value} & {Join(language.Skills.Select(static skill => (FormattableString) $"{skill.Text}"), ", ")} \\\\");
 
         return $$"""
             \cvsection{Languages}
 
             \languagetable{
-            {{string.Join(Environment.NewLine, rows)}}
+            {{Join(rows, Environment.NewLine)}}
             }
             """;
     }
 
-    public static string RenderEventsSectionInner(
+    public static FormattableString RenderEventsSectionInner(
         ImmutableArray<Event> events,
         string sectionName,
         bool isDebug)
     {
         if (events.IsEmpty)
         {
-            return string.Empty;
+            return Empty;
         }
 
         var renderedEvents = events.Select(@event => RenderEvent(@event, isDebug));
         return $$"""
             \cvsection{ {{new LatexEscapedString(sectionName)}} }
 
-            {{string.Join(Environment.NewLine + Environment.NewLine, renderedEvents)}}
+            {{Join(renderedEvents, Environment.NewLine + Environment.NewLine)}}
             """;
     }
 
-    public static string RenderEvent(Event @event, bool isDebug)
+    public static FormattableString RenderEvent(Event @event, bool isDebug)
     {
-        var itemFragments = new List<string>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
+        var itemFragments = new List<FormattableString>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
         foreach (var item in @event.SubItems)
         {
             itemFragments.Add(RenderEventItem(
@@ -113,88 +113,89 @@ internal static class CvLatexFragmentRenderer
 
         if (!@event.Urls.IsEmpty)
         {
-            var urls = string.Join(" | ", @event.Urls.Select(static url => $"\\url{{{url}}}"));
-            itemFragments.Add(RenderEventItem($"\\textbf{{Links:}} {urls}"));
+            var urls = Join(@event.Urls.Select(static url => (FormattableString) $@"\url{{{url}}}"), " | ");
+            itemFragments.Add(RenderEventItem($@"\textbf{{Links:}} {urls}"));
         }
 
-        var place = @event.Place.IsPersonal ? string.Empty : @event.Place.Name.ToString();
-        var title = $"{RenderDebugScore(@event.DebugScore, @event.DebugTagScores, isDebug)}{@event.Title}";
+        FormattableString place = @event.Place.IsPersonal ? Empty : $"{@event.Place.Name}";
+        FormattableString title = $"{RenderDebugScore(@event.DebugScore, @event.DebugTagScores, isDebug)}{@event.Title}";
         return RenderEventCore(
-            @event.DateRange.ToString(),
+            $"{@event.DateRange}",
             title,
             place,
-            string.Join(Environment.NewLine, itemFragments),
-            @event.Text.ToString());
+            $"{Join(itemFragments, Environment.NewLine)}",
+            $"{@event.Text}");
     }
 
-    public static string RenderExperienceChrome(ExperienceList list)
+    public static FormattableString RenderExperienceChrome(ExperienceList list)
     {
-        var place = list.Place.IsPersonal ? string.Empty : list.Place.Name.ToString();
-        var permanentItems = string.Empty;
+        FormattableString place = list.Place.IsPersonal ? Empty : $"{list.Place.Name}";
+        FormattableString permanentItems = Empty;
         if (!list.Urls.IsEmpty)
         {
-            var urls = string.Join(" | ", list.Urls.Select(static url => $"\\url{{{url}}}"));
-            permanentItems = RenderEventItem($"\\textbf{{Links:}} {urls}");
+            var urls = Join(list.Urls.Select(static url => (FormattableString) $@"\url{{{url}}}"), " | ");
+            permanentItems = RenderEventItem($@"\textbf{{Links:}} {urls}");
         }
 
         return RenderEventCore(
-            list.DateRange.ToString(),
-            list.Title.ToString(),
+            $"{list.DateRange}",
+            $"{list.Title}",
             place,
             permanentItems,
-            list.Description.ToString());
+            $"{list.Description}");
     }
 
-    public static string RenderExperienceItem(ExperienceListItem item)
-        => item.Text.ToLatexString().ToString();
+    public static FormattableString RenderExperienceItem(ExperienceListItem item)
+        => $"{item.Text.ToLatexString()}";
 
-    public static string RenderSectionChrome(Section section)
-        => $"\\cvsection{{{new LatexEscapedString(GetSectionTitle(section))}}}";
+    public static FormattableString RenderSectionChrome(Section section)
+        => $@"\cvsection{{{new LatexEscapedString(GetSectionTitle(section))}}}";
 
-    public static string RenderDocumentChrome(CvDataModel model)
-        => RenderDocumentHeader(model) + RenderDocumentFooter(model);
+    public static FormattableString RenderDocumentChrome(CvDataModel model)
+        => $"{RenderDocumentHeader(model)}{RenderDocumentFooter(model)}";
 
-    public static string RenderDocumentHeader(CvDataModel model)
+    public static FormattableString RenderDocumentHeader(CvDataModel model)
     {
-        var result = new StringBuilder();
-        result.AppendLine(@"\vspace{-8pt}");
-        result.AppendLine(@"\begin{center}");
-        result.Append("\\HUGE \\textsc{")
-            .Append(model.Name.Last)
-            .Append(' ')
-            .Append(model.Name.First)
-            .AppendLine(@"} \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]");
-        result.Append("\\small ").AppendLine(model.Profession.Value.ToString());
-        result.AppendLine(@"\end{center}");
-        result.AppendLine(@"\vspace{6pt}");
-        result.Append(RenderMetadata(model));
+        FormattableString summary = Empty;
         if (!model.Summary.IsNull)
         {
-            result.AppendLine(@"\vspace{-6pt}");
-            result.AppendLine(@"\cvsection{Summary}");
-            result.Append(model.Summary).AppendLine(@"\");
+            summary = $$"""
+                \vspace{-6pt}
+                \cvsection{Summary}
+                {{model.Summary}}\\
+                """;
         }
-        return result.ToString();
+
+        return $$$"""
+            \vspace{-8pt}
+            \begin{center}
+            \HUGE \textsc{ {{{model.Name.Last}}} {{{model.Name.First}}} } \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
+            \small {{{model.Profession.Value}}}
+            \end{center}
+            \vspace{6pt}
+            {{{RenderMetadata(model)}}}{{{summary}}}
+            """;
     }
 
-    private static string RenderEventCore(
-        string date,
-        string title,
-        string place,
-        string items,
-        string description)
-        => $"\\cvevent{{{date}}}{{{title}}}{{{place}}}{{{items}}}{{{description}}}";
+    private static FormattableString RenderEventCore(
+        FormattableString date,
+        FormattableString title,
+        FormattableString place,
+        FormattableString items,
+        FormattableString description)
+        => $@"\cvevent{{{date}}}{{{title}}}{{{place}}}{{{items}}}{{{description}}}";
 
-    private static string RenderEventItem(string content) => $"\\cveventitem{{{content}}}";
+    private static FormattableString RenderEventItem(FormattableString content)
+        => $@"\cveventitem{{{content}}}";
 
-    private static string RenderDebugScore(
+    private static FormattableString RenderDebugScore(
         float score,
         ImmutableArray<DebugTagScore> tagScores,
         bool isDebug)
     {
         if (!isDebug)
         {
-            return string.Empty;
+            return Empty;
         }
 
         var text = new StringBuilder();
@@ -215,7 +216,7 @@ internal static class CvLatexFragmentRenderer
             text.Append(')');
         }
 
-        return $"\\debugscore{{{new LatexEscapedString(text.ToString())}}}";
+        return $@"\debugscore{{{new LatexEscapedString(text.ToString())}}}";
     }
 
     private static string GetSectionTitle(Section section) => section switch
@@ -227,51 +228,85 @@ internal static class CvLatexFragmentRenderer
         _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
     };
 
-    private static string RenderMetadata(CvDataModel model)
+    private static FormattableString RenderMetadata(CvDataModel model)
     {
         var count = Math.Max(model.CategorizedInfos.Length, model.CategorizedInfoLists.Length);
-        var result = new StringBuilder();
+        var rows = new List<FormattableString>(count);
         for (var i = 0; i < count; i++)
         {
             var info = i < model.CategorizedInfos.Length ? model.CategorizedInfos[i] : default;
             var list = i < model.CategorizedInfoLists.Length ? model.CategorizedInfoLists[i] : default;
-            var infoText = info == default ? string.Empty : FormatCategoryValue(info.Category, info.Value);
-            var listText = list == default
-                ? string.Empty
-                : $"\\textbf{{{list.Category.DisplayName}:}} {string.Join(", ", list.Values.Select(value => FormatCategoryValue(list.Category, value)))}";
-            result.Append("\\metasection{").Append(infoText).Append("}{").Append(listText).AppendLine("}");
+            FormattableString infoText = info == default ? Empty : FormatCategoryValue(info.Category, info.Value);
+            FormattableString listText = list == default
+                ? Empty
+                : $@"\textbf{{{list.Category.DisplayName}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
+            rows.Add($@"\metasection{{{infoText}}}{{{listText}}}");
         }
 
-        result.AppendLine(@"\vspace{-2pt}");
-        result.AppendLine(@"\textcolor{softcol}{\hrule}");
-        result.AppendLine(@"\vspace{6pt}");
-        result.AppendLine(@"\normalsize");
-        return result.ToString();
+        return $$"""
+            {{Join(rows, Environment.NewLine)}}
+            \vspace{-2pt}
+            \textcolor{softcol}{\hrule}
+            \vspace{6pt}
+            \normalsize
+            """;
     }
 
-    private static string FormatCategoryValue(Category category, RegularString value)
-        => category.IsUrl ? $"\\url{{{value}}}" : value.ToString();
+    private static FormattableString FormatCategoryValue(Category category, RegularString value)
+        => category.IsUrl ? (FormattableString) $@"\url{{{value}}}" : $"{value}";
 
-    public static string RenderDocumentFooter(CvDataModel model)
+    public static FormattableString RenderDocumentFooter(CvDataModel model)
     {
-        var items = new List<string>(2);
+        var items = new List<FormattableString>(2);
         if (!model.Website.IsNull)
         {
-            items.Add($"\\textnormal{{\\textcolor{{sectcol}}{{ \\url{{{model.Website}}} }}}}");
+            items.Add($$$"""\textnormal{\textcolor{sectcol}{ \url{ {{{model.Website}}} } }}""");
         }
         if (!model.GitHub.IsNull)
         {
-            items.Add($"\\textcolor{{sectcol}}{{ \\url{{{model.GitHub}}} }}");
+            items.Add($$"""\textcolor{sectcol}{ \url{ {{model.GitHub}} } }""");
         }
         if (items.Count == 0)
         {
-            return string.Empty;
+            return Empty;
         }
 
-        return "\\null" + Environment.NewLine
-            + "\\vspace*{\\fill}" + Environment.NewLine
-            + "\\hspace{-0.25\\linewidth}\\colorbox{white}{\\makebox[1.5\\linewidth][c]{\\mystrut "
-            + string.Join(" $\\cdot$ ", items)
-            + "}}";
+        return $$$"""
+            \null
+            \vspace*{\fill}
+            \hspace{-0.25\linewidth}\colorbox{white}{\makebox[1.5\linewidth][c]{\mystrut {{{Join(items, " $\\cdot$ ")}}}}}
+            """;
+    }
+
+    public static string Materialize(FormattableString fragment)
+        => fragment.ToString(CultureInfo.InvariantCulture);
+
+    private static JoinedFormattableStrings Join(
+        IEnumerable<FormattableString> fragments,
+        string separator)
+        => new(fragments, separator);
+
+    private sealed class JoinedFormattableStrings(
+        IEnumerable<FormattableString> fragments,
+        string separator) : IFormattable
+    {
+        private readonly IReadOnlyList<FormattableString> _fragments = fragments.ToArray();
+
+        public override string ToString() => ToString(null, CultureInfo.CurrentCulture);
+
+        public string ToString(string? format, IFormatProvider? formatProvider)
+        {
+            var result = new StringBuilder();
+            for (var i = 0; i < _fragments.Count; i++)
+            {
+                if (i > 0)
+                {
+                    result.Append(separator);
+                }
+                var fragment = _fragments[i];
+                result.AppendFormat(formatProvider, fragment.Format, fragment.GetArguments());
+            }
+            return result.ToString();
+        }
     }
 }

@@ -70,13 +70,13 @@ public static class CvTemplate
 
         \pagestyle{fancy}
 
-        {{{{ new LatexString(CvLatexFragmentRenderer.RenderDocumentHeader(p.Model)) }}}}
+        {{{{ CvLatexFragmentRenderer.RenderDocumentHeader(p.Model) }}}}
 
         % Main Content
 
         {{{{ sections.Render() }}}}
 
-        {{{{ new LatexString(CvLatexFragmentRenderer.RenderDocumentFooter(p.Model)) }}}}
+        {{{{ CvLatexFragmentRenderer.RenderDocumentFooter(p.Model) }}}}
 
         \end{document}
         """);
@@ -121,7 +121,7 @@ public static class CvTemplate
     {
         var inner = CvLatexFragmentRenderer.RenderLanguagesSectionInner(languages);
         var wrapped = CvLatexFragmentRenderer.RenderProductionSection(inner);
-        return $"{new LatexString(wrapped)}";
+        return $"{wrapped}";
     }
 
     private static readonly RenderEnumerableOptions ListItemSeparator =
@@ -217,7 +217,7 @@ public static class CvTemplate
     {
         var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(events, sectionName, isDebug);
         var wrapped = CvLatexFragmentRenderer.RenderProductionSection(inner);
-        return $"{new LatexString(wrapped)}";
+        return $"{wrapped}";
     }
 
     private static string FormatDebugScore(

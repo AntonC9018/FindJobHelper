@@ -329,16 +329,15 @@ internal interface ISelectionAdmissionPolicy
 {
     bool PrioritizeMinimums { get; }
 
-    bool CanAccept(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items);
+    bool CanAccept(SelectionAdmission admission);
 
-    void Commit(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items);
+    void Commit(SelectionAdmission admission);
 }
+
+internal readonly record struct SelectionAdmission(
+    ExperienceSelectionGroup Group,
+    ExperienceList List,
+    IReadOnlyList<ExperienceListItem> Items);
 
 internal sealed class UnlimitedSelectionAdmissionPolicy : ISelectionAdmissionPolicy
 {
@@ -350,16 +349,9 @@ internal sealed class UnlimitedSelectionAdmissionPolicy : ISelectionAdmissionPol
 
     public bool PrioritizeMinimums => false;
 
-    public bool CanAccept(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items)
-        => true;
+    public bool CanAccept(SelectionAdmission admission) => true;
 
-    public void Commit(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items)
+    public void Commit(SelectionAdmission admission)
     {
     }
 }
@@ -968,7 +960,8 @@ internal static class ExperienceSelectionEngine
             }
 
             var pendingItems = _temp.Select(static pending => pending.Item).ToArray();
-            if (!_admissionPolicy.CanAccept(candidate.Group, candidate.List, pendingItems))
+            var admission = new SelectionAdmission(candidate.Group, candidate.List, pendingItems);
+            if (!_admissionPolicy.CanAccept(admission))
             {
                 return false;
             }
@@ -1001,7 +994,7 @@ internal static class ExperienceSelectionEngine
             }
 
             _remainingMaximumBudgets[candidate.Group.Key] -= _temp.Count;
-            _admissionPolicy.Commit(candidate.Group, candidate.List, pendingItems);
+            _admissionPolicy.Commit(admission);
             return true;
         }
 

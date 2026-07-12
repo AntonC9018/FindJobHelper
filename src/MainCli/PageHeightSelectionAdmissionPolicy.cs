@@ -6,7 +6,7 @@ namespace FindJobHelper.Core;
 internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPolicy
 {
     private readonly CvMeasurementSnapshot _measurements;
-    private readonly IReadOnlyDictionary<ExperienceKey, Section> _groupSections;
+    private readonly CvExperienceSectionBindings _sectionBindings;
     private readonly HashSet<Section> _renderedSections;
     private readonly Dictionary<ExperienceList, ExperienceListId> _listIds;
     private readonly Dictionary<ExperienceListItem, ExperienceItemId> _itemIds;
@@ -17,15 +17,15 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
     public PageHeightSelectionAdmissionPolicy(
         ExperienceDatabase database,
         CvMeasurementSnapshot measurements,
-        IReadOnlyDictionary<ExperienceKey, Section> groupSections,
+        CvExperienceSectionBindings sectionBindings,
         ImmutableArray<Section> sectionOrder)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(measurements);
-        ArgumentNullException.ThrowIfNull(groupSections);
+        ArgumentNullException.ThrowIfNull(sectionBindings);
 
         _measurements = measurements;
-        _groupSections = groupSections;
+        _sectionBindings = sectionBindings;
         _renderedSections = sectionOrder.ToHashSet();
         _listIds = new(ReferenceEqualityComparer.Instance);
         foreach (var identified in database.EnumerateExperienceLists())
@@ -40,7 +40,7 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
         }
 
         _currentHeight = measurements.DocumentChrome.ScaledPoints;
-        var dynamicSections = groupSections.Values.ToHashSet();
+        var dynamicSections = sectionBindings.Sections.ToHashSet();
         foreach (var section in sectionOrder)
         {
             if (!dynamicSections.Contains(section))
@@ -61,35 +61,26 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
 
     internal LatexHeight CurrentHeight => new(_currentHeight);
 
-    public bool CanAccept(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items)
+    public bool CanAccept(SelectionAdmission admission)
     {
-        var additionalHeight = GetAdditionalHeight(group, list, items);
+        var additionalHeight = GetAdditionalHeight(admission);
         return checked(_currentHeight + additionalHeight) <= _measurements.UsablePageHeight.ScaledPoints;
     }
 
-    public void Commit(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items)
+    public void Commit(SelectionAdmission admission)
     {
-        _currentHeight = checked(_currentHeight + GetAdditionalHeight(group, list, items));
-        var section = GetSection(group);
+        _currentHeight = checked(_currentHeight + GetAdditionalHeight(admission));
+        var section = GetSection(admission.Group);
         if (_renderedSections.Contains(section))
         {
             _visibleSections.Add(section);
-            _visibleLists.Add(list);
+            _visibleLists.Add(admission.List);
         }
     }
 
-    private long GetAdditionalHeight(
-        ExperienceSelectionGroup group,
-        ExperienceList list,
-        IReadOnlyList<ExperienceListItem> items)
+    private long GetAdditionalHeight(SelectionAdmission admission)
     {
-        var section = GetSection(group);
+        var section = GetSection(admission.Group);
         if (!_renderedSections.Contains(section))
         {
             return 0;
@@ -101,16 +92,16 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
             height = checked(height + _measurements.GetSectionChromeHeight(section).ScaledPoints);
         }
 
-        if (!_visibleLists.Contains(list))
+        if (!_visibleLists.Contains(admission.List))
         {
-            if (!_listIds.TryGetValue(list, out var listId))
+            if (!_listIds.TryGetValue(admission.List, out var listId))
             {
                 throw new InvalidOperationException("Selected experience list was not found in the measured database.");
             }
             height = checked(height + _measurements.GetExperienceChromeHeight(listId).ScaledPoints);
         }
 
-        foreach (var item in items)
+        foreach (var item in admission.Items)
         {
             if (!_itemIds.TryGetValue(item, out var itemId))
             {
@@ -124,12 +115,6 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
 
     private Section GetSection(ExperienceSelectionGroup group)
     {
-        if (_groupSections.TryGetValue(group.Key, out var section))
-        {
-            return section;
-        }
-
-        throw new InvalidOperationException(
-            $"No CV section mapping was configured for experience group '{group.Key}'.");
+        return _sectionBindings.GetSection(group.Key);
     }
 }

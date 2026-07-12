@@ -112,7 +112,8 @@ public sealed class LatexMeasurementService
         var graph = new RequestGraph(_ruleVersion);
         foreach (var identified in database.EnumerateExperienceItems())
         {
-            var fragment = CvLatexFragmentRenderer.RenderExperienceItem(identified.Value);
+            var fragment = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderExperienceItem(identified.Value));
             var key = new LatexMeasurementCacheKey(
                 _ruleVersion,
                 LatexMeasurementKind.ExperienceItem,
@@ -126,7 +127,8 @@ public sealed class LatexMeasurementService
 
         foreach (var identified in database.EnumerateExperienceLists())
         {
-            var fragment = CvLatexFragmentRenderer.RenderExperienceChrome(identified.Value);
+            var fragment = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderExperienceChrome(identified.Value));
             graph.Add(
                 CreateFragmentKey(LatexMeasurementKind.ExperienceChrome, fragment),
                 fragment,
@@ -138,7 +140,8 @@ public sealed class LatexMeasurementService
 
         foreach (var section in Enum.GetValues<Section>())
         {
-            var chrome = CvLatexFragmentRenderer.RenderSectionChrome(section);
+            var chrome = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderSectionChrome(section));
             graph.Add(
                 CreateFragmentKey(LatexMeasurementKind.SectionChrome, chrome, section),
                 chrome,
@@ -151,10 +154,11 @@ public sealed class LatexMeasurementService
                 continue;
             }
 
-            var complete = CvLatexFragmentRenderer.RenderSectionInner(
-                section,
-                currentModel,
-                isDebug: false);
+            var complete = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderSectionInner(
+                    section,
+                    currentModel,
+                    isDebug: false));
             var kind = section == Section.Languages
                 ? LatexMeasurementKind.StaticSection
                 : LatexMeasurementKind.CompleteSection;
@@ -165,14 +169,16 @@ public sealed class LatexMeasurementService
                 MeasurementDestination.ForCompleteSection(section));
         }
 
-        var documentHeader = CvLatexFragmentRenderer.RenderDocumentHeader(currentModel);
+        var documentHeader = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentHeader(currentModel));
         graph.Add(
             CreateFragmentKey(LatexMeasurementKind.DocumentHeader, documentHeader),
             documentHeader,
             LatexMeasurementMode.DocumentHeader,
             MeasurementDestination.ForDocumentHeader());
 
-        var documentFooter = CvLatexFragmentRenderer.RenderDocumentFooter(currentModel);
+        var documentFooter = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentFooter(currentModel));
         graph.Add(
             CreateFragmentKey(LatexMeasurementKind.DocumentFooter, documentFooter),
             documentFooter,

@@ -162,9 +162,7 @@ public sealed class CvSelectionConfiguration
         {
             return new(
                 builder.Build(),
-                educationKey,
-                workKey,
-                personalProjectsKey,
+                new(educationKey, workKey, personalProjectsKey),
                 Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
                 [.. SectionOrder],
                 LimitToOnePage);
@@ -385,9 +383,7 @@ public sealed class SelectionOptionsConfiguration
 
 public sealed record ConfiguredCvSearch(
     ExperienceSearch Search,
-    ExperienceKey EducationKey,
-    ExperienceKey WorkKey,
-    ExperienceKey PersonalProjectsKey,
+    CvExperienceSectionBindings Sections,
     ImmutableArray<RegularString> Technologies,
     ImmutableArray<Section> SectionOrder,
     bool LimitToOnePage);

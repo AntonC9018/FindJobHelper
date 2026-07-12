@@ -24,9 +24,9 @@ public sealed class CvSelectionConfigurationTests
                 Section.Education,
             },
             search.SectionOrder);
-        Assert.Equal("Education", search.EducationKey.Value);
-        Assert.Equal("Work", search.WorkKey.Value);
-        Assert.Equal("PersonalProjects", search.PersonalProjectsKey.Value);
+        Assert.Equal("Education", search.Sections.EducationKey.Value);
+        Assert.Equal("Work", search.Sections.WorkKey.Value);
+        Assert.Equal("PersonalProjects", search.Sections.PersonalProjectsKey.Value);
         Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
         Assert.Null(configuration.Selection.Education.MaxTotalItemBudget);
         Assert.Equal(1, configuration.Selection.Education.TotalItemBudget);
