@@ -181,7 +181,9 @@
 
 \usepackage{enumitem}
 
-\newcommand{\maybeitemize}[1]{%
+% The production event list primitive. Measurement invokes this same macro for
+% isolated item fragments, so enumitem geometry has a single source of truth.
+\newcommand{\cveventitems}[1]{%
   \def\temp{#1}%
   \ifx\temp\empty
     % do nothing, no items
@@ -191,6 +193,7 @@
     \end{itemize}
   \fi
 }
+\let\maybeitemize\cveventitems
 
 \newcommand{\maybeindent}[1]{%
   \def\temp{#1}%
@@ -226,7 +229,7 @@
 
 \maybeindent{#5}
 
-\maybeitemize{#4}
+\cveventitems{#4}
 
 \vspace{6pt}
 }
@@ -283,17 +286,44 @@
 \usepackage{needspace}
 \usepackage{environ}
 \newsavebox{\flowbox}
+\newsavebox{\cvmeasurementbox}
 \newlength{\flowheight}
+\newlength{\cvflowblockfitskipamount}
+\setlength{\cvflowblockfitskipamount}{\dimexpr\parskip + 1\baselineskip\relax}
+
+% Build an intrinsic production-width box. This primitive intentionally has no
+% page-state inspection and never inserts the resulting box into the page stream.
+\newcommand{\cvsetflowcontentbox}[2]{%
+    \sbox{#1}{%
+        \begin{varwidth}{\linewidth}
+            #2
+        \end{varwidth}%
+    }%
+}
+
+\newcommand{\cvflowblockfitskip}{%
+    \addvspace{\cvflowblockfitskipamount}%
+}
+
+\newcommand{\cvflowblocknewpageskip}{%
+    \vspace*{1.5\baselineskip}%
+}
+
+% Hidden measurement entry points. The caller reads \ht/\dp from
+% \cvmeasurementbox and must never call \usebox.
+\newcommand{\cvsetmeasurementbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementbox}{#1}%
+}
+
+\newcommand{\cvsetmeasurementsectionbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfitskip #1}%
+}
 
 \NewEnviron{flowblock}{%
     \par
 
     % Measure content
-    \sbox{\flowbox}{%
-        \begin{varwidth}{\linewidth}
-            \BODY
-        \end{varwidth}
-    }%
+    \cvsetflowcontentbox{\flowbox}{\BODY}%
 
     \setlength{\flowheight}{%
         \dimexpr\ht\flowbox+\dp\flowbox\relax
@@ -304,11 +334,11 @@
 
     % If it fits here:
     \ifdim\flowheight<\dimen0
-        \addvspace{\dimexpr\parskip + 1\baselineskip\relax}
+        \cvflowblockfitskip
     \else
         % If moving to next page, add larger top spacing
         \newpage
-        \vspace*{1.5\baselineskip}
+        \cvflowblocknewpageskip
     \fi
 
     % Large blocks become breakable

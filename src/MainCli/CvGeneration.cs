@@ -70,31 +70,13 @@ public static class CvTemplate
 
         \pagestyle{fancy}
 
-        % Title Headline
-        \vspace{-8pt}
-        \begin{center}
-            \HUGE \textsc{{{{{ p.Model.Name.Last }}}} {{{{ p.Model.Name.First }}}}} \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
-            \small {{{{ p.Model.Profession.Value }}}}
-        \end{center}
-
-        \vspace{6pt}
-
-        {{{{ MetaLists(p.Model) }}}}
-
-        {{{{ Symbols.IF(!p.Model.Summary.IsNull) }}}}
-        % Summary
-        \vspace{-6pt}
-        \cvsection{Summary}
-
-        {{{{ p.Model.Summary }}}}\\
-
-        {{{{ Symbols.ENDIF }}}}
+        {{{{ new LatexString(CvLatexFragmentRenderer.RenderDocumentHeader(p.Model)) }}}}
 
         % Main Content
 
         {{{{ sections.Render() }}}}
 
-        {{{{ Footer(p.Model) }}}}
+        {{{{ new LatexString(CvLatexFragmentRenderer.RenderDocumentFooter(p.Model)) }}}}
 
         \end{document}
         """);
@@ -137,28 +119,9 @@ public static class CvTemplate
     private static FormattableString Languages(
         ImmutableArray<LanguageProficiencyInfo> languages)
     {
-        if (languages.IsEmpty)
-        {
-            return $"";
-        }
-
-        return $$"""
-            \cvsection{Languages}
-
-            \languagetable{
-            {{
-                    languages
-                        .Select(lang =>
-                        {
-                            var skills = lang.Skills
-                                .Select(s => s.Text)
-                                .Render(ListItemSeparator);
-
-                            return (FormattableString) $$"""{{ lang.Language.Name }} & {{ lang.GeneralProficiencyLevel.Value }} & {{ skills }} \\""";
-                        })
-                        .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)
-                }}}
-        """;
+        var inner = CvLatexFragmentRenderer.RenderLanguagesSectionInner(languages);
+        var wrapped = CvLatexFragmentRenderer.RenderProductionSection(inner);
+        return $"{new LatexString(wrapped)}";
     }
 
     private static readonly RenderEnumerableOptions ListItemSeparator =
@@ -252,64 +215,9 @@ public static class CvTemplate
         ImmutableArray<Event> events,
         string sectionName)
     {
-        if (events.Length == 0)
-        {
-            return $"";
-        }
-
-        var items = events.Select(e =>
-        {
-            var subItemsE = e.SubItems
-                .Select(x => (FormattableString) $$"""{{ DebugScore(x.DebugScore, x.DebugTagScores) }}{{ x.String }}""");
-
-            if (!e.Urls.IsEmpty)
-            {
-                var urls = e.Urls
-                    .Select(x => (FormattableString) $$"""\url{{{ x }}}""")
-                    .Render(BarSeparator);
-
-                subItemsE = subItemsE.Append((FormattableString) $$"""\textbf{Links:} {{ urls }}""");
-            }
-
-            var subItems = subItemsE
-                .Select(x => (FormattableString) $"""
-                     \item
-                        {x}
-                     """)
-                .Render(RenderEnumerableOptions.LineBreaksWithoutSpacer);
-
-            var place = e.Place.IsPersonal
-                ? ""
-                : e.Place.Name;
-
-            var title = (FormattableString) $$"""{{ DebugScore(e.DebugScore, e.DebugTagScores) }}{{ e.Title }}""";
-
-            return (FormattableString) $$"""
-            \cvevent{{{ e.DateRange }}}{{{ title }}}{{{ place }}}{
-                {{ subItems }}}{{{ e.Text }}}
-            """;
-        });
-        var eventsRendered = items.Render(RenderEnumerableOptions.LineBreaksWithSpacer);
-        return $$"""
-            \begin{flowblock}
-            \cvsection{{{ sectionName }}}
-
-            {{ eventsRendered }}
-            \end{flowblock}
-        """;
-
-        FormattableString DebugScore(
-            float score,
-            ImmutableArray<DebugTagScore> tagScores = default)
-        {
-            if (!isDebug)
-            {
-                return $"";
-            }
-
-            var text = FormatDebugScore(score, tagScores);
-            return $$"""\debugscore{{{ new LatexEscapedString(text) }}}""";
-        }
+        var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(events, sectionName, isDebug);
+        var wrapped = CvLatexFragmentRenderer.RenderProductionSection(inner);
+        return $"{new LatexString(wrapped)}";
     }
 
     private static string FormatDebugScore(

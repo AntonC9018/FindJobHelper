@@ -74,6 +74,61 @@ public sealed class CvGenerationCommand
 
         var searchResult = searchConfiguration.Search.Run(experienceDatabase.Experiences);
         var location = new Location(City: "Chișinău", Country: "Moldova");
+        var currentModel = new CvDataModel
+        {
+            Name = new()
+            {
+                First = "Anton",
+                Last = "Curmanschii",
+            },
+            CategorizedInfoLists = [
+                new(Category.Technologies, searchConfiguration.Technologies),
+                new(Category.GitHub, [
+                    "https://github.com/AntonC9018",
+                ]),
+                new(Category.LinkedIn, [
+                    "https://www.linkedin.com/in/anton-curmanschii-647232161",
+                ]),
+            ],
+            CategorizedInfos = [
+                new(Category.Location, location.FormatInfo()),
+                new(Category.Email, personalInfo.Email),
+                new(Category.Phone, personalInfo.Phone),
+            ],
+            Profession = new("Software Developer"),
+            Educations = searchResult.Get(searchConfiguration.EducationKey),
+            Languages = [
+                new(
+                    Language.Russian,
+                    LanguageProficiencyLevel.Native),
+                new(
+                    Language.English,
+                    LanguageProficiencyLevel.C2,
+                    Skills: [
+                        new("Technical Writing & Reading"),
+                        new("Conversational Fluency"),
+                    ]),
+                new(
+                    Language.Romanian,
+                    LanguageProficiencyLevel.B2,
+                    Skills: [
+                        new("Technical Conversation"),
+                        new("Tutoring"),
+                    ]),
+            ],
+            Location = location,
+            Summary = NullableLatexString.Null,
+            WorkExperiences = searchResult.Get(searchConfiguration.WorkKey),
+            PersonalProjects = searchResult.Get(searchConfiguration.PersonalProjectsKey),
+            SectionOrder = searchConfiguration.SectionOrder,
+        };
+
+        var measurementSnapshot = await new LatexMeasurementService().MeasureAsync(
+            experienceDatabase,
+            currentModel,
+            templatePath,
+            cancellationToken);
+        _ = measurementSnapshot;
 
         var stagingDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -85,54 +140,7 @@ public sealed class CvGenerationCommand
             var artifacts = await CvTemplate.Generate(new()
             {
                 IsDebug = isDebug,
-                Model = new()
-                {
-                    Name = new()
-                    {
-                        First = "Anton",
-                        Last = "Curmanschii",
-                    },
-                    CategorizedInfoLists = [
-                        new(Category.Technologies, searchConfiguration.Technologies),
-                        new(Category.GitHub, [
-                            "https://github.com/AntonC9018",
-                        ]),
-                        new(Category.LinkedIn, [
-                            "https://www.linkedin.com/in/anton-curmanschii-647232161",
-                        ]),
-                    ],
-                    CategorizedInfos = [
-                        new(Category.Location, location.FormatInfo()),
-                        new(Category.Email, personalInfo.Email),
-                        new(Category.Phone, personalInfo.Phone),
-                    ],
-                    Profession = new("Software Developer"),
-                    Educations = searchResult.Get(searchConfiguration.EducationKey),
-                    Languages = [
-                        new(
-                            Language.Russian,
-                            LanguageProficiencyLevel.Native),
-                        new(
-                            Language.English,
-                            LanguageProficiencyLevel.C2,
-                            Skills: [
-                                new("Technical Writing & Reading"),
-                                new("Conversational Fluency"),
-                            ]),
-                        new(
-                            Language.Romanian,
-                            LanguageProficiencyLevel.B2,
-                            Skills: [
-                                new("Technical Conversation"),
-                                new("Tutoring"),
-                            ]),
-                    ],
-                    Location = location,
-                    Summary = NullableLatexString.Null,
-                    WorkExperiences = searchResult.Get(searchConfiguration.WorkKey),
-                    PersonalProjects = searchResult.Get(searchConfiguration.PersonalProjectsKey),
-                    SectionOrder = searchConfiguration.SectionOrder,
-                },
+                Model = currentModel,
                 CancellationToken = cancellationToken,
                 ConfigFilePath = templatePath,
                 OutputDirectory = stagingDirectory,
