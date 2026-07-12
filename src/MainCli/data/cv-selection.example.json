@@ -1,4 +1,5 @@
 {
+  "limitToOnePage": true,
   "requiredTags": [
     { "name": ".NET", "weight": 1.0 },
     { "name": "Thesis", "weight": 0.01 },

@@ -241,7 +241,22 @@ public sealed class ExperienceSearch
             experiences,
             _tags,
             _mmr,
-            _groups);
+            _groups,
+            UnlimitedSelectionAdmissionPolicy.Instance);
+    }
+
+    internal SearchResult Run(
+        ExperienceDatabase database,
+        ISelectionAdmissionPolicy admissionPolicy)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(admissionPolicy);
+        return ExperienceSelectionEngine.Select(
+            database.Experiences,
+            _tags,
+            _mmr,
+            _groups,
+            admissionPolicy);
     }
 }
 
@@ -310,6 +325,45 @@ internal sealed record ExperienceSelectionGroup(
     ExperienceSelectionOptions Options,
     int Order);
 
+internal interface ISelectionAdmissionPolicy
+{
+    bool PrioritizeMinimums { get; }
+
+    bool CanAccept(
+        ExperienceSelectionGroup group,
+        ExperienceList list,
+        IReadOnlyList<ExperienceListItem> items);
+
+    void Commit(
+        ExperienceSelectionGroup group,
+        ExperienceList list,
+        IReadOnlyList<ExperienceListItem> items);
+}
+
+internal sealed class UnlimitedSelectionAdmissionPolicy : ISelectionAdmissionPolicy
+{
+    public static UnlimitedSelectionAdmissionPolicy Instance { get; } = new();
+
+    private UnlimitedSelectionAdmissionPolicy()
+    {
+    }
+
+    public bool PrioritizeMinimums => false;
+
+    public bool CanAccept(
+        ExperienceSelectionGroup group,
+        ExperienceList list,
+        IReadOnlyList<ExperienceListItem> items)
+        => true;
+
+    public void Commit(
+        ExperienceSelectionGroup group,
+        ExperienceList list,
+        IReadOnlyList<ExperienceListItem> items)
+    {
+    }
+}
+
 internal enum SelectionItemReason
 {
     Direct,
@@ -375,7 +429,12 @@ internal static class ExperienceSelectionEngine
             new(p.MinTotalItemBudget, p.EffectiveMaxTotalItemBudget, p.ScoreLowerBound),
             Order: 0));
 
-        var result = Select(lists, p.Tags, p.Mmr, groups);
+        var result = Select(
+            lists,
+            p.Tags,
+            p.Mmr,
+            groups,
+            UnlimitedSelectionAdmissionPolicy.Instance);
         return result.Get(key);
     }
 
@@ -417,10 +476,12 @@ internal static class ExperienceSelectionEngine
         IEnumerable<ExperienceList> lists,
         WeightedTags tags,
         MmrOptions mmr,
-        ImmutableArray<ExperienceSelectionGroup> groups)
+        ImmutableArray<ExperienceSelectionGroup> groups,
+        ISelectionAdmissionPolicy admissionPolicy)
     {
         ArgumentNullException.ThrowIfNull(tags);
         ArgumentNullException.ThrowIfNull(mmr);
+        ArgumentNullException.ThrowIfNull(admissionPolicy);
 
         mmr.Validate();
 
@@ -477,7 +538,7 @@ internal static class ExperienceSelectionEngine
                 .Concat(requiredThesisCandidates)
                 .Max(x => x.Matches.Sum));
 
-        var context = new SelectionContext(groups);
+        var context = new SelectionContext(groups, admissionPolicy);
         foreach (var x in candidates.Concat(requiredThesisCandidates))
         {
             context.Scores.TryAdd(x.Item, x.Matches);
@@ -486,6 +547,12 @@ internal static class ExperienceSelectionEngine
         foreach (var candidate in requiredThesisCandidates)
         {
             TryAddAndRegister(candidate, allowExceedingBudget: true);
+        }
+
+        var rejected = new HashSet<ExperienceListItem>(ItemReferenceComparer.Instance);
+        if (admissionPolicy.PrioritizeMinimums)
+        {
+            FillMinimums();
         }
 
         foreach (var scoredList in scoredLists)
@@ -502,11 +569,13 @@ internal static class ExperienceSelectionEngine
 
             if (best is { } candidate)
             {
-                TryAddAndRegister(candidate);
+                if (!TryAddAndRegister(candidate))
+                {
+                    rejected.Add(candidate.Item);
+                }
             }
         }
 
-        var rejected = new HashSet<ExperienceListItem>(ItemReferenceComparer.Instance);
         while (context.HasRemainingBudget)
         {
             var next = ranker.BestCandidate(candidates, context.Added, rejected);
@@ -521,24 +590,32 @@ internal static class ExperienceSelectionEngine
             }
         }
 
-        while (context.HasUnmetMinimum)
+        if (!admissionPolicy.PrioritizeMinimums)
         {
-            var next = ranker.BestCandidate(
-                candidates.Where(context.IsBelowMinimum),
-                context.Added,
-                rejected);
-            if (next is null)
-            {
-                break;
-            }
-
-            if (!TryAddAndRegister(next.Value))
-            {
-                rejected.Add(next.Value.Item);
-            }
+            FillMinimums();
         }
 
         return context.Output();
+
+        void FillMinimums()
+        {
+            while (context.HasUnmetMinimum)
+            {
+                var next = ranker.BestCandidate(
+                    candidates.Where(context.IsBelowMinimum),
+                    context.Added,
+                    rejected);
+                if (next is null)
+                {
+                    break;
+                }
+
+                if (!TryAddAndRegister(next.Value))
+                {
+                    rejected.Add(next.Value.Item);
+                }
+            }
+        }
 
         bool TryAddAndRegister(
             MmrCandidate candidate,
@@ -838,6 +915,7 @@ internal static class ExperienceSelectionEngine
     private sealed class SelectionContext
     {
         private readonly ImmutableArray<ExperienceSelectionGroup> _groups;
+        private readonly ISelectionAdmissionPolicy _admissionPolicy;
         private readonly Dictionary<ExperienceKey, int> _remainingMaximumBudgets = new();
         private readonly List<PendingSelectedItem> _temp = new();
         private readonly HashSet<ExperienceListItem> _tempVisited = new(ItemReferenceComparer.Instance);
@@ -852,9 +930,12 @@ internal static class ExperienceSelectionEngine
         public readonly Dictionary<ExperienceListItem, SelectionItemReason> Reasons = new(ItemReferenceComparer.Instance);
         public readonly Dictionary<ExperienceListItem, ExperienceListItem> DependencyTargets = new(ItemReferenceComparer.Instance);
 
-        public SelectionContext(ImmutableArray<ExperienceSelectionGroup> groups)
+        public SelectionContext(
+            ImmutableArray<ExperienceSelectionGroup> groups,
+            ISelectionAdmissionPolicy admissionPolicy)
         {
             _groups = groups;
+            _admissionPolicy = admissionPolicy;
             foreach (var group in groups)
             {
                 _remainingMaximumBudgets.Add(group.Key, group.Options.MaxTotalItemBudget);
@@ -882,6 +963,12 @@ internal static class ExperienceSelectionEngine
             CollectSelectionClosure(candidate.List, candidate.Item);
 
             if (_temp.Count == 0)
+            {
+                return false;
+            }
+
+            var pendingItems = _temp.Select(static pending => pending.Item).ToArray();
+            if (!_admissionPolicy.CanAccept(candidate.Group, candidate.List, pendingItems))
             {
                 return false;
             }
@@ -914,6 +1001,7 @@ internal static class ExperienceSelectionEngine
             }
 
             _remainingMaximumBudgets[candidate.Group.Key] -= _temp.Count;
+            _admissionPolicy.Commit(candidate.Group, candidate.List, pendingItems);
             return true;
         }
 

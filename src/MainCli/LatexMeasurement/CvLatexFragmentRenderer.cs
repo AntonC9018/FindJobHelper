@@ -146,7 +146,7 @@ internal static class CvLatexFragmentRenderer
     }
 
     public static string RenderExperienceItem(ExperienceListItem item)
-        => $"\\cveventitems{{{RenderEventItem(item.Text.ToLatexString().ToString())}}}";
+        => item.Text.ToLatexString().ToString();
 
     public static string RenderSectionChrome(Section section)
         => $"\\cvsection{{{new LatexEscapedString(GetSectionTitle(section))}}}";
@@ -185,7 +185,7 @@ internal static class CvLatexFragmentRenderer
         string description)
         => $"\\cvevent{{{date}}}{{{title}}}{{{place}}}{{{items}}}{{{description}}}";
 
-    private static string RenderEventItem(string content) => $"\\item {content}";
+    private static string RenderEventItem(string content) => $"\\cveventitem{{{content}}}";
 
     private static string RenderDebugScore(
         float score,

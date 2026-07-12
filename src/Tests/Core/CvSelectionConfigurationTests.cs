@@ -1,5 +1,5 @@
-using MainCli;
 using FindJobHelper.CVGeneration;
+using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -30,6 +30,35 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
         Assert.Null(configuration.Selection.Education.MaxTotalItemBudget);
         Assert.Equal(1, configuration.Selection.Education.TotalItemBudget);
+        Assert.True(configuration.LimitToOnePage);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LimitToOnePageDefaultsToTrueAndMapsFalse()
+    {
+        var json = await ReadFixtureAsync();
+        var omitted = json.Replace("  \"limitToOnePage\": true,\r\n", "", StringComparison.Ordinal)
+            .Replace("  \"limitToOnePage\": true,\n", "", StringComparison.Ordinal);
+        var disabled = json.Replace(
+            "\"limitToOnePage\": true",
+            "\"limitToOnePage\": false",
+            StringComparison.Ordinal);
+
+        Assert.True((await LoadAsync(omitted)).LimitToOnePage);
+        Assert.False((await LoadAsync(disabled)).LimitToOnePage);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsNonBooleanLimitToOnePage()
+    {
+        var json = (await ReadFixtureAsync()).Replace(
+            "\"limitToOnePage\": true",
+            "\"limitToOnePage\": \"yes\"",
+            StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(json, buildSearch: false);
+
+        Assert.Contains("limitToOnePage", exception.Message, StringComparison.Ordinal);
     }
 
     [Theory]

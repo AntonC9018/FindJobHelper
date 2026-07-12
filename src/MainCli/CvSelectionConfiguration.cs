@@ -46,6 +46,7 @@ public sealed class CvConfigurationException : Exception
 
 public sealed class CvSelectionConfiguration
 {
+    public bool LimitToOnePage { get; init; } = true;
     public required List<RequiredTagConfiguration> RequiredTags { get; init; }
     public required List<string> Technologies { get; init; }
     public required MmrConfiguration Mmr { get; init; }
@@ -165,7 +166,8 @@ public sealed class CvSelectionConfiguration
                 workKey,
                 personalProjectsKey,
                 Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
-                [.. SectionOrder]);
+                [.. SectionOrder],
+                LimitToOnePage);
         }
         catch (ArgumentOutOfRangeException ex)
         {
@@ -387,4 +389,5 @@ public sealed record ConfiguredCvSearch(
     ExperienceKey WorkKey,
     ExperienceKey PersonalProjectsKey,
     ImmutableArray<RegularString> Technologies,
-    ImmutableArray<Section> SectionOrder);
+    ImmutableArray<Section> SectionOrder,
+    bool LimitToOnePage);

@@ -1,4 +1,5 @@
 using CommandDotNet;
+using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 using MainCli;
@@ -72,7 +73,6 @@ public sealed class CvGenerationCommand
             });
         }
 
-        var searchResult = searchConfiguration.Search.Run(experienceDatabase.Experiences);
         var location = new Location(City: "Chișinău", Country: "Moldova");
         var currentModel = new CvDataModel
         {
@@ -96,7 +96,6 @@ public sealed class CvGenerationCommand
                 new(Category.Phone, personalInfo.Phone),
             ],
             Profession = new("Software Developer"),
-            Educations = searchResult.Get(searchConfiguration.EducationKey),
             Languages = [
                 new(
                     Language.Russian,
@@ -118,18 +117,38 @@ public sealed class CvGenerationCommand
             ],
             Location = location,
             Summary = NullableLatexString.Null,
-            WorkExperiences = searchResult.Get(searchConfiguration.WorkKey),
-            PersonalProjects = searchResult.Get(searchConfiguration.PersonalProjectsKey),
             SectionOrder = searchConfiguration.SectionOrder,
         };
 
-        var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
-        var measurementSnapshot = await measurementService.MeasureAsync(
-            experienceDatabase,
-            currentModel,
-            templatePath,
-            cancellationToken);
-        _ = measurementSnapshot;
+        SearchResult searchResult;
+        if (searchConfiguration.LimitToOnePage)
+        {
+            var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
+            var measurementSnapshot = await measurementService.MeasureAsync(
+                experienceDatabase,
+                currentModel,
+                templatePath,
+                cancellationToken);
+            var admissionPolicy = new PageHeightSelectionAdmissionPolicy(
+                experienceDatabase,
+                measurementSnapshot,
+                new Dictionary<ExperienceKey, Section>
+                {
+                    [searchConfiguration.EducationKey] = Section.Education,
+                    [searchConfiguration.WorkKey] = Section.WorkExperience,
+                    [searchConfiguration.PersonalProjectsKey] = Section.PersonalProjects,
+                },
+                searchConfiguration.SectionOrder);
+            searchResult = searchConfiguration.Search.Run(experienceDatabase, admissionPolicy);
+        }
+        else
+        {
+            searchResult = searchConfiguration.Search.Run(experienceDatabase.Experiences);
+        }
+
+        currentModel.Educations = searchResult.Get(searchConfiguration.EducationKey);
+        currentModel.WorkExperiences = searchResult.Get(searchConfiguration.WorkKey);
+        currentModel.PersonalProjects = searchResult.Get(searchConfiguration.PersonalProjectsKey);
 
         var stagingDirectory = Path.Combine(
             Path.GetTempPath(),

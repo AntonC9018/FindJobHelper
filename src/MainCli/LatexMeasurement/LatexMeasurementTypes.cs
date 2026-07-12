@@ -17,7 +17,8 @@ public sealed record CvMeasurementSnapshot(
     IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceChrome,
     IReadOnlyDictionary<Section, LatexHeight> CompleteSections,
     IReadOnlyDictionary<Section, LatexHeight> SectionChrome,
-    LatexHeight DocumentChrome)
+    LatexHeight DocumentChrome,
+    LatexHeight UsablePageHeight)
 {
     public LatexHeight GetExperienceItemHeight(ExperienceItemId id)
         => GetRequired(ExperienceItems, id, "experience item");
@@ -36,13 +37,15 @@ public sealed record CvMeasurementSnapshot(
         IDictionary<ExperienceListId, LatexHeight> experienceChrome,
         IDictionary<Section, LatexHeight> completeSections,
         IDictionary<Section, LatexHeight> sectionChrome,
-        LatexHeight documentChrome)
+        LatexHeight documentChrome,
+        LatexHeight usablePageHeight)
         => new(
             experienceItems.ToFrozenDictionary(),
             experienceChrome.ToFrozenDictionary(),
             completeSections.ToFrozenDictionary(),
             sectionChrome.ToFrozenDictionary(),
-            documentChrome);
+            documentChrome,
+            usablePageHeight);
 
     private static LatexHeight GetRequired<TKey>(
         IReadOnlyDictionary<TKey, LatexHeight> values,
@@ -72,7 +75,20 @@ internal enum LatexMeasurementKind
     SectionChrome,
     StaticSection,
     CompleteSection,
-    DocumentChrome,
+    DocumentHeader,
+    DocumentFooter,
+    UsablePageHeight,
+}
+
+internal enum LatexMeasurementMode
+{
+    Box,
+    FlowBlock,
+    SectionChrome,
+    ExperienceItemMarginal,
+    ExperienceChromeWithoutPermanentItems,
+    DocumentHeader,
+    PageStart,
 }
 
 internal readonly record struct LatexMeasurementCacheKey(
@@ -113,7 +129,7 @@ internal static class RichTextCanonicalHasher
         {
             Write(visitor, "node", "StyledText");
             Write(visitor, "text", node.Text);
-            Write(visitor, "style", (int)node.Style);
+            Write(visitor, "style", (int) node.Style);
             Write(visitor, "children", 0);
             next(node, visitor);
         })
@@ -163,7 +179,7 @@ internal static class LatexFragmentHasher
         Append(hash, kind.ToString());
         if (section is { } sectionValue)
         {
-            Append(hash, ((int)sectionValue).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(hash, ((int) sectionValue).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
         Append(hash, renderedLatex);
         return Convert.ToHexStringLower(hash.GetHashAndReset());

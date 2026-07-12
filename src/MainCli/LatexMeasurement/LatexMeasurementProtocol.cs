@@ -9,7 +9,7 @@ internal sealed record LatexMeasurementRequest(
     MeasurementCorrelationId CorrelationId,
     LatexMeasurementCacheKey CacheKey,
     string RenderedFragment,
-    bool IncludeFlowBlockFitSpacing);
+    LatexMeasurementMode Mode);
 
 internal interface ILatexMeasurementRunner
 {
@@ -103,9 +103,56 @@ internal static class LatexMeasurementDocument
 
         foreach (var request in requests)
         {
-            var setBoxCommand = request.IncludeFlowBlockFitSpacing
-                ? @"\cvsetmeasurementsectionbox"
-                : @"\cvsetmeasurementbox";
+            if (request.Mode == LatexMeasurementMode.DocumentHeader)
+            {
+                source.AppendLine($$"""
+                    \clearpage
+                    \begingroup
+                    \cvsetmeasurementsectionbox{\cvmeasurementsentinelsection}
+                    \dimen2=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax
+                    \fjhmeasurementpagetotal=\pagetotal
+                    {{request.RenderedFragment}}
+                    \begin{flowblock}
+                    \cvmeasurementsentinelsection
+                    \end{flowblock}
+                    \par
+                    % The fresh-page header/boxed-section boundary suppresses
+                    % 2.5pt that exists when the section is boxed in isolation.
+                    \dimen0=\dimexpr\pagetotal-\fjhmeasurementpagetotal-\dimen2-2.5pt\relax
+                    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}
+                    \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
+                    \endgroup
+                    \clearpage
+                    """);
+                continue;
+            }
+
+            if (request.Mode == LatexMeasurementMode.PageStart)
+            {
+                source.AppendLine($$"""
+                    \clearpage
+                    \begingroup
+                    \fjhmeasurementpagetotal=\pagetotal
+                    {{request.RenderedFragment}}
+                    \par
+                    \dimen0=\dimexpr\pagetotal-\fjhmeasurementpagetotal\relax
+                    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}
+                    \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
+                    \endgroup
+                    \clearpage
+                    """);
+                continue;
+            }
+
+            var setBoxCommand = request.Mode switch
+            {
+                LatexMeasurementMode.Box => @"\cvsetmeasurementbox",
+                LatexMeasurementMode.FlowBlock => @"\cvsetmeasurementsectionbox",
+                LatexMeasurementMode.SectionChrome => @"\cvsetmeasurementsectionchromebox",
+                LatexMeasurementMode.ExperienceItemMarginal => @"\cvsetmeasurementitembox",
+                LatexMeasurementMode.ExperienceChromeWithoutPermanentItems => @"\cvsetmeasurementexperiencechromebox",
+                _ => throw new ArgumentOutOfRangeException(nameof(request.Mode), request.Mode, null),
+            };
             source.AppendLine($$"""
                 \begingroup
                 \fjhmeasurementpage=\value{page}

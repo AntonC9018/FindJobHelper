@@ -69,7 +69,7 @@ public sealed class LatexMeasurementService
                     new MeasurementCorrelationId(i + 1),
                     misses[i].Key,
                     misses[i].RenderedFragment,
-                    misses[i].IncludeFlowBlockFitSpacing);
+                    misses[i].Mode);
             }
 
             var measured = await _runner.MeasureAsync(
@@ -94,12 +94,15 @@ public sealed class LatexMeasurementService
         }
 
         graph.VerifyComplete(database);
+        var documentChrome = new LatexHeight(checked(
+            graph.DocumentHeader!.Value.ScaledPoints + graph.DocumentFooter!.Value.ScaledPoints));
         return CvMeasurementSnapshot.CreateFrozen(
             graph.ExperienceItems,
             graph.ExperienceChrome,
             graph.CompleteSections,
             graph.SectionChrome,
-            graph.DocumentChrome!.Value);
+            documentChrome,
+            graph.UsablePageHeight!.Value);
     }
 
     private RequestGraph BuildRequestGraph(
@@ -117,7 +120,7 @@ public sealed class LatexMeasurementService
             graph.Add(
                 key,
                 fragment,
-                includeFlowBlockFitSpacing: false,
+                LatexMeasurementMode.ExperienceItemMarginal,
                 MeasurementDestination.ForExperienceItem(identified.Id));
         }
 
@@ -127,7 +130,9 @@ public sealed class LatexMeasurementService
             graph.Add(
                 CreateFragmentKey(LatexMeasurementKind.ExperienceChrome, fragment),
                 fragment,
-                includeFlowBlockFitSpacing: false,
+                identified.Value.Urls.IsEmpty
+                    ? LatexMeasurementMode.ExperienceChromeWithoutPermanentItems
+                    : LatexMeasurementMode.Box,
                 MeasurementDestination.ForExperienceChrome(identified.Id));
         }
 
@@ -137,7 +142,7 @@ public sealed class LatexMeasurementService
             graph.Add(
                 CreateFragmentKey(LatexMeasurementKind.SectionChrome, chrome, section),
                 chrome,
-                includeFlowBlockFitSpacing: true,
+                LatexMeasurementMode.SectionChrome,
                 MeasurementDestination.ForSectionChrome(section));
 
             if (CvLatexFragmentRenderer.IsSectionEmpty(section, currentModel))
@@ -156,16 +161,30 @@ public sealed class LatexMeasurementService
             graph.Add(
                 CreateFragmentKey(kind, complete, section),
                 complete,
-                includeFlowBlockFitSpacing: true,
+                LatexMeasurementMode.FlowBlock,
                 MeasurementDestination.ForCompleteSection(section));
         }
 
-        var documentChrome = CvLatexFragmentRenderer.RenderDocumentChrome(currentModel);
+        var documentHeader = CvLatexFragmentRenderer.RenderDocumentHeader(currentModel);
         graph.Add(
-            CreateFragmentKey(LatexMeasurementKind.DocumentChrome, documentChrome),
-            documentChrome,
-            includeFlowBlockFitSpacing: false,
-            MeasurementDestination.ForDocumentChrome());
+            CreateFragmentKey(LatexMeasurementKind.DocumentHeader, documentHeader),
+            documentHeader,
+            LatexMeasurementMode.DocumentHeader,
+            MeasurementDestination.ForDocumentHeader());
+
+        var documentFooter = CvLatexFragmentRenderer.RenderDocumentFooter(currentModel);
+        graph.Add(
+            CreateFragmentKey(LatexMeasurementKind.DocumentFooter, documentFooter),
+            documentFooter,
+            LatexMeasurementMode.Box,
+            MeasurementDestination.ForDocumentFooter());
+
+        const string usablePageFragment = @"\rule{0pt}{\textheight}";
+        graph.Add(
+            CreateFragmentKey(LatexMeasurementKind.UsablePageHeight, usablePageFragment),
+            usablePageFragment,
+            LatexMeasurementMode.Box,
+            MeasurementDestination.ForUsablePageHeight());
         return graph;
     }
 
@@ -207,12 +226,14 @@ public sealed class LatexMeasurementService
         public Dictionary<ExperienceListId, LatexHeight> ExperienceChrome { get; } = new();
         public Dictionary<Section, LatexHeight> CompleteSections { get; } = new();
         public Dictionary<Section, LatexHeight> SectionChrome { get; } = new();
-        public LatexHeight? DocumentChrome { get; private set; }
+        public LatexHeight? DocumentHeader { get; private set; }
+        public LatexHeight? DocumentFooter { get; private set; }
+        public LatexHeight? UsablePageHeight { get; private set; }
 
         public void Add(
             LatexMeasurementCacheKey key,
             string renderedFragment,
-            bool includeFlowBlockFitSpacing,
+            LatexMeasurementMode mode,
             MeasurementDestination destination)
         {
             if (key.RuleVersion != ruleVersion)
@@ -222,11 +243,11 @@ public sealed class LatexMeasurementService
 
             if (!WorkItems.TryGetValue(key, out var workItem))
             {
-                workItem = new(key, renderedFragment, includeFlowBlockFitSpacing);
+                workItem = new(key, renderedFragment, mode);
                 WorkItems.Add(key, workItem);
             }
             else if (workItem.RenderedFragment != renderedFragment
-                     || workItem.IncludeFlowBlockFitSpacing != includeFlowBlockFitSpacing)
+                     || workItem.Mode != mode)
             {
                 throw new InvalidOperationException(
                     $"Hash collision detected for {key.Kind} key '{key.ContentHash}'.");
@@ -255,8 +276,14 @@ public sealed class LatexMeasurementService
                     case MeasurementDestinationKind.SectionChrome:
                         SectionChrome[destination.Section] = height;
                         break;
-                    case MeasurementDestinationKind.DocumentChrome:
-                        DocumentChrome = height;
+                    case MeasurementDestinationKind.DocumentHeader:
+                        DocumentHeader = height;
+                        break;
+                    case MeasurementDestinationKind.DocumentFooter:
+                        DocumentFooter = height;
+                        break;
+                    case MeasurementDestinationKind.UsablePageHeight:
+                        UsablePageHeight = height;
                         break;
                     default:
                         throw new ArgumentOutOfRangeException();
@@ -284,9 +311,13 @@ public sealed class LatexMeasurementService
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: section chrome is missing.");
             }
-            if (DocumentChrome is null)
+            if (DocumentHeader is null || DocumentFooter is null)
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: document chrome is missing.");
+            }
+            if (UsablePageHeight is null)
+            {
+                throw new InvalidOperationException("Incomplete measurement snapshot: usable page height is missing.");
             }
         }
     }
@@ -294,11 +325,11 @@ public sealed class LatexMeasurementService
     private sealed class MeasurementWorkItem(
         LatexMeasurementCacheKey key,
         string renderedFragment,
-        bool includeFlowBlockFitSpacing)
+        LatexMeasurementMode mode)
     {
         public LatexMeasurementCacheKey Key { get; } = key;
         public string RenderedFragment { get; } = renderedFragment;
-        public bool IncludeFlowBlockFitSpacing { get; } = includeFlowBlockFitSpacing;
+        public LatexMeasurementMode Mode { get; } = mode;
         public List<MeasurementDestination> Destinations { get; } = new();
     }
 
@@ -308,7 +339,9 @@ public sealed class LatexMeasurementService
         ExperienceChrome,
         CompleteSection,
         SectionChrome,
-        DocumentChrome,
+        DocumentHeader,
+        DocumentFooter,
+        UsablePageHeight,
     }
 
     private readonly record struct MeasurementDestination(
@@ -329,7 +362,13 @@ public sealed class LatexMeasurementService
         public static MeasurementDestination ForSectionChrome(Section section)
             => new(MeasurementDestinationKind.SectionChrome, default, default, section);
 
-        public static MeasurementDestination ForDocumentChrome()
-            => new(MeasurementDestinationKind.DocumentChrome, default, default, default);
+        public static MeasurementDestination ForDocumentHeader()
+            => new(MeasurementDestinationKind.DocumentHeader, default, default, default);
+
+        public static MeasurementDestination ForDocumentFooter()
+            => new(MeasurementDestinationKind.DocumentFooter, default, default, default);
+
+        public static MeasurementDestination ForUsablePageHeight()
+            => new(MeasurementDestinationKind.UsablePageHeight, default, default, default);
     }
 }

@@ -155,9 +155,15 @@
 %
 \newcommand{\cvsection}[1]
 {
-    \begin{center}
-        \large\textcolor{sectcol}{\textbf{#1}}
-    \end{center}
+    \par
+    \vskip6pt
+    \nointerlineskip
+    \vbox{%
+        \hsize=\linewidth
+        \centering
+        \large\textcolor{sectcol}{\textbf{#1}}\par
+    }%
+    \vskip6pt
 }
 
 %create a coloured arrow with title as cv meta section section
@@ -181,16 +187,28 @@
 
 \usepackage{enumitem}
 
-% The production event list primitive. Measurement invokes this same macro for
-% isolated item fragments, so enumitem geometry has a single source of truth.
+% Each bullet is an intrinsic vertical unit. This preserves the visual list
+% while making every selected item's observed height exactly additive.
+\newcommand{\cveventitem}[1]{%
+  \par
+  \vskip3pt%
+  \nointerlineskip
+  \vbox{%
+    \hsize=\linewidth
+    \leftskip=1.5em
+    \parindent=0pt
+    \noindent
+    \llap{\textbullet\hspace{0.6em}}#1\par
+  }%
+}
+
 \newcommand{\cveventitems}[1]{%
   \def\temp{#1}%
   \ifx\temp\empty
     % do nothing, no items
   \else
-    \begin{itemize}[topsep=3pt, partopsep=0pt, itemsep=3pt, parsep=0pt]
-      #1
-    \end{itemize}
+    #1%
+    \vspace{3pt}%
   \fi
 }
 \let\maybeitemize\cveventitems
@@ -213,6 +231,10 @@
 %
 \newcommand{\cvevent}[5]
 {
+\par
+\nointerlineskip
+\vbox{%
+\hsize=\linewidth
 \begin{tabular*}{1\textwidth}{p{13.6cm}  x{3.9cm}}
     \textbf{#2}%
     \if\relax\detokenize{#3}\relax
@@ -232,6 +254,7 @@
 \cveventitems{#4}
 
 \vspace{6pt}
+}%
 }
 
 % creates a stretched box as
@@ -286,7 +309,10 @@
 \usepackage{needspace}
 \usepackage{environ}
 \newsavebox{\flowbox}
+\newsavebox{\flowfitbox}
 \newsavebox{\cvmeasurementbox}
+\newsavebox{\cvmeasurementreferencebox}
+\newsavebox{\cvmeasurementcandidatebox}
 \newlength{\flowheight}
 \newlength{\cvflowblockfitskipamount}
 \setlength{\cvflowblockfitskipamount}{\dimexpr\parskip + 1\baselineskip\relax}
@@ -309,6 +335,17 @@
     \vspace*{1.5\baselineskip}%
 }
 
+% The complete representation used when a section fits on the current page.
+% Production and measurement must use this exact wrapper so all leading and
+% trailing glue is charged once.
+\newcommand{\cvflowblockfitcontent}[1]{%
+    \cvflowblockfitskip
+    #1
+    \par
+    \hspace{1em plus 1fill}\allowbreak
+    \par
+}
+
 % Hidden measurement entry points. The caller reads \ht/\dp from
 % \cvmeasurementbox and must never call \usebox.
 \newcommand{\cvsetmeasurementbox}[1]{%
@@ -316,39 +353,91 @@
 }
 
 \newcommand{\cvsetmeasurementsectionbox}[1]{%
-    \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfitskip #1}%
+    \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfitcontent{#1}}%
+    % Production contributes 1pt at each flowblock boundary. Charge it to
+    % the section; document-header measurement cancels it for the first one.
+    \dimen0=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox+1pt\relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+\newcommand{\cvmeasurementsentinelevent}{%
+    \cvevent{}{}{Personal}{}{}%
+}
+
+\newcommand{\cvmeasurementsentinelsection}{%
+    \cvsection{Measurement Sentinel}%
+    \cvmeasurementsentinelevent
+}
+
+% Measure section chrome as its observed marginal contribution immediately
+% before the same event primitive used in production.
+\newcommand{\cvsetmeasurementsectionchromebox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementcandidatebox}{%
+        \cvflowblockfitcontent{#1\cvmeasurementsentinelevent}%
+    }%
+    \cvsetflowcontentbox{\cvmeasurementreferencebox}{%
+        \cvmeasurementsentinelevent
+    }%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
+        -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
+        +1pt
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+% Measure the marginal contribution of appending a bullet to the shared
+% production itemize. The sentinel cancels top/bottom list chrome.
+\newcommand{\cvsetmeasurementitembox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementbox}{\cveventitem{#1}}%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementbox+\dp\cvmeasurementbox+3pt
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+% An event without permanent link bullets still acquires one-time itemize
+% chrome as soon as its first selected experience item is rendered.
+\newcommand{\cvsetmeasurementexperiencechromebox}[1]{%
+    % The bottom half of the production list spacing is charged once here;
+    % each marginal item carries its own leading/inter-item spacing.
+    \cvsetmeasurementbox{#1}%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementbox+\dp\cvmeasurementbox+3pt
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
 
 \NewEnviron{flowblock}{%
     \par
 
-    % Measure content
+    % Measure both the raw body and the exact fit representation.
     \cvsetflowcontentbox{\flowbox}{\BODY}%
+    \cvsetflowcontentbox{\flowfitbox}{\cvflowblockfitcontent{\BODY}}%
 
     \setlength{\flowheight}{%
-        \dimexpr\ht\flowbox+\dp\flowbox\relax
+        \dimexpr\ht\flowfitbox+\dp\flowfitbox\relax
     }
 
     % Remaining vertical space on current page
     \dimen0=\dimexpr\pagegoal-\pagetotal\relax
 
-    % If it fits here:
-    \ifdim\flowheight<\dimen0
-        \cvflowblockfitskip
-    \else
-        % If moving to next page, add larger top spacing
+    % If the complete fit representation fits here, use the measured box.
+    \ifdim\flowheight>\dimen0
         \newpage
         \cvflowblocknewpageskip
-    \fi
 
-    % Large blocks become breakable
-    \ifdim\flowheight>\textheight
-        \BODY
+        % Large blocks become breakable.
+        \dimen2=\dimexpr\ht\flowbox+\dp\flowbox\relax
+        \ifdim\dimen2>\textheight
+            \BODY
+        \else
+            \usebox{\flowbox}%
+        \fi
+
+        \par
+        \hspace{1em plus 1fill}\allowbreak
     \else
-        \usebox{\flowbox}
+        \usebox{\flowfitbox}%
     \fi
-
-    \par
-
-    \hspace{1em plus 1fill}\allowbreak
 }

@@ -73,6 +73,33 @@ public sealed class CvGenerationCliEndToEndTests
         }
     }
 
+    [Fact]
+    public async Task Generate_DisabledOnePageLimitPublishesUnrestrictedPdf()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-multipage-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                MultiPageFixturePath,
+                "--output-directory",
+                outputDirectory);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
+            Assert.Single(Directory.GetFiles(outputDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
     private static async Task<ProcessResult> RunCliAsync(params string[] arguments)
     {
         var startInfo = new ProcessStartInfo("dotnet")
@@ -106,6 +133,11 @@ public sealed class CvGenerationCliEndToEndTests
         AppContext.BaseDirectory,
         "data",
         "cli-e2e-config.json");
+
+    private static string MultiPageFixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-multipage-config.json");
 
     private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 }

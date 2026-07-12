@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
-using FindJobHelper.CVGeneration;
 using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -44,6 +44,7 @@ public sealed class LatexMeasurementTests
             new Dictionary<ExperienceListId, LatexHeight>(),
             new Dictionary<Section, LatexHeight>(),
             new Dictionary<Section, LatexHeight>(),
+            LatexHeight.Zero,
             LatexHeight.Zero);
         var missing = new ExperienceItemId(new ExperienceListId(3), 4);
 
@@ -242,7 +243,7 @@ public sealed class LatexMeasurementTests
                     LatexMeasurementKind.ExperienceItem,
                     position.ToString("x64")),
                 @"\rule{0pt}{900pt}",
-                false))
+                LatexMeasurementMode.Box))
             .ToArray();
         var runner = new XeLatexMeasurementRunner();
 
@@ -257,21 +258,211 @@ public sealed class LatexMeasurementTests
         }
     }
 
+    [Fact]
+    public async Task ProductionEventAndSectionHeights_EqualTheirMeasuredComponents()
+    {
+        var firstText = CreateRichText(new PlainText { Text = "A short first measured bullet." });
+        var secondText = CreateRichText(new PlainText
+        {
+            Text = "A longer second measured bullet which wraps far enough to exercise the production item width and line spacing consistently.",
+        });
+        var list = CreateList(firstText, secondText);
+        var @event = new Event
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Text = list.Description,
+            Urls = list.Urls,
+            SubItems =
+            [
+                new(0, firstText.ToLatexString()),
+                new(0, secondText.ToLatexString()),
+            ],
+        };
+        var linkedList = new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Type = list.Type,
+            Description = list.Description,
+            Items = [list.Items[0]],
+            Urls = ["https://example.test/project"],
+        };
+        var linkedEvent = @event with
+        {
+            SubItems = [new(0, firstText.ToLatexString())],
+            Urls = linkedList.Urls,
+        };
+        var documentModel = CreateEmptyModel();
+        documentModel.WorkExperiences = [@event];
+        documentModel.SectionOrder = [Section.WorkExperience];
+        var completeWorkSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
+            documentModel.WorkExperiences,
+            "Experience",
+            false);
+        var completeDocument = CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)
+            + CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)
+            + CvLatexFragmentRenderer.RenderDocumentFooter(documentModel);
+        var completeProjectSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
+            [@event],
+            "Personal Projects",
+            false);
+        var twoSectionDocument = CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)
+            + CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)
+            + CvLatexFragmentRenderer.RenderProductionSection(completeProjectSection)
+            + CvLatexFragmentRenderer.RenderDocumentFooter(documentModel);
+        var requests = new[]
+        {
+            Request(1, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(list), LatexMeasurementMode.ExperienceChromeWithoutPermanentItems),
+            Request(2, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(list.Items[0]), LatexMeasurementMode.ExperienceItemMarginal),
+            Request(3, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(list.Items[1]), LatexMeasurementMode.ExperienceItemMarginal),
+            Request(4, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(@event, false), LatexMeasurementMode.Box),
+            Request(5, LatexMeasurementKind.SectionChrome, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.SectionChrome),
+            Request(6, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience", false), LatexMeasurementMode.FlowBlock),
+            Request(7, LatexMeasurementKind.UsablePageHeight, @"\rule{0pt}{\textheight}", LatexMeasurementMode.Box),
+            Request(8, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event, @event], "Experience", false), LatexMeasurementMode.FlowBlock),
+            Request(9, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(linkedList), LatexMeasurementMode.Box),
+            Request(10, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(linkedList.Items[0]), LatexMeasurementMode.ExperienceItemMarginal),
+            Request(11, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(linkedEvent, false), LatexMeasurementMode.Box),
+            Request(12, LatexMeasurementKind.DocumentHeader, CvLatexFragmentRenderer.RenderDocumentHeader(documentModel), LatexMeasurementMode.DocumentHeader),
+            Request(13, LatexMeasurementKind.DocumentFooter, CvLatexFragmentRenderer.RenderDocumentFooter(documentModel), LatexMeasurementMode.Box),
+            Request(14, LatexMeasurementKind.CompleteSection, completeDocument, LatexMeasurementMode.PageStart),
+            Request(15, LatexMeasurementKind.CompleteSection, completeProjectSection, LatexMeasurementMode.FlowBlock),
+            Request(16, LatexMeasurementKind.CompleteSection, twoSectionDocument, LatexMeasurementMode.PageStart),
+        };
+        var runner = new XeLatexMeasurementRunner();
+
+        var measured = await runner.MeasureAsync(ProductionTemplatePath, requests, CancellationToken.None);
+
+        var eventComponents = measured[new(1)].ScaledPoints
+            + measured[new(2)].ScaledPoints
+            + measured[new(3)].ScaledPoints;
+        Assert.True(
+            measured[new(4)].ScaledPoints == eventComponents,
+            $"chrome={measured[new(1)].ScaledPoints}, item1={measured[new(2)].ScaledPoints}, item2={measured[new(3)].ScaledPoints}, event={measured[new(4)].ScaledPoints}");
+        Assert.Equal(
+            measured[new(6)].ScaledPoints,
+            measured[new(5)].ScaledPoints + measured[new(4)].ScaledPoints);
+        Assert.Equal(
+            measured[new(8)].ScaledPoints,
+            measured[new(5)].ScaledPoints + (2 * measured[new(4)].ScaledPoints));
+        Assert.Equal(
+            measured[new(11)].ScaledPoints,
+            measured[new(9)].ScaledPoints + measured[new(10)].ScaledPoints);
+        Assert.Equal(
+            measured[new(14)].ScaledPoints,
+            measured[new(12)].ScaledPoints
+            + measured[new(13)].ScaledPoints
+            + measured[new(6)].ScaledPoints);
+        Assert.Equal(
+            measured[new(16)].ScaledPoints,
+            measured[new(12)].ScaledPoints
+            + measured[new(13)].ScaledPoints
+            + measured[new(6)].ScaledPoints
+            + measured[new(15)].ScaledPoints);
+        Assert.True(measured[new(7)].ScaledPoints > measured[new(6)].ScaledPoints);
+    }
+
+    [Fact]
+    public async Task LatexLog_ReportsOneAndMultiplePageProductionDocuments()
+    {
+        var shortDirectory = Path.Combine(Path.GetTempPath(), $"fjh-short-pages-{Guid.NewGuid():N}");
+        var longDirectory = Path.Combine(Path.GetTempPath(), $"fjh-long-pages-{Guid.NewGuid():N}");
+        try
+        {
+            var shortModel = CreateEmptyModel();
+            shortModel.SectionOrder = [];
+            await CvTemplate.Generate(new()
+            {
+                ConfigFilePath = ProductionTemplatePath,
+                OutputDirectory = shortDirectory,
+                Model = shortModel,
+                CancellationToken = CancellationToken.None,
+            });
+
+            var longModel = CreateEmptyModel();
+            longModel.SectionOrder = [Section.WorkExperience];
+            longModel.WorkExperiences = Enumerable.Range(1, 24)
+                .Select(position => new Event
+                {
+                    Title = $"Measured event {position}",
+                    Place = Place.Personal,
+                    DateRange = DateRange.Completed(new(2020), new(2021)),
+                    SubItems =
+                    [
+                        new(0, new LatexString("A production bullet used to force a genuine multi-page document.")),
+                    ],
+                })
+                .ToImmutableArray();
+            await CvTemplate.Generate(new()
+            {
+                ConfigFilePath = ProductionTemplatePath,
+                OutputDirectory = longDirectory,
+                Model = longModel,
+                CancellationToken = CancellationToken.None,
+            });
+
+            Assert.Equal(1, ReadPageCount(shortDirectory));
+            Assert.True(ReadPageCount(longDirectory) > 1);
+        }
+        finally
+        {
+            if (Directory.Exists(shortDirectory))
+            {
+                Directory.Delete(shortDirectory, recursive: true);
+            }
+            if (Directory.Exists(longDirectory))
+            {
+                Directory.Delete(longDirectory, recursive: true);
+            }
+        }
+    }
+
     private static IReadOnlyList<LatexMeasurementRequest> CreateProtocolRequests()
     {
         return
         [
             new(
                 new MeasurementCorrelationId(1),
-                new LatexMeasurementCacheKey(1, LatexMeasurementKind.DocumentChrome, new string('a', 64)),
+                new LatexMeasurementCacheKey(1, LatexMeasurementKind.DocumentHeader, new string('a', 64)),
                 "first",
-                false),
+                LatexMeasurementMode.Box),
             new(
                 new MeasurementCorrelationId(2),
                 new LatexMeasurementCacheKey(1, LatexMeasurementKind.SectionChrome, new string('b', 64)),
                 "second",
-                true),
+                LatexMeasurementMode.FlowBlock),
         ];
+    }
+
+    private static LatexMeasurementRequest Request(
+        int id,
+        LatexMeasurementKind kind,
+        string fragment,
+        LatexMeasurementMode mode)
+        => new(
+            new(id),
+            new LatexMeasurementCacheKey(2, kind, id.ToString("x64")),
+            fragment,
+            mode);
+
+    private static string ProductionTemplatePath => Path.Combine(
+        Path.GetDirectoryName(typeof(CvTemplate).Assembly.Location)!,
+        "data",
+        "cv_template_config.tex");
+
+    private static int ReadPageCount(string outputDirectory)
+    {
+        var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
+        var match = System.Text.RegularExpressions.Regex.Match(
+            log,
+            @"Output written on main\.(?:pdf|xdv) \((\d+) pages?\b");
+        Assert.True(
+            match.Success,
+            $"LaTeX log did not contain its standard output page-count line. Output lines: {string.Join(" | ", log.Split('\n').Where(static line => line.Contains("Output", StringComparison.OrdinalIgnoreCase)))}");
+        return int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static string ResultLine(LatexMeasurementRequest request, long height)
