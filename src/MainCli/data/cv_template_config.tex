@@ -209,11 +209,16 @@
 
 \usepackage{enumitem}
 
+% Keep adjacent bullet baselines about 1.5 normal lines apart. The same value
+% is reused by production rendering and hidden height measurement.
+\newlength{\cveventitemspacing}
+\setlength{\cveventitemspacing}{0.5\baselineskip}
+
 % Each bullet is an intrinsic vertical unit. This preserves the visual list
 % while making every selected item's observed height exactly additive.
 \newcommand{\cveventitem}[1]{%
   \par
-  \vskip3pt%
+  \vskip\cveventitemspacing%
   \nointerlineskip
   \vbox{%
     \hsize=\linewidth
@@ -230,7 +235,7 @@
     % do nothing, no items
   \else
     #1%
-    \vspace{3pt}%
+    \vspace{\cveventitemspacing}%
   \fi
 }
 \let\maybeitemize\cveventitems
@@ -415,7 +420,7 @@
 \newcommand{\cvsetmeasurementitembox}[1]{%
     \cvsetflowcontentbox{\cvmeasurementbox}{\cveventitem{#1}}%
     \dimen0=\dimexpr
-        \ht\cvmeasurementbox+\dp\cvmeasurementbox+3pt
+        \ht\cvmeasurementbox+\dp\cvmeasurementbox+\cveventitemspacing
         \relax
     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
@@ -427,7 +432,7 @@
     % each marginal item carries its own leading/inter-item spacing.
     \cvsetmeasurementbox{#1}%
     \dimen0=\dimexpr
-        \ht\cvmeasurementbox+\dp\cvmeasurementbox+3pt
+        \ht\cvmeasurementbox+\dp\cvmeasurementbox+\cveventitemspacing
         \relax
     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
