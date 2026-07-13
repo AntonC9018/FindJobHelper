@@ -127,11 +127,12 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public void DocumentHeader_UsesSingleLineCheckOnlyForTechnologiesMetadata()
+    public void DocumentHeader_RendersMetadataInTwoColumnTable()
     {
         var model = CreateEmptyModel();
         model.CategorizedInfoLists =
         [
+            new(Category.Skills, ["API Design"]),
             new(Category.Technologies, [".NET", "PostgreSQL"]),
             new(Category.GitHub, ["https://github.com/example"]),
         ];
@@ -144,9 +145,11 @@ public sealed class LatexMeasurementTests
         var header = CvLatexFragmentRenderer.Materialize(
             CvLatexFragmentRenderer.RenderDocumentHeader(model));
 
-        Assert.Equal(1, CountOccurrences(header, @"\singlelinemetasection{"));
-        Assert.Equal(1, CountOccurrences(header, @"\metasection{"));
-        Assert.Contains(@"\textbf{Skills \& Technologies:}", header);
+        Assert.Contains(@"\begin{cvmetasectiontable}", header);
+        Assert.Contains(@"\end{cvmetasectiontable}", header);
+        Assert.Equal(3, CountOccurrences(header, @"\metasection{"));
+        Assert.Contains(@"\textbf{Skills:}", header);
+        Assert.Contains(@"\textbf{Technologies:}", header);
     }
 
     [Fact]
@@ -462,7 +465,7 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public async Task ProductionGeneration_FailsWhenTechnologiesMetadataWraps()
+    public async Task ProductionGeneration_FailsWhenLeftMetadataExceedsItsColumn()
     {
         var outputDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -474,8 +477,8 @@ public sealed class LatexMeasurementTests
             model.CategorizedInfoLists =
             [
                 new(
-                    Category.Technologies,
-                    Enumerable.Repeat<RegularString>("Extremely Long Technology Name", 30).ToImmutableArray()),
+                    Category.Skills,
+                    Enumerable.Repeat<RegularString>("Extremely Long Skill Name", 30).ToImmutableArray()),
             ];
             model.CategorizedInfos = [new(Category.Location, "Example City, Example Country")];
 
@@ -488,7 +491,7 @@ public sealed class LatexMeasurementTests
                     CancellationToken = CancellationToken.None,
                 }));
 
-            Assert.Equal(CvLatexErrors.TechnologiesLineWrappedMessage, exception.Message);
+            Assert.Equal(CvLatexErrors.MetadataLeftOverflowMessage, exception.Message);
         }
         finally
         {

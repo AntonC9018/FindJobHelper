@@ -166,36 +166,41 @@
     \vskip6pt
 }
 
-%create a coloured arrow with title as cv meta section section
+% Metadata is a two-column table with a visible divider. The left column gets
+% three quarters of the available width; the right column is kept compact for
+% contact details. Keep these dimensions shared by rendering and validation.
+\newlength{\cvmetasectionleftwidth}
+\newlength{\cvmetasectionrightwidth}
+
+\newsavebox{\cvmetasectionleftbox}
+\newcommand{\cvmetasectioncheckleft}[1]{%
+    \sbox{\cvmetasectionleftbox}{\footnotesize #1}%
+    \ifdim\wd\cvmetasectionleftbox>\cvmetasectionleftwidth
+        \PackageError{FindJobHelper}{FJH_METADATA_LEFT_OVERFLOW: Left-side metadata must fit within its column}{Shorten the left-side metadata list until it fits on one line.}%
+    \fi
+}
+
+\newenvironment{cvmetasectiontable}{%
+    \par
+    \noindent
+    \begingroup
+    \footnotesize
+    \setlength{\cvmetasectionleftwidth}{0.75\linewidth}%
+    \setlength{\cvmetasectionrightwidth}{%
+        \dimexpr\linewidth-\cvmetasectionleftwidth-2\tabcolsep-\arrayrulewidth\relax}%
+    \arrayrulecolor{softcol}%
+    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{\cvmetasectionleftwidth}|>{\raggedleft\arraybackslash}p{\cvmetasectionrightwidth}@{}}%
+}{%
+    \end{tabular}%
+    \endgroup
+    \par
+}
+
 % param 1: right-hand meta value
 % param 2: left-hand meta value
-%
-\newcommand{\cvmetasectioncontent}[2]{%
-\footnotesize{#2} \hspace*{\fill} \footnotesize{#1}%
-}
-
-\newcommand{\metasection}[2]
-{
-%\begin{tabular*}{1\textwidth}{r r}
-\cvmetasectioncontent{#1}{#2}\\[1pt]
-%\end{tabular*}
-}
-
-% Technologies are deliberately restricted to one rendered line. Typeset the
-% exact row into a hidden box first and use TeX's own line count so the check
-% stays in sync with the production font, escaping, and available width.
-\newsavebox{\cvmetasectionsinglelinebox}
-\newcount\cvmetasectionlinecount
-\newcommand{\singlelinemetasection}[2]{%
-\setbox\cvmetasectionsinglelinebox=\vbox{%
-    \hsize=\linewidth
-    \cvmetasectioncontent{#1}{#2}\par
-    \global\cvmetasectionlinecount=\prevgraf
-}%
-\ifnum\cvmetasectionlinecount>1
-    \PackageError{FindJobHelper}{FJH_TECHNOLOGIES_LINE_WRAPPED: Technologies metadata must fit on one line}{Remove technologies until the metadata row fits on one line.}%
-\fi
-\metasection{#1}{#2}%
+\newcommand{\metasection}[2]{%
+    \cvmetasectioncheckleft{#2}%
+    #2 & #1\\[1pt]
 }
 
 %----------------------------------------------------------------------------------------

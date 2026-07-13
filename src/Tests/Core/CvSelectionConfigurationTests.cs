@@ -15,6 +15,7 @@ public sealed class CvSelectionConfigurationTests
 
         var search = configuration.BuildSearch(tagsDatabase);
 
+        Assert.Equal(new[] { "E2E Skill" }, search.Skills.Select(x => x.Value));
         Assert.Equal(new[] { "E2E JSON Configuration" }, search.Technologies.Select(x => x.Value));
         Assert.Equal(
             new[]
@@ -28,7 +29,6 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal("Work", search.Sections.WorkKey.Value);
         Assert.Equal("PersonalProjects", search.Sections.PersonalProjectsKey.Value);
         Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
-        Assert.Null(configuration.Selection.Education.MaxTotalItemBudget);
         Assert.Equal(1, configuration.Selection.Education.TotalItemBudget);
         Assert.True(configuration.LimitToOnePage);
     }
@@ -71,6 +71,19 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
+    public async Task LoadAsync_RejectsMissingSkills()
+    {
+        var json = await ReadFixtureAsync();
+        var withoutSkills = json
+            .Replace("  \"skills\": [\r\n    \"E2E Skill\"\r\n  ],\r\n", "", StringComparison.Ordinal)
+            .Replace("  \"skills\": [\n    \"E2E Skill\"\n  ],\n", "", StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(withoutSkills, buildSearch: false);
+
+        Assert.Contains("skills", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task LoadAsync_RejectsNonBooleanLimitToOnePage()
     {
         var json = (await ReadFixtureAsync()).Replace(
@@ -86,10 +99,8 @@ public sealed class CvSelectionConfigurationTests
     [Theory]
     [InlineData("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", "mmr.relevanceWeight")]
     [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", "must be non-negative")]
-    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": -1, \"maxTotalItemBudget\": 1", "minTotalItemBudget")]
-    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 0, \"maxTotalItemBudget\": -1", "maxTotalItemBudget")]
-    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 2, \"maxTotalItemBudget\": 1", "must not exceed")]
-    [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": 1, \"maxTotalItemBudget\": 1", "not both")]
+    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": -1, \"totalItemBudget\": 1", "minTotalItemBudget")]
+    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 2, \"totalItemBudget\": 1", "must not exceed")]
     public async Task LoadAsync_RejectsInvalidSelectionValues(
         string oldValue,
         string newValue,
@@ -104,18 +115,17 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
-    public async Task LoadAsync_MapsMinimumAndMaximumSelectionBudgets()
+    public async Task LoadAsync_MapsMinimumAndTotalSelectionBudgets()
     {
         var json = (await ReadFixtureAsync()).Replace(
             "\"totalItemBudget\": 1",
-            "\"minTotalItemBudget\": 1, \"maxTotalItemBudget\": 2",
+            "\"minTotalItemBudget\": 1, \"totalItemBudget\": 2",
             StringComparison.Ordinal);
 
         var configuration = await LoadAsync(json);
 
         Assert.Equal(1, configuration.Selection.Education.MinTotalItemBudget);
-        Assert.Equal(2, configuration.Selection.Education.MaxTotalItemBudget);
-        Assert.Null(configuration.Selection.Education.TotalItemBudget);
+        Assert.Equal(2, configuration.Selection.Education.TotalItemBudget);
     }
 
     [Fact]
@@ -135,7 +145,6 @@ public sealed class CvSelectionConfigurationTests
             budget => budget.Section == configured.Sections.EducationKey);
 
         Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
-        Assert.Null(configuration.Selection.Education.MaxTotalItemBudget);
         Assert.Null(configuration.Selection.Education.TotalItemBudget);
         Assert.Equal(0, educationBudget.RequestedMinimum);
         Assert.Equal(int.MaxValue, educationBudget.RequestedMaximum);
@@ -161,6 +170,7 @@ public sealed class CvSelectionConfigurationTests
         var json = await ReadFixtureAsync();
         var invalidJson = json
             .Replace("\"weight\": 1.0", "\"weight\": 0", StringComparison.Ordinal)
+            .Replace("E2E Skill", " ", StringComparison.Ordinal)
             .Replace("E2E JSON Configuration", " ", StringComparison.Ordinal)
             .Replace("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", StringComparison.Ordinal)
             .Replace("\"saturationQuota\": 2", "\"saturationQuota\": 0", StringComparison.Ordinal)
@@ -171,8 +181,9 @@ public sealed class CvSelectionConfigurationTests
 
         var exception = await LoadInvalidAsync(invalidJson, buildSearch: false);
 
-        Assert.Equal(12, exception.Errors.Length);
+        Assert.Equal(13, exception.Errors.Length);
         Assert.Contains(exception.Errors, error => error.Contains("required tag", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(exception.Errors, error => error.Contains("skills", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(exception.Errors, error => error.Contains("technologies", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(exception.Errors, error => error.Contains("mmr.relevanceWeight", StringComparison.Ordinal));
         Assert.Contains(exception.Errors, error => error.Contains("selection.workExperience.totalItemBudget", StringComparison.Ordinal));
@@ -201,6 +212,7 @@ public sealed class CvSelectionConfigurationTests
             """
             {
               "requiredTags": [{ "name": ".NET", "weight": 1 }],
+              "skills": ["Backend Development"],
               "technologies": [".NET"],
               "mmr": { "relevanceWeight": 0.72, "saturationQuota": 2, "saturationPenalty": 0.18 },
               "selection": {

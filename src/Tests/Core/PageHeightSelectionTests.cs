@@ -228,7 +228,7 @@ public sealed class PageHeightSelectionTests
                 options =>
                 {
                     options.MinTotalItemBudget = group.Minimum;
-                    options.MaxTotalItemBudget = group.Maximum;
+                    options.TotalItemBudget = group.Maximum;
                 });
         }
         return builder.Build();
@@ -243,7 +243,7 @@ public sealed class PageHeightSelectionTests
             static experience => experience.Type == ExperienceType.Job,
             options =>
             {
-                options.MaxTotalItemBudget = maximum;
+                options.TotalItemBudget = maximum;
                 options.IncludeEmptyLists = true;
             });
         return builder.Build();

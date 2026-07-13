@@ -23,11 +23,11 @@ public sealed record GeneratedCvArtifacts(string PdfPath);
 
 internal static class CvLatexErrors
 {
-    public const string TechnologiesLineWrappedMarker = "FJH_TECHNOLOGIES_LINE_WRAPPED";
-    public const string TechnologiesLineWrappedMessage = "Technologies metadata must fit on one line.";
+    public const string MetadataLeftOverflowMarker = "FJH_METADATA_LEFT_OVERFLOW";
+    public const string MetadataLeftOverflowMessage = "Left-side metadata must fit within its column.";
 
-    public static bool ContainsTechnologiesLineWrappedMarker(string output)
-        => output.Contains(TechnologiesLineWrappedMarker, StringComparison.Ordinal);
+    public static bool ContainsMetadataLeftOverflowMarker(string output)
+        => output.Contains(MetadataLeftOverflowMarker, StringComparison.Ordinal);
 }
 
 public static class CvTemplate
@@ -114,9 +114,9 @@ public static class CvTemplate
         {
             var latexLogPath = Path.Join(outputDirectory.FullName, "main.log");
             if (File.Exists(latexLogPath)
-                && CvLatexErrors.ContainsTechnologiesLineWrappedMarker(File.ReadAllText(latexLogPath)))
+                && CvLatexErrors.ContainsMetadataLeftOverflowMarker(File.ReadAllText(latexLogPath)))
             {
-                throw new InvalidOperationException(CvLatexErrors.TechnologiesLineWrappedMessage);
+                throw new InvalidOperationException(CvLatexErrors.MetadataLeftOverflowMessage);
             }
 
             throw new InvalidOperationException("Latex execution failure");
@@ -892,7 +892,8 @@ public readonly record struct Category(string DisplayName, bool IsUrl = false)
     public static Category Email => new("Email");
     public static Category Location => new("Location");
     public static Category Phone => new("Phone");
-    public static Category Technologies => new("Skills & Technologies");
+    public static Category Skills => new("Skills");
+    public static Category Technologies => new("Technologies");
 }
 
 public readonly record struct Name(

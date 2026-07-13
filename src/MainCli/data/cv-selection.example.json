@@ -16,10 +16,12 @@
     { "name": "JPEG", "weight": 0.5 },
     { "name": "GRPC", "weight": 0.9 }
   ],
+  "skills": [
+    "Image Processing",
+    "Parallel Processing"
+  ],
   "technologies": [
     ".NET",
-    "Image Processing",
-    "Parallel Processing",
     "SQL Server",
     "PostgreSQL",
     "Entity Framework",
@@ -34,17 +36,17 @@
   "selection": {
     "education": {
       "minTotalItemBudget": 0,
-      "maxTotalItemBudget": 2,
+      "totalItemBudget": 2,
       "scoreLowerBound": 0
     },
     "workExperience": {
       "minTotalItemBudget": 2,
-      "maxTotalItemBudget": 8,
+      "totalItemBudget": 8,
       "scoreLowerBound": 5
     },
     "personalProjects": {
       "minTotalItemBudget": 0,
-      "maxTotalItemBudget": 1,
+      "totalItemBudget": 1,
       "scoreLowerBound": 5
     }
   },

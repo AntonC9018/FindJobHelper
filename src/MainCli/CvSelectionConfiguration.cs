@@ -48,6 +48,7 @@ public sealed class CvSelectionConfiguration
 {
     public bool LimitToOnePage { get; init; } = true;
     public required List<RequiredTagConfiguration> RequiredTags { get; init; }
+    public required List<string> Skills { get; init; }
     public required List<string> Technologies { get; init; }
     public required MmrConfiguration Mmr { get; init; }
     public required SelectionConfiguration Selection { get; init; }
@@ -167,6 +168,7 @@ public sealed class CvSelectionConfiguration
             return new(
                 builder.Build(),
                 new(educationKey, workKey, personalProjectsKey),
+                Skills.Select(static skill => new RegularString(skill)).ToImmutableArray(),
                 Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
                 [.. SectionOrder],
                 LimitToOnePage);
@@ -214,6 +216,15 @@ public sealed class CvSelectionConfiguration
                         $"Required tag '{tag.Name}' must have a finite, positive 'weight'.");
                 }
             }
+        }
+
+        if (Skills is null || Skills.Count == 0)
+        {
+            errors.Add("'skills' must contain at least one item.");
+        }
+        else if (Skills.Any(string.IsNullOrWhiteSpace))
+        {
+            errors.Add("'skills' cannot contain blank items.");
         }
 
         if (Technologies is null || Technologies.Count == 0)
@@ -334,14 +345,13 @@ public sealed class SelectionConfiguration
 public sealed class SelectionOptionsConfiguration
 {
     public int MinTotalItemBudget { get; init; } = 0;
-    public int? MaxTotalItemBudget { get; init; }
     public int? TotalItemBudget { get; init; }
     public required float ScoreLowerBound { get; init; }
 
     public void Apply(SearchPredicateOptions options)
     {
         options.MinTotalItemBudget = MinTotalItemBudget;
-        options.MaxTotalItemBudget = EffectiveMaxTotalItemBudget;
+        options.TotalItemBudget = TotalItemBudget ?? int.MaxValue;
         options.ScoreLowerBound = ScoreLowerBound;
     }
 
@@ -352,24 +362,14 @@ public sealed class SelectionOptionsConfiguration
             errors.Add($"'{path}.minTotalItemBudget' must be non-negative.");
         }
 
-        if (MaxTotalItemBudget.HasValue && TotalItemBudget.HasValue)
+        var total = TotalItemBudget ?? int.MaxValue;
+        if (total < 0)
         {
-            errors.Add($"'{path}' must contain either 'totalItemBudget' or 'maxTotalItemBudget', not both.");
+            errors.Add($"'{path}.totalItemBudget' must be non-negative.");
         }
-        else
+        else if (MinTotalItemBudget > total)
         {
-            var max = EffectiveMaxTotalItemBudget;
-            if (max < 0)
-            {
-                var maximumPath = MaxTotalItemBudget.HasValue
-                    ? "maxTotalItemBudget"
-                    : "totalItemBudget";
-                errors.Add($"'{path}.{maximumPath}' must be non-negative.");
-            }
-            else if (MinTotalItemBudget > max)
-            {
-                errors.Add($"'{path}.minTotalItemBudget' must not exceed the maximum total item budget.");
-            }
+            errors.Add($"'{path}.minTotalItemBudget' must not exceed the total item budget.");
         }
 
         if (!float.IsFinite(ScoreLowerBound) || ScoreLowerBound < 0)
@@ -377,14 +377,12 @@ public sealed class SelectionOptionsConfiguration
             errors.Add($"'{path}.scoreLowerBound' must be finite and non-negative.");
         }
     }
-
-    private int EffectiveMaxTotalItemBudget =>
-        MaxTotalItemBudget ?? TotalItemBudget ?? int.MaxValue;
 }
 
 public sealed record ConfiguredCvSearch(
     ExperienceSearch Search,
     CvExperienceSectionBindings Sections,
+    ImmutableArray<RegularString> Skills,
     ImmutableArray<RegularString> Technologies,
     ImmutableArray<Section> SectionOrder,
     bool LimitToOnePage);

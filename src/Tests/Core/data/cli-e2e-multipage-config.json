@@ -3,6 +3,9 @@
   "requiredTags": [
     { "name": ".NET", "weight": 1.0 }
   ],
+  "skills": [
+    "Backend Development"
+  ],
   "technologies": [
     ".NET"
   ],
@@ -14,17 +17,17 @@
   "selection": {
     "education": {
       "minTotalItemBudget": 0,
-      "maxTotalItemBudget": 100,
+      "totalItemBudget": 100,
       "scoreLowerBound": 0
     },
     "workExperience": {
       "minTotalItemBudget": 0,
-      "maxTotalItemBudget": 100,
+      "totalItemBudget": 100,
       "scoreLowerBound": 0
     },
     "personalProjects": {
       "minTotalItemBudget": 0,
-      "maxTotalItemBudget": 100,
+      "totalItemBudget": 100,
       "scoreLowerBound": 0
     }
   },

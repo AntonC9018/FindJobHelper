@@ -58,10 +58,10 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 .ExecuteBufferedAsync(cancellationToken);
             if (!result.IsSuccess)
             {
-                if (CvLatexErrors.ContainsTechnologiesLineWrappedMarker(
+                if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(
                         $"{result.StandardError}{Environment.NewLine}{result.StandardOutput}"))
                 {
-                    throw new InvalidOperationException(CvLatexErrors.TechnologiesLineWrappedMessage);
+                    throw new InvalidOperationException(CvLatexErrors.MetadataLeftOverflowMessage);
                 }
 
                 throw new InvalidOperationException(

@@ -251,15 +251,19 @@ internal static class CvLatexFragmentRenderer
             FormattableString listText = list == default
                 ? Empty
                 : $@"\textbf{{{new LatexEscapedString(list.Category.DisplayName)}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
-            var rowCommand = info.Category == Category.Technologies
-                             || list.Category == Category.Technologies
-                ? "singlelinemetasection"
-                : "metasection";
-            rows.Add($@"\{rowCommand}{{{infoText}}}{{{listText}}}");
+            rows.Add($@"\metasection{{{infoText}}}{{{listText}}}");
         }
 
+        FormattableString table = rows.Count == 0
+            ? Empty
+            : $$"""
+                \begin{cvmetasectiontable}
+                {{Join(rows, Environment.NewLine)}}
+                \end{cvmetasectiontable}
+                """;
+
         return $$"""
-            {{Join(rows, Environment.NewLine)}}
+            {{table}}
             \vspace{-2pt}
             \textcolor{softcol}{\hrule}
             \vspace{6pt}

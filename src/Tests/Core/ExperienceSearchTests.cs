@@ -126,7 +126,7 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_AppliesMaximumBudgetOption()
+    public void Search_AppliesTotalItemBudgetOption()
     {
         var tagA = new Tag("a");
         var tagB = new Tag("b");
@@ -145,7 +145,7 @@ public sealed class ExperienceSearchTests
             opts =>
             {
                 opts.MinTotalItemBudget = 0;
-                opts.MaxTotalItemBudget = 2;
+                opts.TotalItemBudget = 2;
             });
 
         var result = builder.Build().Run([
@@ -181,7 +181,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.MaxTotalItemBudget = 2);
+            opts => opts.TotalItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience("first", ExperienceType.Job, 2025, Item("first", (tagA, 10))),
@@ -206,7 +206,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.MaxTotalItemBudget = 2);
+            opts => opts.TotalItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience(
@@ -238,7 +238,7 @@ public sealed class ExperienceSearchTests
             opts =>
             {
                 opts.MinTotalItemBudget = 2;
-                opts.MaxTotalItemBudget = 2;
+                opts.TotalItemBudget = 2;
             });
 
         var result = builder.Build().Run([
@@ -271,7 +271,7 @@ public sealed class ExperienceSearchTests
             opts =>
             {
                 opts.MinTotalItemBudget = 2;
-                opts.MaxTotalItemBudget = 2;
+                opts.TotalItemBudget = 2;
                 opts.ScoreLowerBound = 5;
             });
 
@@ -291,7 +291,7 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_RejectsMinimumBudgetAboveMaximum()
+    public void Search_RejectsMinimumBudgetAboveTotal()
     {
         var builder = NewBuilder(new()
         {
@@ -303,7 +303,7 @@ public sealed class ExperienceSearchTests
             opts =>
             {
                 opts.MinTotalItemBudget = 2;
-                opts.MaxTotalItemBudget = 1;
+                opts.TotalItemBudget = 1;
             });
 
         var exception = Assert.Throws<ArgumentException>(() => builder.Build());
@@ -322,7 +322,7 @@ public sealed class ExperienceSearchTests
         var parameters = new SearchParams(
             Tags: tags,
             MinTotalItemBudget: 2,
-            MaxTotalItemBudget: 2,
+            TotalItemBudget: 2,
             ScoreLowerBound: 0)
         {
             Mmr = new(
@@ -366,7 +366,7 @@ public sealed class ExperienceSearchTests
 
         Assert.Equal(new[] { "first", "second" }, Texts(result));
         Assert.Equal(0, parameters.MinTotalItemBudget);
-        Assert.Equal(int.MaxValue, parameters.EffectiveMaxTotalItemBudget);
+        Assert.Equal(int.MaxValue, parameters.TotalItemBudget);
     }
 
     [Fact]
@@ -516,14 +516,14 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.MaxTotalItemBudget = 1;
+                opts.TotalItemBudget = 1;
                 opts.ScoreLowerBound = 5;
                 opts.IncludeEmptyLists = true;
             });
         builder.Configure(
             ProjectKey,
             e => e.Type == ExperienceType.Project,
-            opts => opts.MaxTotalItemBudget = 1);
+            opts => opts.TotalItemBudget = 1);
 
         var newestUnmatchedJob = ExperienceWithMetadata(
             "newest unmatched job",
@@ -577,7 +577,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.MaxTotalItemBudget = 0;
+                opts.TotalItemBudget = 0;
                 opts.IncludeEmptyLists = true;
             });
 

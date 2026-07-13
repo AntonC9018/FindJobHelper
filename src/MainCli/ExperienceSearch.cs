@@ -13,17 +13,7 @@ public readonly record struct ExperienceKey(string Value)
 public sealed class SearchPredicateOptions
 {
     public int MinTotalItemBudget { get; set; } = 0;
-    public int MaxTotalItemBudget { get; set; } = int.MaxValue;
-
-    /// <summary>
-    /// Legacy alias for <see cref="MaxTotalItemBudget"/>. New callers should use the maximum-specific name.
-    /// </summary>
-    [Obsolete("Use MaxTotalItemBudget instead.")]
-    public int TotalItemBudget
-    {
-        get => MaxTotalItemBudget;
-        set => MaxTotalItemBudget = value;
-    }
+    public int TotalItemBudget { get; set; } = int.MaxValue;
 
     public float ScoreLowerBound { get; set; }
     public bool IncludeEmptyLists { get; set; }
@@ -33,7 +23,7 @@ public sealed class SearchPredicateOptions
         return new()
         {
             MinTotalItemBudget = MinTotalItemBudget,
-            MaxTotalItemBudget = MaxTotalItemBudget,
+            TotalItemBudget = TotalItemBudget,
             ScoreLowerBound = ScoreLowerBound,
             IncludeEmptyLists = IncludeEmptyLists,
         };
@@ -150,7 +140,7 @@ public sealed class SearchBuilder
                 predicate.Predicate,
                 new(
                     predicate.Options.MinTotalItemBudget,
-                    predicate.Options.MaxTotalItemBudget,
+                    predicate.Options.TotalItemBudget,
                     predicate.Options.ScoreLowerBound,
                     predicate.Options.IncludeEmptyLists),
                 i));
@@ -180,18 +170,18 @@ public sealed class SearchBuilder
                 "Minimum total item budget must be non-negative.");
         }
 
-        if (options.MaxTotalItemBudget < 0)
+        if (options.TotalItemBudget < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(options.MaxTotalItemBudget),
-                options.MaxTotalItemBudget,
-                "Maximum total item budget must be non-negative.");
+                nameof(options.TotalItemBudget),
+                options.TotalItemBudget,
+                "Total item budget must be non-negative.");
         }
 
-        if (options.MinTotalItemBudget > options.MaxTotalItemBudget)
+        if (options.MinTotalItemBudget > options.TotalItemBudget)
         {
             throw new ArgumentException(
-                "Minimum total item budget must not exceed maximum total item budget.",
+                "Minimum total item budget must not exceed total item budget.",
                 nameof(options.MinTotalItemBudget));
         }
 
@@ -319,7 +309,7 @@ public static class SearchBuilderExtensions
 
 internal readonly record struct ExperienceSelectionOptions(
     int MinTotalItemBudget,
-    int MaxTotalItemBudget,
+    int TotalItemBudget,
     float ScoreLowerBound,
     bool IncludeEmptyLists);
 
@@ -398,9 +388,9 @@ internal sealed record SelectionDiagnostics(
                 .Select(x => new SelectionBudgetTrace(
                     x.Key,
                     x.Options.MinTotalItemBudget,
-                    x.Options.MaxTotalItemBudget,
+                    x.Options.TotalItemBudget,
                     ActualCount: 0,
-                    RemainingMaximumBudget: x.Options.MaxTotalItemBudget))
+                    RemainingMaximumBudget: x.Options.TotalItemBudget))
                 .ToImmutableArray());
     }
 }
@@ -424,7 +414,7 @@ internal static class ExperienceSelectionEngine
             static _ => true,
             new(
                 p.MinTotalItemBudget,
-                p.EffectiveMaxTotalItemBudget,
+                p.TotalItemBudget,
                 p.ScoreLowerBound,
                 IncludeEmptyLists: false),
             Order: 0));
@@ -448,18 +438,18 @@ internal static class ExperienceSelectionEngine
                 "Minimum total item budget must be non-negative.");
         }
 
-        if (p.EffectiveMaxTotalItemBudget < 0)
+        if (p.TotalItemBudget < 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(p.MaxTotalItemBudget),
-                p.EffectiveMaxTotalItemBudget,
-                "Maximum total item budget must be non-negative.");
+                nameof(p.TotalItemBudget),
+                p.TotalItemBudget,
+                "Total item budget must be non-negative.");
         }
 
-        if (p.MinTotalItemBudget > p.EffectiveMaxTotalItemBudget)
+        if (p.MinTotalItemBudget > p.TotalItemBudget)
         {
             throw new ArgumentException(
-                "Minimum total item budget must not exceed maximum total item budget.",
+                "Minimum total item budget must not exceed total item budget.",
                 nameof(p.MinTotalItemBudget));
         }
 
@@ -511,7 +501,7 @@ internal static class ExperienceSelectionEngine
             .ToList();
 
         var requiredThesisCandidates = groupedLists
-            .Where(x => x.Group.Options.MaxTotalItemBudget > 0)
+            .Where(x => x.Group.Options.TotalItemBudget > 0)
             .SelectMany(x => x.List.Items
                 .Select((item, itemIndex) => (Item: item, ItemIndex: itemIndex))
                 .Where(x => IsRequiredThesisItem(x.Item))
@@ -943,7 +933,7 @@ internal static class ExperienceSelectionEngine
             _admissionPolicy = admissionPolicy;
             foreach (var group in groups)
             {
-                _remainingMaximumBudgets.Add(group.Key, group.Options.MaxTotalItemBudget);
+                _remainingMaximumBudgets.Add(group.Key, group.Options.TotalItemBudget);
             }
         }
 
@@ -1090,7 +1080,7 @@ internal static class ExperienceSelectionEngine
                 budgetTraces.Add(new(
                     group.Key,
                     group.Options.MinTotalItemBudget,
-                    group.Options.MaxTotalItemBudget,
+                    group.Options.TotalItemBudget,
                     actualCount,
                     _remainingMaximumBudgets[group.Key]));
             }
@@ -1119,7 +1109,7 @@ internal static class ExperienceSelectionEngine
 
         private bool IsBelowMinimum(ExperienceSelectionGroup group)
         {
-            var actualCount = group.Options.MaxTotalItemBudget - _remainingMaximumBudgets[group.Key];
+            var actualCount = group.Options.TotalItemBudget - _remainingMaximumBudgets[group.Key];
             return actualCount < group.Options.MinTotalItemBudget;
         }
 

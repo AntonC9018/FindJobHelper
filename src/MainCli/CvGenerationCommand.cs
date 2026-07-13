@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CommandDotNet;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
@@ -94,15 +95,7 @@ public sealed class CvGenerationCommand
                 First = "Anton",
                 Last = "Curmanschii",
             },
-            CategorizedInfoLists = [
-                new(Category.Technologies, searchConfiguration.Technologies),
-                new(Category.GitHub, [
-                    "https://github.com/AntonC9018",
-                ]),
-                new(Category.LinkedIn, [
-                    "https://www.linkedin.com/in/anton-curmanschii-647232161",
-                ]),
-            ],
+            CategorizedInfoLists = CreateMetadataLists(searchConfiguration),
             CategorizedInfos = [
                 new(Category.Location, location.FormatInfo()),
                 new(Category.Email, personalInfo.Email),
@@ -201,6 +194,17 @@ public sealed class CvGenerationCommand
             }
         }
     }
+
+    private static ImmutableArray<CategorizedInfoList> CreateMetadataLists(
+        ConfiguredCvSearch searchConfiguration) =>
+    [
+        new(Category.Skills, searchConfiguration.Skills),
+        new(Category.Technologies, searchConfiguration.Technologies),
+        new(Category.GitHub, ["https://github.com/AntonC9018"]),
+        new(Category.LinkedIn, [
+            "https://www.linkedin.com/in/anton-curmanschii-647232161",
+        ]),
+    ];
 }
 
 public sealed class CvGenerationArguments : IArgumentModel

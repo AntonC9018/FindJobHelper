@@ -3,6 +3,9 @@
   "requiredTags": [
     { "name": ".NET", "weight": 1.0 }
   ],
+  "skills": [
+    "E2E Skill"
+  ],
   "technologies": [
     "E2E JSON Configuration"
   ],
