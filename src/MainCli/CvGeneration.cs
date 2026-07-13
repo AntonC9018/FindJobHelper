@@ -190,7 +190,7 @@ public static class CvTemplate
 
             var ret = (FormattableString) $$"""\metasection{{{ infoString }}}{{{
                 Symbols.IF(list != default)
-            }}\textbf{{{ list.Category.DisplayName }}:} {{ formattedList }}{{
+            }}\textbf{{{ new LatexEscapedString(list.Category.DisplayName) }}:} {{ formattedList }}{{
                 Symbols.ENDIF
             }}}""";
 
@@ -659,16 +659,14 @@ public readonly record struct LatexEscapedString(string Value) : ISpanFormattabl
 {
     public override string ToString()
     {
-        var builder = new StringBuilder(Value.Length);
-        AppendEscaped(builder, Value);
-        return builder.ToString();
+        return $"{this}";
     }
 
     public string ToString(string? format, IFormatProvider? formatProvider)
     {
         _ = format;
         _ = formatProvider;
-        return ToString();
+        return $"{this}";
     }
 
     public bool TryFormat(
@@ -679,36 +677,49 @@ public readonly record struct LatexEscapedString(string Value) : ISpanFormattabl
     {
         _ = format;
         _ = provider;
-        charsWritten = 0;
-        var escaped = ToString();
-        if (!escaped.AsSpan().TryCopyTo(destination))
+        var position = 0;
+        foreach (var ch in Value)
         {
-            return false;
-        }
-
-        charsWritten = escaped.Length;
-        return true;
-    }
-
-    private static void AppendEscaped(StringBuilder builder, string value)
-    {
-        foreach (var ch in value)
-        {
-            switch (ch)
+            var escaped = ch switch
             {
-                case '\\': builder.Append(@"\textbackslash{}"); break;
-                case '{': builder.Append(@"\{"); break;
-                case '}': builder.Append(@"\}"); break;
-                case '#': builder.Append(@"\#"); break;
-                case '$': builder.Append(@"\$"); break;
-                case '%': builder.Append(@"\%"); break;
-                case '&': builder.Append(@"\&"); break;
-                case '_': builder.Append(@"\_"); break;
-                case '^': builder.Append(@"\^{}"); break;
-                case '~': builder.Append(@"\~{}"); break;
-                default: builder.Append(ch); break;
+                '\\' => @"\textbackslash{}",
+                '{' => @"\{",
+                '}' => @"\}",
+                '#' => @"\#",
+                '$' => @"\$",
+                '%' => @"\%",
+                '&' => @"\&",
+                '_' => @"\_",
+                '^' => @"\^{}",
+                '~' => @"\~{}",
+                _ => null,
+            };
+
+            if (escaped is null)
+            {
+                if (position == destination.Length)
+                {
+                    charsWritten = 0;
+                    return false;
+                }
+
+                destination[position] = ch;
+                position++;
+            }
+            else
+            {
+                if (!escaped.AsSpan().TryCopyTo(destination[position..]))
+                {
+                    charsWritten = 0;
+                    return false;
+                }
+
+                position += escaped.Length;
             }
         }
+
+        charsWritten = position;
+        return true;
     }
 }
 
@@ -881,7 +892,7 @@ public readonly record struct Category(string DisplayName, bool IsUrl = false)
     public static Category Email => new("Email");
     public static Category Location => new("Location");
     public static Category Phone => new("Phone");
-    public static Category Technologies => new("Technologies");
+    public static Category Technologies => new("Skills & Technologies");
 }
 
 public readonly record struct Name(

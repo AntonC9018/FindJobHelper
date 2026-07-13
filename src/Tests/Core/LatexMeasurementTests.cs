@@ -146,6 +146,7 @@ public sealed class LatexMeasurementTests
 
         Assert.Equal(1, CountOccurrences(header, @"\singlelinemetasection{"));
         Assert.Equal(1, CountOccurrences(header, @"\metasection{"));
+        Assert.Contains(@"\textbf{Skills \& Technologies:}", header);
     }
 
     [Fact]

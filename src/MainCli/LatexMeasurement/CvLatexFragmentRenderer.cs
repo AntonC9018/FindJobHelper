@@ -250,7 +250,7 @@ internal static class CvLatexFragmentRenderer
             FormattableString infoText = info == default ? Empty : FormatCategoryValue(info.Category, info.Value);
             FormattableString listText = list == default
                 ? Empty
-                : $@"\textbf{{{list.Category.DisplayName}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
+                : $@"\textbf{{{new LatexEscapedString(list.Category.DisplayName)}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
             var rowCommand = info.Category == Category.Technologies
                              || list.Category == Category.Technologies
                 ? "singlelinemetasection"
