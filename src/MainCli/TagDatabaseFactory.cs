@@ -24,6 +24,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T restApi { get; init; }
     public required T roslyn { get; init; }
     public required T sourceGeneration { get; init; }
+    public required T toolingDevelopment { get; init; }
     public required T postman { get; init; }
     public required T nswag { get; init; }
     public required T sql { get; init; }
@@ -37,6 +38,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T csv { get; init; }
     public required T mediator { get; init; }
     public required T unitTests { get; init; }
+    public required T debugging { get; init; }
     public required T linq2db { get; init; }
     public required T parser { get; init; }
     public required T msBuild { get; init; }
@@ -86,6 +88,8 @@ public sealed class Tags<T> : KnownTags<T>
     public required T docx { get; init; }
     public required T latex { get; init; }
     public required T blazor { get; init; }
+    public required T razor { get; init; }
+    public required T refactoring { get; init; }
     public required T webforms { get; init; }
     public required T aspnetmvc { get; init; }
     public required T thesis { get; init; }
@@ -119,6 +123,7 @@ public static class TagsDatabaseFactory
             restApi = db.Tag("REST API", "REST"),
             roslyn = db.Tag("Roslyn"),
             sourceGeneration = db.Tag("Source Generation", "Source Generators", ".NET Source Generators", "Code Generation"),
+            toolingDevelopment = db.Tag("Tooling Development", "Developer Tooling", "Development Tools", ".NET Tooling"),
             postman = db.Tag("Postman"),
             nswag = db.Tag("NSwag"),
             sql = db.Tag("SQL"),
@@ -130,6 +135,7 @@ public static class TagsDatabaseFactory
             excel = db.Tag("Excel"),
             mediator = db.Tag("Mediator", "CQRS"),
             unitTests = db.Tag("Unit Tests", "xUnit", "Verify"),
+            debugging = db.Tag("Debugging", "Bug Fixing", "Troubleshooting", "Root-Cause Analysis"),
             linq2db = db.Tag("Linq2db"),
             parser = db.Tag("Parser"),
             msBuild = db.Tag("MSBuild"),
@@ -183,6 +189,8 @@ public static class TagsDatabaseFactory
             docx = db.Tag("DOCX"),
             latex = db.Tag("LaTeX"),
             blazor = db.Tag("Blazor"),
+            razor = db.Tag("Razor", "Razor Pages"),
+            refactoring = db.Tag("Refactoring", "Legacy Code Modernization"),
             webforms = db.Tag("WebForms"),
             aspnetmvc = db.Tag("ASP.NET MVC"),
             csv = db.Tag("CSV"),
@@ -260,7 +268,9 @@ public static class TagsDatabaseFactory
 
         t.grpc.IsIncludedIn(t.protobuf).By(0.2f).WhichIsIncludedInIt().Fully();
 
-        t.azure.IsIncludedIn(t.aws).By(0.8f).WhichIsIncludedInIt().By(0.8f);
+        // Azure and AWS share transferable cloud concepts, but they are not interchangeable skills;
+        // keep the relation modest so an Azure-targeted CV does not over-rank AWS-only experience.
+        t.azure.IsIncludedIn(t.aws).By(0.25f).WhichIsIncludedInIt().By(0.25f);
 
         t.sql.IsIncludedIn(t.sqlServer).Fully().WhichIsIncludedInIt().By(0.4f);
         t.sql.IsIncludedIn(t.postgres).Fully().WhichIsIncludedInIt().By(0.3f);
@@ -294,6 +304,10 @@ public static class TagsDatabaseFactory
         t.xml.IsIncludedIn(t.excel).Fully().WhichIsIncludedInIt().By(0.08f);
 
         t.aspnetmvc.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.10f);
+        // Razor is part of the ASP.NET web stack and also exercises frontend concerns;
+        // model both links so ASP.NET tooling roles can find concrete Razor work automatically.
+        t.razor.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.25f);
+        t.razor.IsIncludedIn(t.frontend).By(0.70f).WhichIsIncludedInIt().By(0.10f);
         // avalonia
 
         t._3d.IsIncludedIn(t.graphics).Fully().WhichIsIncludedInIt().By(0.3f);
