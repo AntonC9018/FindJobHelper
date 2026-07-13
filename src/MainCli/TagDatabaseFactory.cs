@@ -219,6 +219,11 @@ public static class TagsDatabaseFactory
         t.sourceGeneration.IsIncludedIn(t.dotnet).By(0.5f).WhichIsIncludedInIt().By(0.2f);
         t.nuget.IsIncludedIn(t.dotnet).By(0.4f).WhichIsIncludedInIt().By(0.15f);
         t.nuget.IsIncludedIn(t.msBuild).By(0.3f).WhichIsIncludedInIt().By(0.2f);
+        // Source generators, Roslyn analyzers and MSBuild integrations are concrete forms of developer tooling;
+        // keep the umbrella-to-tool weights modest because tooling development is broader than any one mechanism.
+        t.toolingDevelopment.IsIncludedIn(t.sourceGeneration).By(0.35f).WhichIsIncludedInIt().By(0.85f);
+        t.toolingDevelopment.IsIncludedIn(t.roslyn).By(0.35f).WhichIsIncludedInIt().By(0.65f);
+        t.toolingDevelopment.IsIncludedIn(t.msBuild).By(0.3f).WhichIsIncludedInIt().By(0.75f);
 
         t.dotnet.IsIncludedIn(t.programming).By(0.25f).WhichIsIncludedInIt().Fully();
         t.cpp.IsIncludedIn(t.programming).By(0.2f).WhichIsIncludedInIt().Fully();
@@ -231,6 +236,13 @@ public static class TagsDatabaseFactory
         t.go.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().Fully();
         t.concurrency.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().By(0.1f);
         t.multithreading.IsIncludedIn(t.concurrency).By(0.85f).WhichIsIncludedInIt().By(0.55f);
+        // Testing, debugging and refactoring are transferable programming activities, not language-specific skills;
+        // modest reverse weights let general programming searches find them without making them interchangeable.
+        t.unitTests.IsIncludedIn(t.programming).By(0.45f).WhichIsIncludedInIt().By(0.1f);
+        t.debugging.IsIncludedIn(t.programming).By(0.5f).WhichIsIncludedInIt().By(0.12f);
+        t.refactoring.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().By(0.12f);
+        // Refactoring often applies design-pattern knowledge, while design-pattern work does not necessarily refactor code.
+        t.refactoring.IsIncludedIn(t.designPatterns).By(0.5f).WhichIsIncludedInIt().By(0.15f);
 
         t.javaScript.IsIncludedIn(t.typeScript).Fully().WhichIsIncludedInIt().By(0.3f);
 
@@ -238,6 +250,10 @@ public static class TagsDatabaseFactory
         t.hotChocolate.IsIncludedIn(t.graphql).By(0.7f).WhichIsIncludedInIt().By(0.9f);
         t.openApi.IsIncludedIn(t.nswag).By(0.9f).WhichIsIncludedInIt().By(0.6f);
         t.restApi.IsIncludedIn(t.aspnet).By(0.8f).WhichIsIncludedInIt().By(0.15f);
+        // Postman exercises REST APIs directly, and the Google APIs represented in the experience database are REST APIs;
+        // low reverse weights avoid treating either vendor/tool tag as a requirement of REST work in general.
+        t.postman.IsIncludedIn(t.restApi).By(0.85f).WhichIsIncludedInIt().By(0.08f);
+        t.googleApi.IsIncludedIn(t.restApi).By(0.6f).WhichIsIncludedInIt().By(0.08f);
 
         t.typeScript.IsIncludedIn(t.frontend).By(0.4f).WhichIsIncludedInIt().By(0.15f);
         t.javaScript.IsIncludedIn(t.frontend).By(0.7f).WhichIsIncludedInIt().By(0.07f);
@@ -247,6 +263,11 @@ public static class TagsDatabaseFactory
         // dom manipulation
         t.jquery.IsIncludedIn(t.frontend).By(0.95f).WhichIsIncludedInIt().By(0.05f);
         t.vue.IsIncludedIn(t.frontend).By(0.7f).WhichIsIncludedInIt().By(0.15f);
+        // HTMX is a frontend interaction library; CSS is a core frontend technology; and Tailwind is implemented in CSS.
+        // The asymmetric reverse weights keep broad frontend/CSS requests from over-ranking a particular library.
+        t.htmx.IsIncludedIn(t.frontend).By(0.9f).WhichIsIncludedInIt().By(0.05f);
+        t.css.IsIncludedIn(t.frontend).By(0.9f).WhichIsIncludedInIt().By(0.12f);
+        t.tailwind.IsIncludedIn(t.css).By(0.95f).WhichIsIncludedInIt().By(0.15f);
 
         t.unity.IsIncludedIn(t.dotween).By(0.05f).WhichIsIncludedInIt().By(0.95f);
         t.unity.IsIncludedIn(t.dotnet).By(0.15f).WhichIsIncludedInIt().By(0.5f);
@@ -261,6 +282,8 @@ public static class TagsDatabaseFactory
         t.graphics.IsIncludedIn(t.shaders).By(0.1f).WhichIsIncludedInIt().Fully();
         t.unity.IsIncludedIn(t.shaders).By(0.05f).WhichIsIncludedInIt().By(0.9f);
         t.raylib.IsIncludedIn(t.graphics).By(0.8f).WhichIsIncludedInIt().By(0.2f);
+        // OpenGL work is directly graphics work, but graphics experience is much broader than OpenGL.
+        t.openGl.IsIncludedIn(t.graphics).By(0.95f).WhichIsIncludedInIt().By(0.15f);
         t.compression.IsIncludedIn(t.programming).By(0.2f).WhichIsIncludedInIt().By(0.1f);
         t.compression.IsIncludedIn(t.imageProcessing).By(0.35f).WhichIsIncludedInIt().By(0.2f);
         t.apiDesign.IsIncludedIn(t.designPatterns).By(0.5f).WhichIsIncludedInIt().By(0.2f);
@@ -279,6 +302,9 @@ public static class TagsDatabaseFactory
         t.sqlServer.IsIncludedIn(t.postgres).By(0.5f).WhichIsIncludedInIt().By(0.35f);
         t.sqlServer.IsIncludedIn(t.mysql).By(0.5f).WhichIsIncludedInIt().By(0.5f);
         t.sql.IsIncludedIn(t.efCore).By(0.7f).WhichIsIncludedInIt().By(0.3f);
+        // Neon is a managed PostgreSQL platform, so Neon experience is strongly PostgreSQL-relevant;
+        // PostgreSQL itself is provider-independent, hence the small reverse weight.
+        t.neon.IsIncludedIn(t.postgres).By(0.95f).WhichIsIncludedInIt().By(0.12f);
 
         t.backend.IsIncludedIn(t.go).By(0.2f).WhichIsIncludedInIt().By(0.2f);
         t.backend.IsIncludedIn(t.grpc).By(0.05f).WhichIsIncludedInIt().By(0.35f);
@@ -290,11 +316,22 @@ public static class TagsDatabaseFactory
         t.backend.IsIncludedIn(t.nodejs).By(0.10f).WhichIsIncludedInIt().By(0.45f);
 
         t.backend.IsIncludedIn(t.microservices).By(0.1f).WhichIsIncludedInIt().By(0.8f);
+        // Application security is cross-cutting but strongly represented by backend authorization in this database;
+        // the low reverse weight prevents ordinary backend work from scoring as dedicated security experience.
+        t.security.IsIncludedIn(t.backend).By(0.55f).WhichIsIncludedInIt().By(0.08f);
+        // nginx commonly serves or proxies backends on Linux; Linux/backend knowledge only weakly implies nginx.
+        t.nginx.IsIncludedIn(t.linux).By(0.75f).WhichIsIncludedInIt().By(0.08f);
+        t.nginx.IsIncludedIn(t.backend).By(0.55f).WhichIsIncludedInIt().By(0.05f);
 
         foreach (var cloudProvider in new[] { t.aws, t.azure })
         {
             t.cicd.IsIncludedIn(cloudProvider).By(0.9f).WhichIsIncludedInIt().By(0.2f);
         }
+        // Containers are commonly built and deployed by CI/CD pipelines, while CI/CD is not necessarily container-based.
+        t.docker.IsIncludedIn(t.cicd).By(0.65f).WhichIsIncludedInIt().By(0.35f);
+
+        // GitHub is built around Git repositories, but Git skills transfer beyond a single hosting provider.
+        t.github.IsIncludedIn(t.git).By(0.9f).WhichIsIncludedInIt().By(0.65f);
 
         t.json.IsIncludedIn(t.javaScript).Fully().WhichIsIncludedInIt().By(0.1f);
         t.json.IsIncludedIn(t.typeScript).Fully().WhichIsIncludedInIt().By(0.05f);
@@ -302,12 +339,24 @@ public static class TagsDatabaseFactory
         t.xml.IsIncludedIn(t.msBuild).Fully().WhichIsIncludedInIt().By(0.1f);
         t.xml.IsIncludedIn(t.docx).Fully().WhichIsIncludedInIt().By(0.05f);
         t.xml.IsIncludedIn(t.excel).Fully().WhichIsIncludedInIt().By(0.08f);
+        // CSV and Excel both represent tabular data, and CSV work usually involves parsing a structured text format;
+        // partial weights preserve the important format and tooling differences.
+        t.csv.IsIncludedIn(t.excel).By(0.65f).WhichIsIncludedInIt().By(0.3f);
+        t.csv.IsIncludedIn(t.parser).By(0.55f).WhichIsIncludedInIt().By(0.12f);
+        // Web scraping extracts information by parsing remote documents, but generic parser work is rarely web scraping.
+        t.webScraping.IsIncludedIn(t.parser).By(0.6f).WhichIsIncludedInIt().By(0.1f);
 
         t.aspnetmvc.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.10f);
         // Razor is part of the ASP.NET web stack and also exercises frontend concerns;
         // model both links so ASP.NET tooling roles can find concrete Razor work automatically.
         t.razor.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.25f);
         t.razor.IsIncludedIn(t.frontend).By(0.70f).WhichIsIncludedInIt().By(0.10f);
+        // Blazor is an ASP.NET frontend framework; WebForms is a legacy ASP.NET frontend framework.
+        // Reverse weights stay low because neither framework represents ASP.NET or frontend work as a whole.
+        t.blazor.IsIncludedIn(t.aspnet).By(0.9f).WhichIsIncludedInIt().By(0.18f);
+        t.blazor.IsIncludedIn(t.frontend).By(0.75f).WhichIsIncludedInIt().By(0.08f);
+        t.webforms.IsIncludedIn(t.aspnet).By(0.95f).WhichIsIncludedInIt().By(0.08f);
+        t.webforms.IsIncludedIn(t.frontend).By(0.65f).WhichIsIncludedInIt().By(0.04f);
         // avalonia
 
         t._3d.IsIncludedIn(t.graphics).Fully().WhichIsIncludedInIt().By(0.3f);
