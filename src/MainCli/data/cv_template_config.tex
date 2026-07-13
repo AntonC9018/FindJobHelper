@@ -346,10 +346,11 @@
 \newsavebox{\cvmeasurementreferencebox}
 \newsavebox{\cvmeasurementcandidatebox}
 \newlength{\flowheight}
-\newlength{\cvflowblockfitskipamount}
-% Shared vertical unit used by section flow and by the header-to-first-section
-% boundary, keeping the first section aligned with all later sections.
-\setlength{\cvflowblockfitskipamount}{\dimexpr\parskip + 1\baselineskip\relax}
+
+% Space between CV sections. Change this one value to tune every section
+% boundary, including the boundary between the document header and first section.
+\newlength{\cvsectionspacing}
+\setlength{\cvsectionspacing}{\baselineskip}
 
 % Build an intrinsic production-width box. This primitive intentionally has no
 % page-state inspection and never inserts the resulting box into the page stream.
@@ -362,7 +363,7 @@
 }
 
 \newcommand{\cvflowblockfitskip}{%
-    \addvspace{\cvflowblockfitskipamount}%
+    \addvspace{\cvsectionspacing}%
 }
 
 \newcommand{\cvflowblocknewpageskip}{%

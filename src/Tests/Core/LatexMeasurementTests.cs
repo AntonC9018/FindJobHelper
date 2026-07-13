@@ -158,7 +158,7 @@ public sealed class LatexMeasurementTests
         var header = CvLatexFragmentRenderer.Materialize(
             CvLatexFragmentRenderer.RenderDocumentHeader(CreateEmptyModel()));
 
-        Assert.Contains(@"\vspace{\cvflowblockfitskipamount}", header);
+        Assert.Contains(@"\vspace{\cvsectionspacing}", header);
     }
 
     [Fact]

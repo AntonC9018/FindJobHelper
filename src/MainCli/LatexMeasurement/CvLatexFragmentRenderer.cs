@@ -271,7 +271,7 @@ internal static class CvLatexFragmentRenderer
             % Match the final event padding and trailing flow-block line that
             % precede every later section.
             \vspace{6pt}
-            \vspace{\cvflowblockfitskipamount}
+            \vspace{\cvsectionspacing}
             """;
     }
 
