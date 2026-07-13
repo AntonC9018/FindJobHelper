@@ -20,6 +20,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T xml { get; init; }
     public required T webScraping { get; init; }
     public required T teachingSkill { get; init; }
+    public required T mentoring { get; init; }
     public required T openApi { get; init; }
     public required T restApi { get; init; }
     public required T roslyn { get; init; }
@@ -83,6 +84,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T azure { get; init; }
     public required T neon { get; init; }
     public required T backend { get; init; }
+    public required T highVolumeDataProcessing { get; init; }
     public required T microservices { get; init; }
     public required T json { get; init; }
     public required T docx { get; init; }
@@ -119,6 +121,7 @@ public static class TagsDatabaseFactory
             designPatterns = db.Tag("Design Patterns"),
             webScraping = db.Tag("Web Scraping"),
             teachingSkill = db.Tag("Teaching"),
+            mentoring = db.Tag("Mentoring"),
             openApi = db.Tag("OpenAPI"),
             restApi = db.Tag("REST API", "REST"),
             roslyn = db.Tag("Roslyn"),
@@ -182,6 +185,7 @@ public static class TagsDatabaseFactory
             azure = db.Tag("Azure"),
             neon = db.Tag("Neon"),
             backend = db.Tag("Backend"),
+            highVolumeDataProcessing = db.Tag("High-Volume Data Processing"),
             microservices = db.Tag("microservices"),
             cicd = db.Tag("CI/CD"),
             xml = db.Tag("XML"),
@@ -243,6 +247,8 @@ public static class TagsDatabaseFactory
         t.refactoring.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().By(0.12f);
         // Refactoring often applies design-pattern knowledge, while design-pattern work does not necessarily refactor code.
         t.refactoring.IsIncludedIn(t.designPatterns).By(0.5f).WhichIsIncludedInIt().By(0.15f);
+        // Teaching is strong evidence of mentoring, while workplace mentoring does not necessarily imply formal teaching.
+        t.teachingSkill.IsIncludedIn(t.mentoring).By(0.85f).WhichIsIncludedInIt().By(0.45f);
 
         t.javaScript.IsIncludedIn(t.typeScript).Fully().WhichIsIncludedInIt().By(0.3f);
 

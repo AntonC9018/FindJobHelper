@@ -42,6 +42,7 @@ public sealed class LatexMeasurementTests
         var snapshot = new CvMeasurementSnapshot(
             new Dictionary<ExperienceItemId, LatexHeight>(),
             new Dictionary<ExperienceListId, LatexHeight>(),
+            new Dictionary<ExperienceListId, LatexHeight>(),
             new Dictionary<Section, LatexHeight>(),
             new Dictionary<Section, LatexHeight>(),
             LatexHeight.Zero,
@@ -141,12 +142,15 @@ public sealed class LatexMeasurementTests
 
         Assert.Equal(1, runner.CallCount);
         Assert.Single(runner.Batches[0].Where(static request => request.CacheKey.Kind == LatexMeasurementKind.ExperienceItem));
+        Assert.Single(runner.Batches[0].Where(static request => request.CacheKey.Kind == LatexMeasurementKind.ExperienceHeading));
         Assert.Equal(2, cold.ExperienceItems.Count);
+        Assert.Single(cold.ExperienceHeadings);
         Assert.Equal(
             cold.GetExperienceItemHeight(new ExperienceItemId(new ExperienceListId(0), 0)),
             cold.GetExperienceItemHeight(new ExperienceItemId(new ExperienceListId(0), 1)));
         Assert.Equal(cold.DocumentChrome, warm.DocumentChrome);
         Assert.Equal(cold.ExperienceItems, warm.ExperienceItems);
+        Assert.Equal(cold.ExperienceHeadings, warm.ExperienceHeadings);
         Assert.Equal(cold.ExperienceChrome, warm.ExperienceChrome);
         Assert.Equal(cold.CompleteSections, warm.CompleteSections);
         Assert.Equal(cold.SectionChrome, warm.SectionChrome);
@@ -295,6 +299,12 @@ public sealed class LatexMeasurementTests
             SubItems = [new(0, firstText.ToLatexString())],
             Urls = linkedList.Urls,
         };
+        var headingOnlyEvent = new Event
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+        };
         var documentModel = CreateEmptyModel();
         documentModel.WorkExperiences = [@event];
         documentModel.SectionOrder = [Section.WorkExperience];
@@ -326,6 +336,8 @@ public sealed class LatexMeasurementTests
             Request(14, LatexMeasurementKind.CompleteSection, completeDocument, LatexMeasurementMode.PageStart),
             Request(15, LatexMeasurementKind.CompleteSection, completeProjectSection, LatexMeasurementMode.FlowBlock),
             Request(16, LatexMeasurementKind.CompleteSection, twoSectionDocument, LatexMeasurementMode.PageStart),
+            Request(17, LatexMeasurementKind.ExperienceHeading, CvLatexFragmentRenderer.RenderExperienceHeading(list), LatexMeasurementMode.Box),
+            Request(18, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(headingOnlyEvent, false), LatexMeasurementMode.Box),
         };
         var runner = new XeLatexMeasurementRunner();
 
@@ -346,6 +358,8 @@ public sealed class LatexMeasurementTests
         Assert.Equal(
             measured[new(11)].ScaledPoints,
             measured[new(9)].ScaledPoints + measured[new(10)].ScaledPoints);
+        Assert.Equal(measured[new(17)], measured[new(18)]);
+        Assert.True(measured[new(1)].ScaledPoints > measured[new(17)].ScaledPoints);
         Assert.Equal(
             measured[new(14)].ScaledPoints,
             measured[new(12)].ScaledPoints

@@ -14,6 +14,7 @@ public readonly record struct LatexHeight(long ScaledPoints)
 
 public sealed record CvMeasurementSnapshot(
     IReadOnlyDictionary<ExperienceItemId, LatexHeight> ExperienceItems,
+    IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceHeadings,
     IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceChrome,
     IReadOnlyDictionary<Section, LatexHeight> CompleteSections,
     IReadOnlyDictionary<Section, LatexHeight> SectionChrome,
@@ -22,6 +23,9 @@ public sealed record CvMeasurementSnapshot(
 {
     public LatexHeight GetExperienceItemHeight(ExperienceItemId id)
         => GetRequired(ExperienceItems, id, "experience item");
+
+    public LatexHeight GetExperienceHeadingHeight(ExperienceListId id)
+        => GetRequired(ExperienceHeadings, id, "experience list heading");
 
     public LatexHeight GetExperienceChromeHeight(ExperienceListId id)
         => GetRequired(ExperienceChrome, id, "experience list chrome");
@@ -34,6 +38,7 @@ public sealed record CvMeasurementSnapshot(
 
     internal static CvMeasurementSnapshot CreateFrozen(
         IDictionary<ExperienceItemId, LatexHeight> experienceItems,
+        IDictionary<ExperienceListId, LatexHeight> experienceHeadings,
         IDictionary<ExperienceListId, LatexHeight> experienceChrome,
         IDictionary<Section, LatexHeight> completeSections,
         IDictionary<Section, LatexHeight> sectionChrome,
@@ -41,6 +46,7 @@ public sealed record CvMeasurementSnapshot(
         LatexHeight usablePageHeight)
         => new(
             experienceItems.ToFrozenDictionary(),
+            experienceHeadings.ToFrozenDictionary(),
             experienceChrome.ToFrozenDictionary(),
             completeSections.ToFrozenDictionary(),
             sectionChrome.ToFrozenDictionary(),
@@ -71,6 +77,7 @@ internal readonly record struct MeasurementCorrelationId(int Value)
 internal enum LatexMeasurementKind
 {
     ExperienceItem,
+    ExperienceHeading,
     ExperienceChrome,
     SectionChrome,
     StaticSection,

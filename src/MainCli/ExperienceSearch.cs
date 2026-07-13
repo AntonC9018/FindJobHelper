@@ -26,6 +26,7 @@ public sealed class SearchPredicateOptions
     }
 
     public float ScoreLowerBound { get; set; }
+    public bool IncludeEmptyLists { get; set; }
 
     internal SearchPredicateOptions Copy()
     {
@@ -34,6 +35,7 @@ public sealed class SearchPredicateOptions
             MinTotalItemBudget = MinTotalItemBudget,
             MaxTotalItemBudget = MaxTotalItemBudget,
             ScoreLowerBound = ScoreLowerBound,
+            IncludeEmptyLists = IncludeEmptyLists,
         };
     }
 }
@@ -149,7 +151,8 @@ public sealed class SearchBuilder
                 new(
                     predicate.Options.MinTotalItemBudget,
                     predicate.Options.MaxTotalItemBudget,
-                    predicate.Options.ScoreLowerBound),
+                    predicate.Options.ScoreLowerBound,
+                    predicate.Options.IncludeEmptyLists),
                 i));
         }
 
@@ -317,7 +320,8 @@ public static class SearchBuilderExtensions
 internal readonly record struct ExperienceSelectionOptions(
     int MinTotalItemBudget,
     int MaxTotalItemBudget,
-    float ScoreLowerBound);
+    float ScoreLowerBound,
+    bool IncludeEmptyLists);
 
 internal sealed record ExperienceSelectionGroup(
     ExperienceKey Key,
@@ -418,7 +422,11 @@ internal static class ExperienceSelectionEngine
         var groups = ImmutableArray.Create(new ExperienceSelectionGroup(
             key,
             static _ => true,
-            new(p.MinTotalItemBudget, p.EffectiveMaxTotalItemBudget, p.ScoreLowerBound),
+            new(
+                p.MinTotalItemBudget,
+                p.EffectiveMaxTotalItemBudget,
+                p.ScoreLowerBound,
+                IncludeEmptyLists: false),
             Order: 0));
 
         var result = Select(
@@ -516,12 +524,18 @@ internal static class ExperienceSelectionEngine
                     i.ItemIndex)))
             .ToList();
 
+        var context = new SelectionContext(groups, admissionPolicy);
+        foreach (var scoredList in groupedLists.Where(x => x.Group.Options.IncludeEmptyLists))
+        {
+            context.RequireList(
+                scoredList.Group,
+                scoredList.List,
+                scoredList.ListIndex);
+        }
+
         if (candidates.Count == 0 && requiredThesisCandidates.Count == 0)
         {
-            return new(
-                groups.Select(x => x.Key),
-                new Dictionary<ExperienceKey, ImmutableArray<Event>>(),
-                SelectionDiagnostics.CreateEmpty(groups));
+            return context.Output();
         }
 
         var ranker = new MmrRanker(
@@ -530,7 +544,6 @@ internal static class ExperienceSelectionEngine
                 .Concat(requiredThesisCandidates)
                 .Max(x => x.Matches.Sum));
 
-        var context = new SelectionContext(groups, admissionPolicy);
         foreach (var x in candidates.Concat(requiredThesisCandidates))
         {
             context.Scores.TryAdd(x.Item, x.Matches);
@@ -940,6 +953,29 @@ internal static class ExperienceSelectionEngine
 
         public bool IsBelowMinimum(MmrCandidate candidate) => IsBelowMinimum(candidate.Group);
 
+        public void RequireList(
+            ExperienceSelectionGroup group,
+            ExperienceList list,
+            int listIndex)
+        {
+            var admission = new SelectionAdmission(group, list, []);
+            if (!_admissionPolicy.CanAccept(admission))
+            {
+                throw new InvalidOperationException(
+                    $"Required experience headings exceed the usable one-page height; " +
+                    $"the heading for '{list.Title}' could not be included.");
+            }
+
+            ref var groupResults = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                Results,
+                group.Key,
+                out _);
+            groupResults ??= new();
+            groupResults.TryAdd(list, []);
+            _listOrders.TryAdd(list, listIndex);
+            _admissionPolicy.Commit(admission);
+        }
+
         public bool TryAdd(
             MmrCandidate candidate,
             bool allowExceedingBudget = false,
@@ -1178,6 +1214,7 @@ internal static class ExperienceSelectionEngine
         foreach (var t in s)
         {
             var items = t.Items.ToList();
+            var hasItems = items.Count > 0;
             foreach (var x in items)
             {
                 var latexStr = x.Item.Text.ToLatexString();
@@ -1192,11 +1229,11 @@ internal static class ExperienceSelectionEngine
                 DateRange = t.List.DateRange,
                 Place = t.List.Place,
                 Title = t.List.Title,
-                Text = t.List.Description,
+                Text = hasItems ? t.List.Description : NullableLatexString.Null,
                 DebugScore = t.TotalScore,
                 DebugTagScores = ToDebugTagScores(items.Select(x => (x.Matches, x.DebugScore))),
                 SubItems = subBuilder.ToImmutable(),
-                Urls = t.List.Urls,
+                Urls = hasItems ? t.List.Urls : [],
             });
             subBuilder.Clear();
         }

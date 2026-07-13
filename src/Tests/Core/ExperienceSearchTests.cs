@@ -452,6 +452,96 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_IncludeEmptyListsRetainsHeadingsAndSuppressesEmptyBodyMetadata()
+    {
+        var matching = new Tag("matching");
+        var unrelated = new Tag("unrelated");
+        var builder = NewBuilder(new()
+        {
+            [matching] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.MaxTotalItemBudget = 1;
+                opts.ScoreLowerBound = 5;
+                opts.IncludeEmptyLists = true;
+            });
+        builder.Configure(
+            ProjectKey,
+            e => e.Type == ExperienceType.Project,
+            opts => opts.MaxTotalItemBudget = 1);
+
+        var newestUnmatchedJob = ExperienceWithMetadata(
+            "newest unmatched job",
+            ExperienceType.Job,
+            2025,
+            Item("unmatched", (unrelated, 10)));
+        var olderMatchedJob = ExperienceWithMetadata(
+            "older matched job",
+            ExperienceType.Job,
+            2024,
+            Item("matched", (matching, 10)));
+        var unmatchedProject = ExperienceWithMetadata(
+            "unmatched project",
+            ExperienceType.Project,
+            2026,
+            Item("project", (unrelated, 10)));
+
+        var result = builder.Build().Run([
+            olderMatchedJob,
+            unmatchedProject,
+            newestUnmatchedJob,
+        ]);
+
+        var work = result.Get(WorkKey);
+        Assert.Equal(
+            new[] { "newest unmatched job", "older matched job" },
+            work.Select(static item => item.Title.Value));
+        Assert.Empty(work[0].SubItems);
+        Assert.True(work[0].Text.IsNull);
+        Assert.Empty(work[0].Urls);
+        Assert.Equal(new[] { "matched" }, Texts([work[1]]));
+        Assert.False(work[1].Text.IsNull);
+        Assert.Equal(
+            new[] { "https://example.test/experience" },
+            work[1].Urls.Select(static url => url.Value));
+        Assert.Empty(result.Get(ProjectKey));
+
+        var workBudget = Assert.Single(result.Diagnostics.Budgets.Where(x => x.Section == WorkKey));
+        Assert.Equal(1, workBudget.ActualCount);
+        Assert.Equal(0, workBudget.RemainingMaximumBudget);
+        Assert.Single(result.Diagnostics.Items);
+    }
+
+    [Fact]
+    public void Search_IncludeEmptyListsStillEmitsHeadingsAtZeroItemBudget()
+    {
+        var tag = new Tag("matching");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.MaxTotalItemBudget = 0;
+                opts.IncludeEmptyLists = true;
+            });
+
+        var result = builder.Build().Run([
+            Experience("work", ExperienceType.Job, 2025, Item("point", (tag, 10))),
+        ]);
+
+        var work = Assert.Single(result.Get(WorkKey));
+        Assert.Empty(work.SubItems);
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(0, budget.ActualCount);
+        Assert.Equal(0, budget.RemainingMaximumBudget);
+    }
+
+    [Fact]
     public void Search_KnownKeyWithNoCandidatesReturnsEmpty()
     {
         var tag = new Tag("a");
@@ -824,6 +914,24 @@ public sealed class ExperienceSearchTests
             DateRange = DateRange.Completed(new(Year: year), new(Year: year + 1)),
             Items = items.ToImmutableArray(),
             Type = type,
+        };
+    }
+
+    private static ExperienceList ExperienceWithMetadata(
+        string title,
+        ExperienceType type,
+        int year,
+        params ExperienceListItem[] items)
+    {
+        return new()
+        {
+            Title = title,
+            Place = new("test"),
+            DateRange = DateRange.Completed(new(Year: year), new(Year: year + 1)),
+            Description = new("description"),
+            Items = items.ToImmutableArray(),
+            Type = type,
+            Urls = ["https://example.test/experience"],
         };
     }
 

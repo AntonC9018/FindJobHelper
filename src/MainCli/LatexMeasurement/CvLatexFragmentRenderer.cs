@@ -145,6 +145,17 @@ internal static class CvLatexFragmentRenderer
             $"{list.Description}");
     }
 
+    public static FormattableString RenderExperienceHeading(ExperienceList list)
+    {
+        FormattableString place = list.Place.IsPersonal ? Empty : $"{list.Place.Name}";
+        return RenderEventCore(
+            $"{list.DateRange}",
+            $"{list.Title}",
+            place,
+            Empty,
+            Empty);
+    }
+
     public static FormattableString RenderExperienceItem(ExperienceListItem item)
         => $"{item.Text.ToLatexString()}";
 

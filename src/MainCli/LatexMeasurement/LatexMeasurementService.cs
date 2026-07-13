@@ -98,6 +98,7 @@ public sealed class LatexMeasurementService
             graph.DocumentHeader!.Value.ScaledPoints + graph.DocumentFooter!.Value.ScaledPoints));
         return CvMeasurementSnapshot.CreateFrozen(
             graph.ExperienceItems,
+            graph.ExperienceHeadings,
             graph.ExperienceChrome,
             graph.CompleteSections,
             graph.SectionChrome,
@@ -127,6 +128,14 @@ public sealed class LatexMeasurementService
 
         foreach (var identified in database.EnumerateExperienceLists())
         {
+            var headingFragment = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderExperienceHeading(identified.Value));
+            graph.Add(
+                CreateFragmentKey(LatexMeasurementKind.ExperienceHeading, headingFragment),
+                headingFragment,
+                LatexMeasurementMode.Box,
+                MeasurementDestination.ForExperienceHeading(identified.Id));
+
             var fragment = CvLatexFragmentRenderer.Materialize(
                 CvLatexFragmentRenderer.RenderExperienceChrome(identified.Value));
             graph.Add(
@@ -229,6 +238,7 @@ public sealed class LatexMeasurementService
     {
         public Dictionary<LatexMeasurementCacheKey, MeasurementWorkItem> WorkItems { get; } = new();
         public Dictionary<ExperienceItemId, LatexHeight> ExperienceItems { get; } = new();
+        public Dictionary<ExperienceListId, LatexHeight> ExperienceHeadings { get; } = new();
         public Dictionary<ExperienceListId, LatexHeight> ExperienceChrome { get; } = new();
         public Dictionary<Section, LatexHeight> CompleteSections { get; } = new();
         public Dictionary<Section, LatexHeight> SectionChrome { get; } = new();
@@ -273,6 +283,9 @@ public sealed class LatexMeasurementService
                     case MeasurementDestinationKind.ExperienceItem:
                         ExperienceItems[destination.ExperienceItemId] = height;
                         break;
+                    case MeasurementDestinationKind.ExperienceHeading:
+                        ExperienceHeadings[destination.ExperienceListId] = height;
+                        break;
                     case MeasurementDestinationKind.ExperienceChrome:
                         ExperienceChrome[destination.ExperienceListId] = height;
                         break;
@@ -309,6 +322,10 @@ public sealed class LatexMeasurementService
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: experience chrome is missing.");
             }
+            if (ExperienceHeadings.Count != database.Experiences.Length)
+            {
+                throw new InvalidOperationException("Incomplete measurement snapshot: experience headings are missing.");
+            }
             if (CompleteSections.Count != Enum.GetValues<Section>().Length)
             {
                 throw new InvalidOperationException("Incomplete measurement snapshot: complete sections are missing.");
@@ -342,6 +359,7 @@ public sealed class LatexMeasurementService
     private enum MeasurementDestinationKind
     {
         ExperienceItem,
+        ExperienceHeading,
         ExperienceChrome,
         CompleteSection,
         SectionChrome,
@@ -358,6 +376,9 @@ public sealed class LatexMeasurementService
     {
         public static MeasurementDestination ForExperienceItem(ExperienceItemId id)
             => new(MeasurementDestinationKind.ExperienceItem, id, default, default);
+
+        public static MeasurementDestination ForExperienceHeading(ExperienceListId id)
+            => new(MeasurementDestinationKind.ExperienceHeading, default, id, default);
 
         public static MeasurementDestination ForExperienceChrome(ExperienceListId id)
             => new(MeasurementDestinationKind.ExperienceChrome, default, id, default);

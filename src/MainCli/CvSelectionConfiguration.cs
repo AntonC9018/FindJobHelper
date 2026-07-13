@@ -152,7 +152,11 @@ public sealed class CvSelectionConfiguration
         builder.Configure(
             workKey,
             predicate: static experience => experience.Type == ExperienceType.Job,
-            Selection.WorkExperience.Apply);
+            options =>
+            {
+                Selection.WorkExperience.Apply(options);
+                options.IncludeEmptyLists = false;
+            });
         builder.Configure(
             personalProjectsKey,
             predicate: static experience => experience.Type == ExperienceType.Project,

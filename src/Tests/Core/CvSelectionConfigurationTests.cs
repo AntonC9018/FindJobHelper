@@ -34,6 +34,28 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
+    public async Task BuildSearch_AlwaysIncludesEveryWorkExperienceHeading()
+    {
+        var configuration = await CvSelectionConfiguration.LoadAsync(
+            FixturePath,
+            CancellationToken.None);
+        var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
+        var database = ExperienceDatabaseFactory.Create(tags);
+        var configured = configuration.BuildSearch(tagsDatabase);
+
+        var result = configured.Search.Run(database.Experiences);
+
+        var expectedTitles = database.Experiences
+            .Where(static experience => experience.Type == ExperienceType.Job)
+            .OrderByDescending(static experience => experience.DateRange, DateRangeComparer.ByEnd)
+            .Select(static experience => experience.Title.Value)
+            .ToArray();
+        var work = result.Get(configured.Sections.WorkKey);
+        Assert.Equal(expectedTitles, work.Select(static experience => experience.Title.Value));
+        Assert.Contains(work, static experience => experience.SubItems.IsEmpty);
+    }
+
+    [Fact]
     public async Task LoadAsync_LimitToOnePageDefaultsToTrueAndMapsFalse()
     {
         var json = await ReadFixtureAsync();

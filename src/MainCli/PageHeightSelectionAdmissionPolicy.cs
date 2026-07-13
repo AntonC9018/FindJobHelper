@@ -12,6 +12,7 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
     private readonly Dictionary<ExperienceListItem, ExperienceItemId> _itemIds;
     private readonly HashSet<Section> _visibleSections = [];
     private readonly HashSet<ExperienceList> _visibleLists = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ExperienceList> _itemizedLists = new(ReferenceEqualityComparer.Instance);
     private long _currentHeight;
 
     public PageHeightSelectionAdmissionPolicy(
@@ -31,6 +32,13 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
         foreach (var identified in database.EnumerateExperienceLists())
         {
             _listIds.Add(identified.Value, identified.Id);
+            var headingHeight = measurements.GetExperienceHeadingHeight(identified.Id).ScaledPoints;
+            var chromeHeight = measurements.GetExperienceChromeHeight(identified.Id).ScaledPoints;
+            if (chromeHeight < headingHeight)
+            {
+                throw new InvalidOperationException(
+                    $"Measured experience chrome for '{identified.Value.Title}' is smaller than its heading.");
+            }
         }
 
         _itemIds = new(ReferenceEqualityComparer.Instance);
@@ -75,6 +83,10 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
         {
             _visibleSections.Add(section);
             _visibleLists.Add(admission.List);
+            if (admission.Items.Count > 0)
+            {
+                _itemizedLists.Add(admission.List);
+            }
         }
     }
 
@@ -92,13 +104,24 @@ internal sealed class PageHeightSelectionAdmissionPolicy : ISelectionAdmissionPo
             height = checked(height + _measurements.GetSectionChromeHeight(section).ScaledPoints);
         }
 
+        if (!_listIds.TryGetValue(admission.List, out var listId))
+        {
+            throw new InvalidOperationException("Selected experience list was not found in the measured database.");
+        }
+
+        var hasItems = admission.Items.Count > 0;
         if (!_visibleLists.Contains(admission.List))
         {
-            if (!_listIds.TryGetValue(admission.List, out var listId))
-            {
-                throw new InvalidOperationException("Selected experience list was not found in the measured database.");
-            }
-            height = checked(height + _measurements.GetExperienceChromeHeight(listId).ScaledPoints);
+            var listHeight = hasItems
+                ? _measurements.GetExperienceChromeHeight(listId).ScaledPoints
+                : _measurements.GetExperienceHeadingHeight(listId).ScaledPoints;
+            height = checked(height + listHeight);
+        }
+        else if (hasItems && !_itemizedLists.Contains(admission.List))
+        {
+            var chromeHeight = _measurements.GetExperienceChromeHeight(listId).ScaledPoints;
+            var headingHeight = _measurements.GetExperienceHeadingHeight(listId).ScaledPoints;
+            height = checked(height + chromeHeight - headingHeight);
         }
 
         foreach (var item in admission.Items)
