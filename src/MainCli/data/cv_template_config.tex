@@ -167,13 +167,35 @@
 }
 
 %create a coloured arrow with title as cv meta section section
-% param 1: meta section title
+% param 1: right-hand meta value
+% param 2: left-hand meta value
 %
+\newcommand{\cvmetasectioncontent}[2]{%
+\footnotesize{#2} \hspace*{\fill} \footnotesize{#1}%
+}
+
 \newcommand{\metasection}[2]
 {
 %\begin{tabular*}{1\textwidth}{r r}
-\footnotesize{#2} \hspace*{\fill} \footnotesize{#1}\\[1pt]
+\cvmetasectioncontent{#1}{#2}\\[1pt]
 %\end{tabular*}
+}
+
+% Technologies are deliberately restricted to one rendered line. Typeset the
+% exact row into a hidden box first and use TeX's own line count so the check
+% stays in sync with the production font, escaping, and available width.
+\newsavebox{\cvmetasectionsinglelinebox}
+\newcount\cvmetasectionlinecount
+\newcommand{\singlelinemetasection}[2]{%
+\setbox\cvmetasectionsinglelinebox=\vbox{%
+    \hsize=\linewidth
+    \cvmetasectioncontent{#1}{#2}\par
+    \global\cvmetasectionlinecount=\prevgraf
+}%
+\ifnum\cvmetasectionlinecount>1
+    \PackageError{FindJobHelper}{FJH_TECHNOLOGIES_LINE_WRAPPED: Technologies metadata must fit on one line}{Remove technologies until the metadata row fits on one line.}%
+\fi
+\metasection{#1}{#2}%
 }
 
 %----------------------------------------------------------------------------------------

@@ -21,6 +21,15 @@ public record struct GenerateParams()
 
 public sealed record GeneratedCvArtifacts(string PdfPath);
 
+internal static class CvLatexErrors
+{
+    public const string TechnologiesLineWrappedMarker = "FJH_TECHNOLOGIES_LINE_WRAPPED";
+    public const string TechnologiesLineWrappedMessage = "Technologies metadata must fit on one line.";
+
+    public static bool ContainsTechnologiesLineWrappedMarker(string output)
+        => output.Contains(TechnologiesLineWrappedMarker, StringComparison.Ordinal);
+}
+
 public static class CvTemplate
 {
     public static async Task<GeneratedCvArtifacts> Generate(GenerateParams p)
@@ -103,6 +112,13 @@ public static class CvTemplate
 
         if (!result.IsSuccess)
         {
+            var latexLogPath = Path.Join(outputDirectory.FullName, "main.log");
+            if (File.Exists(latexLogPath)
+                && CvLatexErrors.ContainsTechnologiesLineWrappedMarker(File.ReadAllText(latexLogPath)))
+            {
+                throw new InvalidOperationException(CvLatexErrors.TechnologiesLineWrappedMessage);
+            }
+
             throw new InvalidOperationException("Latex execution failure");
         }
 

@@ -251,7 +251,11 @@ internal static class CvLatexFragmentRenderer
             FormattableString listText = list == default
                 ? Empty
                 : $@"\textbf{{{list.Category.DisplayName}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
-            rows.Add($@"\metasection{{{infoText}}}{{{listText}}}");
+            var rowCommand = info.Category == Category.Technologies
+                             || list.Category == Category.Technologies
+                ? "singlelinemetasection"
+                : "metasection";
+            rows.Add($@"\{rowCommand}{{{infoText}}}{{{listText}}}");
         }
 
         return $$"""

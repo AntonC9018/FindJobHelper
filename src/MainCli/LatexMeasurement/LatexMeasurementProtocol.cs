@@ -58,6 +58,12 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 .ExecuteBufferedAsync(cancellationToken);
             if (!result.IsSuccess)
             {
+                if (CvLatexErrors.ContainsTechnologiesLineWrappedMarker(
+                        $"{result.StandardError}{Environment.NewLine}{result.StandardOutput}"))
+                {
+                    throw new InvalidOperationException(CvLatexErrors.TechnologiesLineWrappedMessage);
+                }
+
                 throw new InvalidOperationException(
                     $"XeLaTeX height measurement failed with exit code {result.ExitCode}: {result.StandardError}{Environment.NewLine}{result.StandardOutput}");
             }

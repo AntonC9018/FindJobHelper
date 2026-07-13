@@ -127,6 +127,28 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public void DocumentHeader_UsesSingleLineCheckOnlyForTechnologiesMetadata()
+    {
+        var model = CreateEmptyModel();
+        model.CategorizedInfoLists =
+        [
+            new(Category.Technologies, [".NET", "PostgreSQL"]),
+            new(Category.GitHub, ["https://github.com/example"]),
+        ];
+        model.CategorizedInfos =
+        [
+            new(Category.Location, "Example City, Example Country"),
+            new(Category.Email, "person@example.test"),
+        ];
+
+        var header = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentHeader(model));
+
+        Assert.Equal(1, CountOccurrences(header, @"\singlelinemetasection{"));
+        Assert.Equal(1, CountOccurrences(header, @"\metasection{"));
+    }
+
+    [Fact]
     public async Task Service_DeduplicatesDuplicateItemsAndWarmCacheSkipsRunner()
     {
         using var fixture = new CacheFixture();
@@ -429,6 +451,44 @@ public sealed class LatexMeasurementTests
         }
     }
 
+    [Fact]
+    public async Task ProductionGeneration_FailsWhenTechnologiesMetadataWraps()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"fjh-wrapped-technologies-{Guid.NewGuid():N}");
+        try
+        {
+            var model = CreateEmptyModel();
+            model.SectionOrder = [];
+            model.CategorizedInfoLists =
+            [
+                new(
+                    Category.Technologies,
+                    Enumerable.Repeat<RegularString>("Extremely Long Technology Name", 30).ToImmutableArray()),
+            ];
+            model.CategorizedInfos = [new(Category.Location, "Example City, Example Country")];
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                CvTemplate.Generate(new()
+                {
+                    ConfigFilePath = ProductionTemplatePath,
+                    OutputDirectory = outputDirectory,
+                    Model = model,
+                    CancellationToken = CancellationToken.None,
+                }));
+
+            Assert.Equal(CvLatexErrors.TechnologiesLineWrappedMessage, exception.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
     private static IReadOnlyList<LatexMeasurementRequest> CreateProtocolRequests()
     {
         return
@@ -483,6 +543,19 @@ public sealed class LatexMeasurementTests
 
     private static string ResultLine(LatexMeasurementRequest request, long height)
         => $"FJH1|corr={request.CorrelationId}|rule={request.CacheKey.RuleVersion}|kind={request.CacheKey.Kind}|sha256={request.CacheKey.ContentHash}|height-sp={height}";
+
+    private static int CountOccurrences(string value, string searchValue)
+    {
+        var count = 0;
+        var startIndex = 0;
+        while ((startIndex = value.IndexOf(searchValue, startIndex, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            startIndex += searchValue.Length;
+        }
+
+        return count;
+    }
 
     private static ExperienceDatabase CreateDatabase(params RichText[] items)
         => new() { AllPlaces = [], Experiences = [CreateList(items)] };
