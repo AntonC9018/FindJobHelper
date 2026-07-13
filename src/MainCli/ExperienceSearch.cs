@@ -12,8 +12,8 @@ public readonly record struct ExperienceKey(string Value)
 
 public sealed class SearchPredicateOptions
 {
-    public int MinTotalItemBudget { get; set; }
-    public int MaxTotalItemBudget { get; set; }
+    public int MinTotalItemBudget { get; set; } = 0;
+    public int MaxTotalItemBudget { get; set; } = int.MaxValue;
 
     /// <summary>
     /// Legacy alias for <see cref="MaxTotalItemBudget"/>. New callers should use the maximum-specific name.

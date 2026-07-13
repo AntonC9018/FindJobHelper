@@ -12,6 +12,31 @@ public sealed class ExperienceSearchTests
     private static readonly ExperienceKey ProjectKey = new("Project");
 
     [Fact]
+    public void Search_DefaultsMissingBudgetsToUnboundedRange()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(WorkKey, _ => true);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("first", (tag, 10)),
+                Item("second", (tag, 9))),
+        ]);
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+
+        Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(0, budget.RequestedMinimum);
+        Assert.Equal(int.MaxValue, budget.RequestedMaximum);
+    }
+
+    [Fact]
     public void Search_UsesSharedMmrAcrossPredicates()
     {
         var tagA = new Tag("a");
@@ -316,6 +341,32 @@ public sealed class ExperienceSearchTests
         ], parameters);
 
         Assert.Equal(new[] { "seed", "minimum" }, Texts(result));
+    }
+
+    [Fact]
+    public void SelectEvents_DefaultsMissingBudgetsToUnboundedRange()
+    {
+        var tag = new Tag("a");
+        var tags = new WeightedTags
+        {
+            [tag] = 1,
+        };
+        var parameters = new SearchParams(
+            Tags: tags,
+            ScoreLowerBound: 0);
+
+        var result = ExperienceSelectionEngine.SelectEvents([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("first", (tag, 10)),
+                Item("second", (tag, 9))),
+        ], parameters);
+
+        Assert.Equal(new[] { "first", "second" }, Texts(result));
+        Assert.Equal(0, parameters.MinTotalItemBudget);
+        Assert.Equal(int.MaxValue, parameters.EffectiveMaxTotalItemBudget);
     }
 
     [Fact]

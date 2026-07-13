@@ -155,7 +155,7 @@ public sealed class CvSelectionConfiguration
             options =>
             {
                 Selection.WorkExperience.Apply(options);
-                options.IncludeEmptyLists = false;
+                options.IncludeEmptyLists = true;
             });
         builder.Configure(
             personalProjectsKey,
@@ -333,7 +333,7 @@ public sealed class SelectionConfiguration
 
 public sealed class SelectionOptionsConfiguration
 {
-    public int MinTotalItemBudget { get; init; }
+    public int MinTotalItemBudget { get; init; } = 0;
     public int? MaxTotalItemBudget { get; init; }
     public int? TotalItemBudget { get; init; }
     public required float ScoreLowerBound { get; init; }
@@ -355,10 +355,6 @@ public sealed class SelectionOptionsConfiguration
         if (MaxTotalItemBudget.HasValue && TotalItemBudget.HasValue)
         {
             errors.Add($"'{path}' must contain either 'totalItemBudget' or 'maxTotalItemBudget', not both.");
-        }
-        else if (!MaxTotalItemBudget.HasValue && !TotalItemBudget.HasValue)
-        {
-            errors.Add($"'{path}' must contain either 'totalItemBudget' or 'maxTotalItemBudget'.");
         }
         else
         {
@@ -382,7 +378,8 @@ public sealed class SelectionOptionsConfiguration
         }
     }
 
-    private int EffectiveMaxTotalItemBudget => MaxTotalItemBudget ?? TotalItemBudget!.Value;
+    private int EffectiveMaxTotalItemBudget =>
+        MaxTotalItemBudget ?? TotalItemBudget ?? int.MaxValue;
 }
 
 public sealed record ConfiguredCvSearch(

@@ -119,15 +119,26 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
-    public async Task LoadAsync_RejectsMissingMaximumSelectionBudget()
+    public async Task LoadAsync_DefaultsMissingSelectionBudgetsToUnboundedRange()
     {
         var json = await ReadFixtureAsync();
         var budgetIndex = json.IndexOf("\"totalItemBudget\": 1,", StringComparison.Ordinal);
         json = json.Remove(budgetIndex, "\"totalItemBudget\": 1,".Length);
 
-        var exception = await LoadInvalidAsync(json, buildSearch: false);
+        var configuration = await LoadAsync(json);
+        var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
+        var database = ExperienceDatabaseFactory.Create(tags);
+        var configured = configuration.BuildSearch(tagsDatabase);
+        var result = configured.Search.Run(database.Experiences);
+        var educationBudget = Assert.Single(
+            result.Diagnostics.Budgets,
+            budget => budget.Section == configured.Sections.EducationKey);
 
-        Assert.Contains("either 'totalItemBudget' or 'maxTotalItemBudget'", exception.Message);
+        Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
+        Assert.Null(configuration.Selection.Education.MaxTotalItemBudget);
+        Assert.Null(configuration.Selection.Education.TotalItemBudget);
+        Assert.Equal(0, educationBudget.RequestedMinimum);
+        Assert.Equal(int.MaxValue, educationBudget.RequestedMaximum);
     }
 
     [Fact]
