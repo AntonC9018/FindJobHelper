@@ -9,6 +9,12 @@ public sealed class Tags<T> : KnownTags<T>
     public required T programming { get; init; }
     public required T concurrency { get; init; }
     public required T multithreading { get; init; }
+    public required T networking { get; init; }
+    public required T peerToPeer { get; init; }
+    public required T tcp { get; init; }
+    public required T udp { get; init; }
+    public required T sockets { get; init; }
+    public required T natTraversal { get; init; }
     public required T dotnet { get; init; }
     public required T googleApi { get; init; }
     public required T go { get; init; }
@@ -173,6 +179,12 @@ public static class TagsDatabaseFactory
             programming = db.Tag("Programming"),
             concurrency = db.Tag("Concurrency", "Concurrency Programming", "Concurrent Programming", "Parallel Programming"),
             multithreading = db.Tag("Multithreading", "Multi-threading", "Threading"),
+            networking = db.Tag("Networking", "Network Programming"),
+            peerToPeer = db.Tag("Peer-to-Peer", "Peer to Peer", "P2P"),
+            tcp = db.Tag("TCP"),
+            udp = db.Tag("UDP"),
+            sockets = db.Tag("Sockets", "Socket Programming"),
+            natTraversal = db.Tag("NAT Traversal", "NAT Hole Punching", "Hole Punching"),
             dotween = db.Tag("DOTween"),
             unity = db.Tag("Unity", "Unity3D"),
             blender = db.Tag("Blender"),
@@ -240,6 +252,16 @@ public static class TagsDatabaseFactory
         t.go.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().Fully();
         t.concurrency.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().By(0.1f);
         t.multithreading.IsIncludedIn(t.concurrency).By(0.85f).WhichIsIncludedInIt().By(0.55f);
+        // TCP, UDP, socket programming, peer-to-peer communication and NAT traversal are concrete networking work.
+        // The reverse weights stay low because a broad networking role need not use any one protocol or technique.
+        t.networking.IsIncludedIn(t.programming).By(0.45f).WhichIsIncludedInIt().By(0.1f);
+        t.tcp.IsIncludedIn(t.networking).By(0.95f).WhichIsIncludedInIt().By(0.15f);
+        t.udp.IsIncludedIn(t.networking).By(0.95f).WhichIsIncludedInIt().By(0.15f);
+        t.sockets.IsIncludedIn(t.networking).By(0.9f).WhichIsIncludedInIt().By(0.12f);
+        t.peerToPeer.IsIncludedIn(t.networking).By(0.85f).WhichIsIncludedInIt().By(0.08f);
+        t.natTraversal.IsIncludedIn(t.networking).By(0.9f).WhichIsIncludedInIt().By(0.05f);
+        // Hole punching is a peer-to-peer connectivity technique, while peer-to-peer systems can use other approaches.
+        t.natTraversal.IsIncludedIn(t.peerToPeer).By(0.85f).WhichIsIncludedInIt().By(0.25f);
         // Testing, debugging and refactoring are transferable programming activities, not language-specific skills;
         // modest reverse weights let general programming searches find them without making them interchangeable.
         t.unitTests.IsIncludedIn(t.programming).By(0.45f).WhichIsIncludedInIt().By(0.1f);
