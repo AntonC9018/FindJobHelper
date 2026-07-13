@@ -149,6 +149,15 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public void DocumentHeader_IncludesFirstSectionSpacing()
+    {
+        var header = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentHeader(CreateEmptyModel()));
+
+        Assert.Contains(@"\vspace{\cvflowblockfitskipamount}", header);
+    }
+
+    [Fact]
     public async Task Service_DeduplicatesDuplicateItemsAndWarmCacheSkipsRunner()
     {
         using var fixture = new CacheFixture();

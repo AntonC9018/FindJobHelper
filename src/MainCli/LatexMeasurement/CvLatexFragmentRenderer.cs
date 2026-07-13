@@ -264,6 +264,10 @@ internal static class CvLatexFragmentRenderer
             \textcolor{softcol}{\hrule}
             \vspace{6pt}
             \normalsize
+            % Match the final event padding and trailing flow-block line that
+            % precede every later section.
+            \vspace{6pt}
+            \vspace{\cvflowblockfitskipamount}
             """;
     }
 
