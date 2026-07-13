@@ -11,6 +11,19 @@ public sealed class CvGenerationCommand
 {
     private const string FinalPdfFileName = "CurmanchiiAnton.pdf";
 
+    [Command("list-tags", Description = "List all tags available for CV selection.")]
+    public void ListTags()
+    {
+        var tagsDatabase = TagsDatabaseFactory.Create().TagsDatabase;
+        foreach (var tag in tagsDatabase.TagsGraph.Keys
+                     .Select(static tag => tag.Name)
+                     .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(static name => name, StringComparer.Ordinal))
+        {
+            Console.WriteLine(tag);
+        }
+    }
+
     [DefaultCommand]
     public async Task<int> Generate(
         CvGenerationArguments arguments,
