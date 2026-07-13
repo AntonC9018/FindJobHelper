@@ -7,9 +7,13 @@ public sealed class Tags<T> : KnownTags<T>
     public Tags<U> Map<U>(Func<T, U> f) => (Tags<U>) MapImpl(f);
 
     public required T programming { get; init; }
+    public required T algorithms { get; init; }
+    public required T dataStructures { get; init; }
+    public required T graphs { get; init; }
     public required T concurrency { get; init; }
     public required T multithreading { get; init; }
     public required T networking { get; init; }
+    public required T http { get; init; }
     public required T peerToPeer { get; init; }
     public required T tcp { get; init; }
     public required T udp { get; init; }
@@ -97,6 +101,12 @@ public sealed class Tags<T> : KnownTags<T>
     public required T latex { get; init; }
     public required T blazor { get; init; }
     public required T razor { get; init; }
+    public required T serverSideRendering { get; init; }
+    public required T caching { get; init; }
+    public required T ocr { get; init; }
+    public required T browserAutomation { get; init; }
+    public required T infrastructureAsCode { get; init; }
+    public required T aiAssistedDevelopment { get; init; }
     public required T refactoring { get; init; }
     public required T webforms { get; init; }
     public required T aspnetmvc { get; init; }
@@ -125,6 +135,9 @@ public static class TagsDatabaseFactory
             cpp = db.Tag("C++"),
             python = db.Tag("Python"),
             designPatterns = db.Tag("Design Patterns"),
+            algorithms = db.Tag("Algorithms"),
+            dataStructures = db.Tag("Data Structures"),
+            graphs = db.Tag("Graphs", "Graph Algorithms", "Graph Data Structures"),
             webScraping = db.Tag("Web Scraping"),
             teachingSkill = db.Tag("Teaching"),
             mentoring = db.Tag("Mentoring"),
@@ -180,6 +193,7 @@ public static class TagsDatabaseFactory
             concurrency = db.Tag("Concurrency", "Concurrency Programming", "Concurrent Programming", "Parallel Programming"),
             multithreading = db.Tag("Multithreading", "Multi-threading", "Threading"),
             networking = db.Tag("Networking", "Network Programming"),
+            http = db.Tag("HTTP", "HTTP Protocol"),
             peerToPeer = db.Tag("Peer-to-Peer", "Peer to Peer", "P2P"),
             tcp = db.Tag("TCP"),
             udp = db.Tag("UDP"),
@@ -206,6 +220,12 @@ public static class TagsDatabaseFactory
             latex = db.Tag("LaTeX"),
             blazor = db.Tag("Blazor"),
             razor = db.Tag("Razor", "Razor Pages"),
+            serverSideRendering = db.Tag("Server-Side Rendering", "SSR"),
+            caching = db.Tag("Caching"),
+            ocr = db.Tag("OCR", "Optical Character Recognition"),
+            browserAutomation = db.Tag("Browser Automation", "Playwright"),
+            infrastructureAsCode = db.Tag("Infrastructure as Code", "IaC", "Pulumi"),
+            aiAssistedDevelopment = db.Tag("AI-Assisted Development", "AI Development Tools", "Codex", "Agentic Coding"),
             refactoring = db.Tag("Refactoring", "Legacy Code Modernization"),
             webforms = db.Tag("WebForms"),
             aspnetmvc = db.Tag("ASP.NET MVC"),
@@ -250,8 +270,17 @@ public static class TagsDatabaseFactory
         t.zig.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().Fully();
         t.python.IsIncludedIn(t.programming).By(0.3f).WhichIsIncludedInIt().Fully();
         t.go.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().Fully();
+
+        // Algorithms and data structures are core programming fundamentals, but keep their graph
+        // weights modest so a requirement for them does not over-rank every language-only item.
+        // Graph work is both a concrete data-structure specialization and a setting for traversal algorithms.
+        t.algorithms.IsIncludedIn(t.programming).By(0.1f).WhichIsIncludedInIt().By(0.05f);
+        t.dataStructures.IsIncludedIn(t.programming).By(0.1f).WhichIsIncludedInIt().By(0.05f);
+        t.graphs.IsIncludedIn(t.dataStructures).By(0.9f).WhichIsIncludedInIt().By(0.25f);
+        t.graphs.IsIncludedIn(t.algorithms).By(0.65f).WhichIsIncludedInIt().By(0.2f);
         t.concurrency.IsIncludedIn(t.programming).By(0.35f).WhichIsIncludedInIt().By(0.1f);
         t.multithreading.IsIncludedIn(t.concurrency).By(0.85f).WhichIsIncludedInIt().By(0.55f);
+
         // TCP, UDP, socket programming, peer-to-peer communication and NAT traversal are concrete networking work.
         // The reverse weights stay low because a broad networking role need not use any one protocol or technique.
         t.networking.IsIncludedIn(t.programming).By(0.45f).WhichIsIncludedInIt().By(0.1f);
@@ -260,15 +289,26 @@ public static class TagsDatabaseFactory
         t.sockets.IsIncludedIn(t.networking).By(0.9f).WhichIsIncludedInIt().By(0.12f);
         t.peerToPeer.IsIncludedIn(t.networking).By(0.85f).WhichIsIncludedInIt().By(0.08f);
         t.natTraversal.IsIncludedIn(t.networking).By(0.9f).WhichIsIncludedInIt().By(0.05f);
+
         // Hole punching is a peer-to-peer connectivity technique, while peer-to-peer systems can use other approaches.
         t.natTraversal.IsIncludedIn(t.peerToPeer).By(0.85f).WhichIsIncludedInIt().By(0.25f);
+
+        // HTTP is an application-layer networking protocol normally carried over TCP. REST APIs
+        // and OpenAPI-described services are strong HTTP evidence, while HTTP itself is broader.
+        t.http.IsIncludedIn(t.networking).By(0.1f).WhichIsIncludedInIt().By(0.05f);
+        t.http.IsIncludedIn(t.tcp).By(0.1f).WhichIsIncludedInIt().By(0.05f);
+        t.restApi.IsIncludedIn(t.http).By(0.1f).WhichIsIncludedInIt().By(0.1f);
+        t.openApi.IsIncludedIn(t.http).By(0.1f).WhichIsIncludedInIt().By(0.05f);
+
         // Testing, debugging and refactoring are transferable programming activities, not language-specific skills;
         // modest reverse weights let general programming searches find them without making them interchangeable.
         t.unitTests.IsIncludedIn(t.programming).By(0.45f).WhichIsIncludedInIt().By(0.1f);
         t.debugging.IsIncludedIn(t.programming).By(0.5f).WhichIsIncludedInIt().By(0.12f);
         t.refactoring.IsIncludedIn(t.programming).By(0.55f).WhichIsIncludedInIt().By(0.12f);
+
         // Refactoring often applies design-pattern knowledge, while design-pattern work does not necessarily refactor code.
         t.refactoring.IsIncludedIn(t.designPatterns).By(0.5f).WhichIsIncludedInIt().By(0.15f);
+
         // Teaching is strong evidence of mentoring, while workplace mentoring does not necessarily imply formal teaching.
         t.teachingSkill.IsIncludedIn(t.mentoring).By(0.85f).WhichIsIncludedInIt().By(0.45f);
 
@@ -316,6 +356,14 @@ public static class TagsDatabaseFactory
         t.compression.IsIncludedIn(t.imageProcessing).By(0.35f).WhichIsIncludedInIt().By(0.2f);
         t.apiDesign.IsIncludedIn(t.designPatterns).By(0.5f).WhichIsIncludedInIt().By(0.2f);
         t.apiDesign.IsIncludedIn(t.programming).By(0.2f).WhichIsIncludedInIt().By(0.1f);
+        // AI-assisted development and browser automation are concrete forms of developer tooling.
+        // Infrastructure as code is also cloud-relevant, but provider-independent.
+        t.aiAssistedDevelopment.IsIncludedIn(t.toolingDevelopment).By(0.7f).WhichIsIncludedInIt().By(0.08f);
+        t.browserAutomation.IsIncludedIn(t.toolingDevelopment).By(0.65f).WhichIsIncludedInIt().By(0.06f);
+        t.infrastructureAsCode.IsIncludedIn(t.programming).By(0.4f).WhichIsIncludedInIt().By(0.05f);
+        t.infrastructureAsCode.IsIncludedIn(t.aws).By(0.55f).WhichIsIncludedInIt().By(0.08f);
+        t.ocr.IsIncludedIn(t.imageProcessing).By(0.8f).WhichIsIncludedInIt().By(0.15f);
+        t.ocr.IsIncludedIn(t.parser).By(0.45f).WhichIsIncludedInIt().By(0.08f);
 
         t.grpc.IsIncludedIn(t.protobuf).By(0.2f).WhichIsIncludedInIt().Fully();
 
@@ -330,6 +378,7 @@ public static class TagsDatabaseFactory
         t.sqlServer.IsIncludedIn(t.postgres).By(0.5f).WhichIsIncludedInIt().By(0.35f);
         t.sqlServer.IsIncludedIn(t.mysql).By(0.5f).WhichIsIncludedInIt().By(0.5f);
         t.sql.IsIncludedIn(t.efCore).By(0.7f).WhichIsIncludedInIt().By(0.3f);
+
         // Neon is a managed PostgreSQL platform, so Neon experience is strongly PostgreSQL-relevant;
         // PostgreSQL itself is provider-independent, hence the small reverse weight.
         t.neon.IsIncludedIn(t.postgres).By(0.95f).WhichIsIncludedInIt().By(0.12f);
@@ -344,9 +393,11 @@ public static class TagsDatabaseFactory
         t.backend.IsIncludedIn(t.nodejs).By(0.10f).WhichIsIncludedInIt().By(0.45f);
 
         t.backend.IsIncludedIn(t.microservices).By(0.1f).WhichIsIncludedInIt().By(0.8f);
+
         // Application security is cross-cutting but strongly represented by backend authorization in this database;
         // the low reverse weight prevents ordinary backend work from scoring as dedicated security experience.
         t.security.IsIncludedIn(t.backend).By(0.55f).WhichIsIncludedInIt().By(0.08f);
+
         // nginx commonly serves or proxies backends on Linux; Linux/backend knowledge only weakly implies nginx.
         t.nginx.IsIncludedIn(t.linux).By(0.75f).WhichIsIncludedInIt().By(0.08f);
         t.nginx.IsIncludedIn(t.backend).By(0.55f).WhichIsIncludedInIt().By(0.05f);
@@ -355,6 +406,7 @@ public static class TagsDatabaseFactory
         {
             t.cicd.IsIncludedIn(cloudProvider).By(0.9f).WhichIsIncludedInIt().By(0.2f);
         }
+
         // Containers are commonly built and deployed by CI/CD pipelines, while CI/CD is not necessarily container-based.
         t.docker.IsIncludedIn(t.cicd).By(0.65f).WhichIsIncludedInIt().By(0.35f);
 
@@ -375,10 +427,17 @@ public static class TagsDatabaseFactory
         t.webScraping.IsIncludedIn(t.parser).By(0.6f).WhichIsIncludedInIt().By(0.1f);
 
         t.aspnetmvc.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.10f);
+
         // Razor is part of the ASP.NET web stack and also exercises frontend concerns;
         // model both links so ASP.NET tooling roles can find concrete Razor work automatically.
         t.razor.IsIncludedIn(t.aspnet).Fully().WhichIsIncludedInIt().By(0.25f);
         t.razor.IsIncludedIn(t.frontend).By(0.70f).WhichIsIncludedInIt().By(0.10f);
+
+        // Razor Pages renders HTML on the server, so it is direct SSR evidence. SSR remains
+        // framework-independent, hence the deliberately small reverse relation to Razor.
+        t.razor.IsIncludedIn(t.serverSideRendering).By(0.85f).WhichIsIncludedInIt().By(0.2f);
+        t.serverSideRendering.IsIncludedIn(t.frontend).By(0.7f).WhichIsIncludedInIt().By(0.08f);
+
         // Blazor is an ASP.NET frontend framework; WebForms is a legacy ASP.NET frontend framework.
         // Reverse weights stay low because neither framework represents ASP.NET or frontend work as a whole.
         t.blazor.IsIncludedIn(t.aspnet).By(0.9f).WhichIsIncludedInIt().By(0.18f);
