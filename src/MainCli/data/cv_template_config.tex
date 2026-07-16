@@ -239,6 +239,9 @@
   \ifx\temp\empty
     % do nothing, no items
   \else
+    % Every item carries the inter-item spacing before it. Cancel that spacing
+    % once so the first item starts immediately while later items stay apart.
+    \vspace{-\cveventitemspacing}%
     #1%
     \vspace{\cveventitemspacing}%
   \fi
@@ -431,16 +434,11 @@
     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
 
-% An event without permanent link bullets still acquires one-time itemize
-% chrome as soon as its first selected experience item is rendered.
+% An event without permanent link bullets has no one-time list chrome: the
+% first item's leading spacing is canceled in production, and each marginal
+% item measurement already carries its following inter-item/list-end spacing.
 \newcommand{\cvsetmeasurementexperiencechromebox}[1]{%
-    % The bottom half of the production list spacing is charged once here;
-    % each marginal item carries its own leading/inter-item spacing.
     \cvsetmeasurementbox{#1}%
-    \dimen0=\dimexpr
-        \ht\cvmeasurementbox+\dp\cvmeasurementbox+\cveventitemspacing
-        \relax
-    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
 
 \NewEnviron{flowblock}{%

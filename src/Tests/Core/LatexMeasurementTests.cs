@@ -394,7 +394,7 @@ public sealed class LatexMeasurementTests
             measured[new(11)].ScaledPoints,
             measured[new(9)].ScaledPoints + measured[new(10)].ScaledPoints);
         Assert.Equal(measured[new(17)], measured[new(18)]);
-        Assert.True(measured[new(1)].ScaledPoints > measured[new(17)].ScaledPoints);
+        Assert.Equal(measured[new(1)], measured[new(17)]);
         Assert.Equal(
             measured[new(14)].ScaledPoints,
             measured[new(12)].ScaledPoints
