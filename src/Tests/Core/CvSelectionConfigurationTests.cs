@@ -30,7 +30,25 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal("PersonalProjects", search.Sections.PersonalProjectsKey.Value);
         Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
         Assert.Equal(1, configuration.Selection.Education.TotalItemBudget);
+        Assert.Equal(0, configuration.Selection.Education.RecencyBoost);
+        Assert.Equal(0, configuration.Selection.WorkExperience.RecencyBoost);
+        Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
         Assert.True(configuration.LimitToOnePage);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MapsRecencyBoost()
+    {
+        var json = (await ReadFixtureAsync()).Replace(
+            "\"workExperience\": {",
+            "\"workExperience\": {\n      \"recencyBoost\": 0.25,",
+            StringComparison.Ordinal);
+
+        var configuration = await LoadAsync(json);
+
+        Assert.Equal(0.25f, configuration.Selection.WorkExperience.RecencyBoost);
+        Assert.Equal(0, configuration.Selection.Education.RecencyBoost);
+        Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
     }
 
     [Fact]
@@ -101,6 +119,7 @@ public sealed class CvSelectionConfigurationTests
     [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", "must be non-negative")]
     [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": -1, \"totalItemBudget\": 1", "minTotalItemBudget")]
     [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 2, \"totalItemBudget\": 1", "must not exceed")]
+    [InlineData("\"scoreLowerBound\": 0", "\"scoreLowerBound\": 0, \"recencyBoost\": -0.1", "recencyBoost")]
     public async Task LoadAsync_RejectsInvalidSelectionValues(
         string oldValue,
         string newValue,
@@ -112,6 +131,26 @@ public sealed class CvSelectionConfigurationTests
         var exception = await LoadInvalidAsync(mutated, buildSearch: true);
 
         Assert.Contains(expectedMessage, exception.Message);
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    public void SelectionOptionsConfiguration_RejectsNonFiniteRecencyBoost(float recencyBoost)
+    {
+        var options = new SelectionOptionsConfiguration
+        {
+            ScoreLowerBound = 0,
+            RecencyBoost = recencyBoost,
+        };
+        var errors = new List<string>();
+
+        options.CollectValidationErrors("selection.workExperience", errors);
+
+        Assert.Contains(
+            "'selection.workExperience.recencyBoost' must be finite and non-negative.",
+            errors);
     }
 
     [Fact]

@@ -16,6 +16,7 @@ public sealed class SearchPredicateOptions
     public int TotalItemBudget { get; set; } = int.MaxValue;
 
     public float ScoreLowerBound { get; set; }
+    public float RecencyBoost { get; set; }
     public bool IncludeEmptyLists { get; set; }
 
     internal SearchPredicateOptions Copy()
@@ -25,8 +26,70 @@ public sealed class SearchPredicateOptions
             MinTotalItemBudget = MinTotalItemBudget,
             TotalItemBudget = TotalItemBudget,
             ScoreLowerBound = ScoreLowerBound,
+            RecencyBoost = RecencyBoost,
             IncludeEmptyLists = IncludeEmptyLists,
         };
+    }
+}
+
+internal readonly record struct SearchPredicateOptionsValidationError(
+    string PropertyName,
+    string Message,
+    bool IsOutOfRange)
+{
+    public Exception ToException()
+    {
+        return IsOutOfRange
+            ? new ArgumentOutOfRangeException(PropertyName, Message)
+            : new ArgumentException(Message, PropertyName);
+    }
+}
+
+internal static class SearchPredicateOptionsValidator
+{
+    public static IEnumerable<SearchPredicateOptionsValidationError> ValidateOptions(
+        SearchPredicateOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (options.MinTotalItemBudget < 0)
+        {
+            yield return new(
+                nameof(options.MinTotalItemBudget),
+                "must be non-negative.",
+                IsOutOfRange: true);
+        }
+
+        if (options.TotalItemBudget < 0)
+        {
+            yield return new(
+                nameof(options.TotalItemBudget),
+                "must be non-negative.",
+                IsOutOfRange: true);
+        }
+        else if (options.MinTotalItemBudget > options.TotalItemBudget)
+        {
+            yield return new(
+                nameof(options.MinTotalItemBudget),
+                "must not exceed the total item budget.",
+                IsOutOfRange: false);
+        }
+
+        if (!float.IsFinite(options.ScoreLowerBound) || options.ScoreLowerBound < 0)
+        {
+            yield return new(
+                nameof(options.ScoreLowerBound),
+                "must be finite and non-negative.",
+                IsOutOfRange: true);
+        }
+
+        if (!float.IsFinite(options.RecencyBoost) || options.RecencyBoost < 0)
+        {
+            yield return new(
+                nameof(options.RecencyBoost),
+                "must be finite and non-negative.",
+                IsOutOfRange: true);
+        }
     }
 }
 
@@ -128,7 +191,10 @@ public sealed class SearchBuilder
         {
             var predicate = _predicates[i];
             ValidateKey(predicate.Key);
-            ValidateOptions(predicate.Options);
+            foreach (var error in SearchPredicateOptionsValidator.ValidateOptions(predicate.Options))
+            {
+                throw error.ToException();
+            }
 
             if (!keys.Add(predicate.Key))
             {
@@ -142,6 +208,7 @@ public sealed class SearchBuilder
                     predicate.Options.MinTotalItemBudget,
                     predicate.Options.TotalItemBudget,
                     predicate.Options.ScoreLowerBound,
+                    predicate.Options.RecencyBoost,
                     predicate.Options.IncludeEmptyLists),
                 i));
         }
@@ -157,40 +224,6 @@ public sealed class SearchBuilder
         if (string.IsNullOrWhiteSpace(key.Value))
         {
             throw new InvalidOperationException("Experience search keys cannot be empty.");
-        }
-    }
-
-    private static void ValidateOptions(SearchPredicateOptions options)
-    {
-        if (options.MinTotalItemBudget < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options.MinTotalItemBudget),
-                options.MinTotalItemBudget,
-                "Minimum total item budget must be non-negative.");
-        }
-
-        if (options.TotalItemBudget < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options.TotalItemBudget),
-                options.TotalItemBudget,
-                "Total item budget must be non-negative.");
-        }
-
-        if (options.MinTotalItemBudget > options.TotalItemBudget)
-        {
-            throw new ArgumentException(
-                "Minimum total item budget must not exceed total item budget.",
-                nameof(options.MinTotalItemBudget));
-        }
-
-        if (float.IsNaN(options.ScoreLowerBound) || options.ScoreLowerBound < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(options.ScoreLowerBound),
-                options.ScoreLowerBound,
-                "Score lower bound must be non-negative.");
         }
     }
 
@@ -230,12 +263,21 @@ public sealed class ExperienceSearch
     public SearchResult Run(IEnumerable<ExperienceList> experiences)
     {
         ArgumentNullException.ThrowIfNull(experiences);
+        return Run(experiences, DateOnly.FromDateTime(DateTime.Today));
+    }
+
+    internal SearchResult Run(
+        IEnumerable<ExperienceList> experiences,
+        DateOnly currentDate)
+    {
+        ArgumentNullException.ThrowIfNull(experiences);
         return ExperienceSelectionEngine.Select(
             experiences,
             _tags,
             _mmr,
             _groups,
-            UnlimitedSelectionAdmissionPolicy.Instance);
+            UnlimitedSelectionAdmissionPolicy.Instance,
+            currentDate);
     }
 
     internal SearchResult Run(
@@ -249,7 +291,8 @@ public sealed class ExperienceSearch
             _tags,
             _mmr,
             _groups,
-            admissionPolicy);
+            admissionPolicy,
+            DateOnly.FromDateTime(DateTime.Today));
     }
 }
 
@@ -311,6 +354,7 @@ internal readonly record struct ExperienceSelectionOptions(
     int MinTotalItemBudget,
     int TotalItemBudget,
     float ScoreLowerBound,
+    float RecencyBoost,
     bool IncludeEmptyLists);
 
 internal sealed record ExperienceSelectionGroup(
@@ -402,7 +446,8 @@ internal static class ExperienceSelectionEngine
         WeightedTags tags,
         MmrOptions mmr,
         ImmutableArray<ExperienceSelectionGroup> groups,
-        ISelectionAdmissionPolicy admissionPolicy)
+        ISelectionAdmissionPolicy admissionPolicy,
+        DateOnly currentDate)
     {
         ArgumentNullException.ThrowIfNull(tags);
         ArgumentNullException.ThrowIfNull(mmr);
@@ -425,12 +470,17 @@ internal static class ExperienceSelectionEngine
             .Where(x => x.ScoredItems.Count > 0)
             .ToList();
 
+        var recencyMultipliers = CalculateRecencyMultipliers(
+            scoredLists,
+            currentDate);
+
         var candidates = scoredLists
             .SelectMany(x => x.ScoredItems.Select((i, itemIndex) => new MmrCandidate(
                 x.Group,
                 x.List,
                 i.Item,
                 i.Matches,
+                recencyMultipliers.GetValueOrDefault(x.List, 1),
                 x.ListIndex,
                 itemIndex)))
             .ToList();
@@ -445,6 +495,7 @@ internal static class ExperienceSelectionEngine
                     x.List,
                     i.Item,
                     tags.Match(i.Item.Tags),
+                    recencyMultipliers.GetValueOrDefault(x.List, 1),
                     x.ListIndex,
                     i.ItemIndex)))
             .ToList();
@@ -467,7 +518,7 @@ internal static class ExperienceSelectionEngine
             mmr,
             candidates
                 .Concat(requiredThesisCandidates)
-                .Max(x => x.Matches.Sum));
+                .Max(x => x.AdjustedRelevance));
 
         foreach (var x in candidates.Concat(requiredThesisCandidates))
         {
@@ -493,6 +544,7 @@ internal static class ExperienceSelectionEngine
                     scoredList.List,
                     i.Item,
                     i.Matches,
+                    recencyMultipliers.GetValueOrDefault(scoredList.List, 1),
                     scoredList.ListIndex,
                     itemIndex)),
                 context.Added);
@@ -509,7 +561,7 @@ internal static class ExperienceSelectionEngine
         while (context.HasRemainingBudget)
         {
             var next = ranker.BestCandidate(candidates, context.Added, rejected);
-            if (next is null || ranker.Score(next.Value.Matches) <= 0)
+            if (next is null || ranker.Score(next.Value) <= 0)
             {
                 break;
             }
@@ -558,11 +610,67 @@ internal static class ExperienceSelectionEngine
                 {
                     if (context.Scores.TryGetValue(added, out var matches))
                     {
-                        context.DebugScores[added] = ranker.RawEquivalentScore(matches);
+                        context.DebugScores[added] = ranker.RawEquivalentScore(
+                            matches,
+                            candidate.RecencyMultiplier);
                         ranker.AddSelected(matches);
                     }
                 });
         }
+    }
+
+    private static Dictionary<ExperienceList, float> CalculateRecencyMultipliers(
+        IEnumerable<ScoredList> scoredLists,
+        DateOnly currentDate)
+    {
+        var result = new Dictionary<ExperienceList, float>();
+
+        foreach (var section in scoredLists.GroupBy(x => x.Group.Key))
+        {
+            var lists = section.ToArray();
+            var recencyBoost = lists[0].Group.Options.RecencyBoost;
+            if (recencyBoost == 0)
+            {
+                continue;
+            }
+
+            var datedLists = lists
+                .Select(x => (
+                    x.List,
+                    EndDate: EffectiveEndDate(x.List.DateRange, currentDate)))
+                .ToArray();
+            var oldestDay = datedLists.Min(x => x.EndDate.DayNumber);
+            var newestDay = datedLists.Max(x => x.EndDate.DayNumber);
+            if (oldestDay == newestDay)
+            {
+                continue;
+            }
+
+            var dateRange = newestDay - oldestDay;
+            foreach (var (list, endDate) in datedLists)
+            {
+                var normalizedRecency = (endDate.DayNumber - oldestDay) / (float)dateRange;
+                result[list] = 1 + recencyBoost * Math.Clamp(normalizedRecency, 0, 1);
+            }
+        }
+
+        return result;
+    }
+
+    private static DateOnly EffectiveEndDate(
+        DateRange dateRange,
+        DateOnly currentDate)
+    {
+        if (dateRange.IsCurrent)
+        {
+            return currentDate;
+        }
+
+        var end = dateRange.End;
+        return new(
+            end.Year,
+            end.Month == 0 ? 1 : end.Month,
+            end.Day == 0 ? 1 : end.Day);
     }
 
     private static ScoredList? CreateScoredList(
@@ -627,8 +735,12 @@ internal static class ExperienceSelectionEngine
         ExperienceList List,
         ExperienceListItem Item,
         ScoredTags Matches,
+        float RecencyMultiplier,
         int ListIndex,
-        int ItemIndex);
+        int ItemIndex)
+    {
+        public float AdjustedRelevance => Matches.Sum * RecencyMultiplier;
+    }
 
     private sealed class MmrRanker(
         MmrOptions options,
@@ -653,7 +765,7 @@ internal static class ExperienceSelectionEngine
                     continue;
                 }
 
-                var score = Score(candidate.Matches);
+                var score = Score(candidate);
                 if (best is null ||
                     score > bestScore ||
                     (score == bestScore && BreakTie(candidate, best.Value) < 0))
@@ -680,9 +792,11 @@ internal static class ExperienceSelectionEngine
             }
         }
 
-        public float RawEquivalentScore(ScoredTags matches)
+        public float RawEquivalentScore(
+            ScoredTags matches,
+            float recencyMultiplier)
         {
-            var score = Score(matches);
+            var score = Score(matches, recencyMultiplier);
             if (options.RelevanceWeight <= 0 || maxRelevance <= 0)
             {
                 return Math.Max(0, score);
@@ -691,11 +805,18 @@ internal static class ExperienceSelectionEngine
             return Math.Max(0, score * maxRelevance / options.RelevanceWeight);
         }
 
-        public float Score(ScoredTags matches)
+        public float Score(MmrCandidate candidate)
+        {
+            return Score(candidate.Matches, candidate.RecencyMultiplier);
+        }
+
+        private float Score(
+            ScoredTags matches,
+            float recencyMultiplier)
         {
             var relevance = maxRelevance <= 0
                 ? 0
-                : matches.Sum / maxRelevance;
+                : matches.Sum * recencyMultiplier / maxRelevance;
             var redundancy = MaxSimilarity(matches);
             var saturation = Saturation(matches);
 

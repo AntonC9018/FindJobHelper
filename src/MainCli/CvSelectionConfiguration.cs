@@ -347,34 +347,24 @@ public sealed class SelectionOptionsConfiguration
     public int MinTotalItemBudget { get; init; } = 0;
     public int? TotalItemBudget { get; init; }
     public required float ScoreLowerBound { get; init; }
+    public float RecencyBoost { get; init; }
 
     public void Apply(SearchPredicateOptions options)
     {
         options.MinTotalItemBudget = MinTotalItemBudget;
         options.TotalItemBudget = TotalItemBudget ?? int.MaxValue;
         options.ScoreLowerBound = ScoreLowerBound;
+        options.RecencyBoost = RecencyBoost;
     }
 
     public void CollectValidationErrors(string path, List<string> errors)
     {
-        if (MinTotalItemBudget < 0)
+        var options = new SearchPredicateOptions();
+        Apply(options);
+        foreach (var error in SearchPredicateOptionsValidator.ValidateOptions(options))
         {
-            errors.Add($"'{path}.minTotalItemBudget' must be non-negative.");
-        }
-
-        var total = TotalItemBudget ?? int.MaxValue;
-        if (total < 0)
-        {
-            errors.Add($"'{path}.totalItemBudget' must be non-negative.");
-        }
-        else if (MinTotalItemBudget > total)
-        {
-            errors.Add($"'{path}.minTotalItemBudget' must not exceed the total item budget.");
-        }
-
-        if (!float.IsFinite(ScoreLowerBound) || ScoreLowerBound < 0)
-        {
-            errors.Add($"'{path}.scoreLowerBound' must be finite and non-negative.");
+            var propertyName = JsonNamingPolicy.CamelCase.ConvertName(error.PropertyName);
+            errors.Add($"'{path}.{propertyName}' {error.Message}");
         }
     }
 }

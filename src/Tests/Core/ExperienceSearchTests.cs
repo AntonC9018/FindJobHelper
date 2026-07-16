@@ -506,6 +506,273 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_RecencyBoostFavorsNewerRemainingCandidate()
+    {
+        var tag = new Tag("a");
+        var newer = Experience(
+            "newer",
+            ExperienceType.Job,
+            2024,
+            Item("newer-seed", (tag, 10)),
+            Item("newer-extra", (tag, 8)));
+        var older = Experience(
+            "older",
+            ExperienceType.Job,
+            2019,
+            Item("older-seed", (tag, 10)),
+            Item("older-extra", (tag, 9)));
+
+        var withoutBoost = Run(recencyBoost: 0);
+        var withBoost = Run(recencyBoost: 0.5f);
+
+        Assert.Equal(
+            new[] { "newer-seed", "older-seed", "older-extra" },
+            Texts(withoutBoost.Get(WorkKey)));
+        Assert.Equal(
+            new[] { "newer-seed", "newer-extra", "older-seed" },
+            Texts(withBoost.Get(WorkKey)));
+
+        SearchResult Run(float recencyBoost)
+        {
+            var builder = NewBuilder(new() { [tag] = 1 });
+            builder.Mmr(new MmrOptions(
+                RelevanceWeight: 1,
+                SaturationQuota: 1,
+                SaturationPenalty: 0));
+            builder.Configure(
+                WorkKey,
+                e => e.Type == ExperienceType.Job,
+                options =>
+                {
+                    options.TotalItemBudget = 3;
+                    options.RecencyBoost = recencyBoost;
+                });
+            return builder.Build().Run([older, newer]);
+        }
+    }
+
+    [Fact]
+    public void Search_RecencyBoostInterpolatesLinearlyBetweenSectionDates()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 3;
+                options.RecencyBoost = 0.5f;
+            });
+
+        var result = builder.Build().Run([
+            Experience("oldest", ExperienceType.Job, 2019, Item("oldest", (tag, 10))),
+            Experience("middle", ExperienceType.Job, 2024, Item("middle", (tag, 10))),
+            Experience("newest", ExperienceType.Job, 2029, Item("newest", (tag, 10))),
+        ]);
+
+        var oldest = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "oldest");
+        var middle = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "middle");
+        var newest = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "newest");
+        Assert.Equal(10, oldest.DebugScore);
+        Assert.InRange(middle.DebugScore, 12.5f, 12.501f);
+        Assert.Equal(15, newest.DebugScore);
+        Assert.Equal(15, Assert.Single(newest.DebugTagScores).Score);
+    }
+
+    [Fact]
+    public void Search_RecencyBoostDoesNothingWithoutDateSpread()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 2;
+                options.RecencyBoost = 10;
+            });
+
+        var result = builder.Build().Run([
+            Experience("first", ExperienceType.Job, 2024, Item("first", (tag, 10))),
+            Experience("second", ExperienceType.Job, 2024, Item("second", (tag, 10))),
+        ]);
+
+        Assert.All(result.Diagnostics.Items, item => Assert.Equal(10, item.DebugScore));
+    }
+
+    [Fact]
+    public void Search_RecencyBoostDoesNotAffectScoreLowerBound()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 1;
+                options.ScoreLowerBound = 5;
+                options.RecencyBoost = 10;
+            });
+
+        var result = builder.Build().Run([
+            Experience("older", ExperienceType.Job, 2019, Item("eligible", (tag, 5))),
+            Experience("newer", ExperienceType.Job, 2024, Item("below threshold", (tag, 4))),
+        ]);
+
+        Assert.Equal(new[] { "eligible" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(5, Assert.Single(result.Diagnostics.Items).DebugScore);
+    }
+
+    [Fact]
+    public void Search_RecencyBoostUsesIndependentSectionDateRanges()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 2;
+                options.RecencyBoost = 0.5f;
+            });
+        builder.Configure(
+            ProjectKey,
+            e => e.Type == ExperienceType.Project,
+            options =>
+            {
+                options.TotalItemBudget = 2;
+                options.RecencyBoost = 1;
+            });
+
+        var result = builder.Build().Run([
+            Experience("old work", ExperienceType.Job, 1999, Item("old work", (tag, 10))),
+            Experience("new work", ExperienceType.Job, 2009, Item("new work", (tag, 10))),
+            Experience("old project", ExperienceType.Project, 2019, Item("old project", (tag, 10))),
+            Experience("new project", ExperienceType.Project, 2020, Item("new project", (tag, 10))),
+        ]);
+
+        Assert.Equal(
+            10,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "old work").DebugScore);
+        Assert.Equal(
+            15,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "new work").DebugScore);
+        Assert.Equal(
+            10,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "old project").DebugScore);
+        Assert.Equal(
+            20,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "new project").DebugScore);
+    }
+
+    [Fact]
+    public void Search_RecencyBoostTreatsOngoingExperienceAsEndingToday()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 2;
+                options.RecencyBoost = 0.5f;
+            });
+        var search = builder.Build();
+
+        var result = search.Run(
+            [
+                Experience(
+                    "completed",
+                    ExperienceType.Job,
+                    DateRange.Completed(new(2019), new(2020)),
+                    Item("completed", (tag, 10))),
+                Experience(
+                    "ongoing",
+                    ExperienceType.Job,
+                    DateRange.Ongoing(new(2024, 6)),
+                    Item("ongoing", (tag, 10))),
+            ],
+            new DateOnly(2025, 7, 1));
+
+        Assert.Equal(
+            10,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "completed").DebugScore);
+        Assert.Equal(
+            15,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "ongoing").DebugScore);
+    }
+
+    [Fact]
+    public void Search_RecencyBoostOnlyScalesMmrRelevance()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new() { [tag] = 1 });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0.9f,
+            SaturationQuota: 1,
+            SaturationPenalty: 0.2f));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 2;
+                options.RecencyBoost = 0.5f;
+            });
+
+        var result = builder.Build().Run([
+            Experience("older", ExperienceType.Job, 2019, Item("older", (tag, 10))),
+            Experience("newer", ExperienceType.Job, 2024, Item("newer", (tag, 10))),
+        ]);
+
+        Assert.Equal(
+            15,
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "newer").DebugScore);
+        Assert.InRange(
+            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "older").DebugScore,
+            4.999f,
+            5.001f);
+    }
+
+    [Theory]
+    [InlineData(-0.1f)]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void Search_RejectsInvalidRecencyBoost(float recencyBoost)
+    {
+        var builder = NewBuilder([]);
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            options => options.RecencyBoost = recencyBoost);
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => builder.Build());
+
+        Assert.Equal("RecencyBoost", exception.ParamName);
+    }
+
+    [Fact]
     public void Search_IncludeEmptyListsRetainsHeadingsAndSuppressesEmptyBodyMetadata()
     {
         var matching = new Tag("matching");
@@ -697,7 +964,11 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts =>
+            {
+                opts.TotalItemBudget = 1;
+                opts.RecencyBoost = 0.5f;
+            });
 
         var result = builder.Build().Run([
             Experience(
@@ -789,7 +1060,11 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts =>
+            {
+                opts.TotalItemBudget = 1;
+                opts.RecencyBoost = 0.5f;
+            });
 
         var result = builder.Build().Run([
             Experience(
@@ -1140,11 +1415,24 @@ public sealed class ExperienceSearchTests
         int year,
         params ExperienceListItem[] items)
     {
+        return Experience(
+            title,
+            type,
+            DateRange.Completed(new(Year: year), new(Year: year + 1)),
+            items);
+    }
+
+    private static ExperienceList Experience(
+        string title,
+        ExperienceType type,
+        DateRange dateRange,
+        params ExperienceListItem[] items)
+    {
         return new()
         {
             Title = title,
             Place = new("test"),
-            DateRange = DateRange.Completed(new(Year: year), new(Year: year + 1)),
+            DateRange = dateRange,
             Items = items.ToImmutableArray(),
             Type = type,
         };

@@ -42,7 +42,8 @@
     "workExperience": {
       "minTotalItemBudget": 2,
       "totalItemBudget": 8,
-      "scoreLowerBound": 5
+      "scoreLowerBound": 5,
+      "recencyBoost": 0.25
     },
     "personalProjects": {
       "minTotalItemBudget": 0,
