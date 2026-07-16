@@ -71,11 +71,19 @@ public sealed class Tags<T> : KnownTags<T>
     public required T typeScript { get; init; }
     public required T javaScript { get; init; }
     public required T frontend { get; init; }
+    public required T express { get; init; }
+    public required T socketIo { get; init; }
+    public required T htmlCanvas { get; init; }
+    public required T ebayApi { get; init; }
+    public required T webhooks { get; init; }
     public required T vite { get; init; }
     public required T tailwind { get; init; }
     public required T nodejs { get; init; }
     public required T shaders { get; init; }
     public required T imageProcessing { get; init; }
+    public required T ffmpeg { get; init; }
+    public required T youtubeApi { get; init; }
+    public required T oauth { get; init; }
     public required T compression { get; init; }
     public required T d { get; init; }
     public required T zig { get; init; }
@@ -179,12 +187,20 @@ public static class TagsDatabaseFactory
             typeScript = db.Tag("TypeScript"),
             javaScript = db.Tag("JavaScript"),
             frontend = db.Tag("FrontEnd"),
+            express = db.Tag("Express.js", "Express", "ExpressJS"),
+            socketIo = db.Tag("Socket.IO", "SocketIO"),
+            htmlCanvas = db.Tag("HTML5 Canvas", "HTML Canvas", "Canvas API"),
+            ebayApi = db.Tag("eBay API"),
+            webhooks = db.Tag("Webhooks", "Webhook"),
             jquery = db.Tag("JQuery"),
             vite = db.Tag("Vite"),
             tailwind = db.Tag("Tailwind", "Tailwind CSS"),
             nodejs = db.Tag("NodeJS"),
             shaders = db.Tag("Shaders"),
             imageProcessing = db.Tag("Image Processing"),
+            ffmpeg = db.Tag("FFmpeg"),
+            youtubeApi = db.Tag("YouTube API"),
+            oauth = db.Tag("OAuth 2.0", "OAuth"),
             compression = db.Tag("Compression", "Zlib", "DEFLATE", "Huffman", "Checksum", "CRC", "Adler32"),
             d = db.Tag("D"),
             zig = db.Tag("Zig"),
