@@ -145,7 +145,7 @@ public sealed class CvSelectionConfiguration
         var builder = new SearchBuilder();
         builder.Tags(weightedTags);
         builder.Mmr(mmr);
-        // builder.ConfigureDefaults(Selection.Default.Apply);
+        builder.ConfigureDefaults(Selection.Default.Apply);
         builder.Configure(
             educationKey,
             predicate: static experience => experience.Type.IsDegree(),
@@ -325,6 +325,7 @@ public sealed class MmrConfiguration
 
 public sealed class SelectionConfiguration
 {
+    public SelectionOptionsConfiguration Default { get; init; } = new();
     public required SelectionOptionsConfiguration Education { get; init; }
     public required SelectionOptionsConfiguration WorkExperience { get; init; }
     public required SelectionOptionsConfiguration PersonalProjects { get; init; }
@@ -346,7 +347,7 @@ public sealed class SelectionOptionsConfiguration
 {
     public int MinTotalItemBudget { get; init; } = 0;
     public int? TotalItemBudget { get; init; }
-    public required float ScoreLowerBound { get; init; }
+    public float ScoreLowerBound { get; init; }
     public float RecencyBoost { get; init; }
 
     public void Apply(SearchPredicateOptions options)
