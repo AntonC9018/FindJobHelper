@@ -66,6 +66,7 @@ public sealed class Tags<T> : KnownTags<T>
     public required T linux { get; init; }
     public required T nginx { get; init; }
     public required T gameProgramming { get; init; }
+    public required T physics { get; init; }
     public required T communicationWithClient { get; init; }
     public required T typeScript { get; init; }
     public required T javaScript { get; init; }
@@ -173,6 +174,7 @@ public static class TagsDatabaseFactory
             linux = db.Tag("Linux", "Ubuntu", "VPS"),
             nginx = db.Tag("nginx"),
             gameProgramming = db.Tag("Game Programming"),
+            physics = db.Tag("Physics", "Vehicle Physics", "Physics Simulation"),
             communicationWithClient = db.Tag("Communication with the client"),
             typeScript = db.Tag("TypeScript"),
             javaScript = db.Tag("JavaScript"),
@@ -347,6 +349,8 @@ public static class TagsDatabaseFactory
         t.unity.IsIncludedIn(t.imgui).By(0.05f).WhichIsIncludedInIt().By(0.70f);
         t.graphics.IsIncludedIn(t.imgui).By(0.05f).WhichIsIncludedInIt().By(0.70f);
         t.unity.IsIncludedIn(t.gameProgramming).By(0.5f).WhichIsIncludedInIt().By(0.4f);
+        // Vehicle-physics work is strong game-programming evidence, while game programming also covers many non-physics systems.
+        t.physics.IsIncludedIn(t.gameProgramming).By(0.8f).WhichIsIncludedInIt().By(0.08f);
         t.graphics.IsIncludedIn(t.shaders).By(0.1f).WhichIsIncludedInIt().Fully();
         t.unity.IsIncludedIn(t.shaders).By(0.05f).WhichIsIncludedInIt().By(0.9f);
         t.raylib.IsIncludedIn(t.graphics).By(0.8f).WhichIsIncludedInIt().By(0.2f);
