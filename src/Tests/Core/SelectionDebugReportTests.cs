@@ -57,10 +57,9 @@ public sealed class SelectionDebugReportTests
                             $"Dependency order violation in {run.Scenario}/{run.Preset}/{eventGroup.Key.Event.Title}: {dependency.Text} must appear before {trace.Item.Text}.");
                     }
 
-                    foreach (var predecessor in trace.Item.After)
+                    foreach (var predecessor in TransitiveOrderingPredecessors(trace.Item))
                     {
-                        if (predecessor is null ||
-                            !selectedIndexes.TryGetValue(predecessor, out var predecessorIndex))
+                        if (!selectedIndexes.TryGetValue(predecessor, out var predecessorIndex))
                         {
                             continue;
                         }
@@ -69,6 +68,37 @@ public sealed class SelectionDebugReportTests
                             predecessorIndex < selectedIndexes[trace.Item],
                             $"Relative order violation in {run.Scenario}/{run.Preset}/{eventGroup.Key.Event.Title}: {predecessor.Text} must appear before {trace.Item.Text}.");
                     }
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<ExperienceListItem> TransitiveOrderingPredecessors(
+        ExperienceListItem item)
+    {
+        var seen = new HashSet<ExperienceListItem>();
+        var stack = new Stack<ExperienceListItem>();
+        Push(item);
+
+        while (stack.Count > 0)
+        {
+            var predecessor = stack.Pop();
+            if (!seen.Add(predecessor))
+            {
+                continue;
+            }
+
+            yield return predecessor;
+            Push(predecessor);
+        }
+
+        void Push(ExperienceListItem parent)
+        {
+            foreach (var predecessor in parent.DependsOn.Concat(parent.After))
+            {
+                if (predecessor is not null)
+                {
+                    stack.Push(predecessor);
                 }
             }
         }

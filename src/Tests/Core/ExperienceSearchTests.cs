@@ -1026,6 +1026,39 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_AfterIsTransitiveThroughUnselectedItems()
+    {
+        var tag = new Tag("a");
+        var third = Item("third", (tag, 8));
+        var second = ItemAfter("second", [third]);
+        var first = ItemAfter("first", [second], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.TotalItemBudget = 2;
+                opts.ScoreLowerBound = 1;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                first,
+                second,
+                third),
+        ]);
+
+        Assert.Equal(new[] { "third", "first" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
     public void Search_OrderOnlyCycleThrows()
     {
         var tag = new Tag("a");
