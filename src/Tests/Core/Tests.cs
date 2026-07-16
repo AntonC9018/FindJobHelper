@@ -88,8 +88,9 @@ public sealed class SomeTests
         var db = await GetDb(ct);
         var tags = TagsDatabaseFactory.Create().TagsDatabase;
 
-        var searchParams = new SearchParams(
-            Tags: tags.Weighted([
+        var workKey = new ExperienceKey("Work");
+        var searchBuilder = new SearchBuilder();
+        searchBuilder.Tags(tags.Weighted([
                 (".NET", 1.0f),
                 ("ASP.NET Core", 1.0f),
                 ("TypeScript", 0.5f),
@@ -100,11 +101,17 @@ public sealed class SomeTests
                 ("git", 0.2f),
                 ("SqlServer", 0.8f),
                 ("Java", 1.0f),
-            ]),
-            TotalItemBudget: 20,
-            ScoreLowerBound: 0.0f);
+            ]));
+        searchBuilder.Configure(
+            workKey,
+            static experience => experience.Type == ExperienceType.Job,
+            options =>
+            {
+                options.TotalItemBudget = 20;
+                options.ScoreLowerBound = 0.0f;
+            });
 
-        var ev = db.Experiences.Where(x => x.Type == ExperienceType.Job).SelectEvents(searchParams);
+        var ev = searchBuilder.Build().Run(db.Experiences).Get(workKey);
         await Verify(ev);
     }
 

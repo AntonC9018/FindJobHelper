@@ -312,61 +312,64 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void SelectEvents_UsesNewSearchParameterBudgets()
+    public void SearchBuilder_UsesConfiguredBudgets()
     {
         var tag = new Tag("a");
         var tags = new WeightedTags
         {
             [tag] = 1,
         };
-        var parameters = new SearchParams(
-            Tags: tags,
-            MinTotalItemBudget: 2,
-            TotalItemBudget: 2,
-            ScoreLowerBound: 0)
-        {
-            Mmr = new(
-                RelevanceWeight: 0,
-                SaturationQuota: 1,
-                SaturationPenalty: 0),
-        };
+        var builder = NewBuilder(tags);
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            static _ => true,
+            options =>
+            {
+                options.MinTotalItemBudget = 2;
+                options.TotalItemBudget = 2;
+                options.ScoreLowerBound = 0;
+            });
 
-        var result = ExperienceSelectionEngine.SelectEvents([
+        var result = builder.Build().Run([
             Experience(
                 "work",
                 ExperienceType.Job,
                 2025,
                 Item("seed", (tag, 10)),
                 Item("minimum", (tag, 9))),
-        ], parameters);
+        ]).Get(WorkKey);
 
         Assert.Equal(new[] { "seed", "minimum" }, Texts(result));
     }
 
     [Fact]
-    public void SelectEvents_DefaultsMissingBudgetsToUnboundedRange()
+    public void SearchBuilder_DefaultsMissingBudgetsToUnboundedRange()
     {
         var tag = new Tag("a");
         var tags = new WeightedTags
         {
             [tag] = 1,
         };
-        var parameters = new SearchParams(
-            Tags: tags,
-            ScoreLowerBound: 0);
+        var builder = NewBuilder(tags);
+        builder.Configure(WorkKey, static _ => true);
 
-        var result = ExperienceSelectionEngine.SelectEvents([
+        var result = builder.Build().Run([
             Experience(
                 "work",
                 ExperienceType.Job,
                 2025,
                 Item("first", (tag, 10)),
                 Item("second", (tag, 9))),
-        ], parameters);
+        ]);
+        var budget = Assert.Single(result.Diagnostics.Budgets);
 
-        Assert.Equal(new[] { "first", "second" }, Texts(result));
-        Assert.Equal(0, parameters.MinTotalItemBudget);
-        Assert.Equal(int.MaxValue, parameters.TotalItemBudget);
+        Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(0, budget.RequestedMinimum);
+        Assert.Equal(int.MaxValue, budget.RequestedMaximum);
     }
 
     [Fact]

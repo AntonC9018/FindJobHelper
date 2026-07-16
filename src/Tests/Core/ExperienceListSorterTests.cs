@@ -217,13 +217,19 @@ public sealed class ExperienceListSorterTests
             Type = ExperienceType.Job,
         };
 
-        var events = new[] { list }.SelectEvents(new(
-            Tags: tags,
-            TotalItemBudget: budget,
-            ScoreLowerBound: scoreLowerBound)
-        {
-            Mmr = mmr,
-        });
+        var key = new ExperienceKey("Default");
+        var builder = new SearchBuilder();
+        builder.Tags(tags);
+        builder.Mmr(mmr);
+        builder.Configure(
+            key,
+            static _ => true,
+            options =>
+            {
+                options.TotalItemBudget = budget;
+                options.ScoreLowerBound = scoreLowerBound;
+            });
+        var events = builder.Build().Run([list]).Get(key);
 
         return Assert.Single(events)
             .SubItems
