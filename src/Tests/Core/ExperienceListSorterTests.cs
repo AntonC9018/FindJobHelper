@@ -1,11 +1,56 @@
 using System.Collections.Immutable;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
+using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
 public sealed class ExperienceListSorterTests
 {
+    [Fact]
+    public void AllEvents_AfterOrdersItemsWithoutChangingSelection()
+    {
+        var predecessor = Item(Text("predecessor"));
+        var ordered = new ExperienceListItem
+        {
+            Text = RichText.Create($"{Text("ordered")}"),
+            After = [predecessor],
+        };
+        var list = new ExperienceList
+        {
+            Title = "test",
+            Place = new("test"),
+            DateRange = DateRange.Completed(new(Year: 2024), new(Year: 2025)),
+            Items = [ordered, predecessor],
+            Type = ExperienceType.Job,
+        };
+
+        var texts = Assert.Single(new[] { list }.AllEvents())
+            .SubItems
+            .Select(x => x.String.ToString())
+            .ToArray();
+
+        Assert.Equal(new[] { "predecessor", "ordered" }, texts);
+    }
+
+    [Fact]
+    public void Factory_ExampleCo BetaAuthenticationIsOnlyOrderedAfterBackendIntroduction()
+    {
+        var (tags, _) = TagsDatabaseFactory.Create();
+        var database = ExperienceDatabaseFactory.Create(tags);
+        var backend = Assert.Single(database.Experiences.Where(x =>
+            x.Title.Value == "Backend Developer" &&
+            x.Place.Name.Value == "ExampleCo Beta"));
+        var introduction = backend.Items[0];
+        var authentication = Assert.Single(backend.Items.Where(x =>
+            x.Tags.Any(tag =>
+                tag.Tag.Name.Equals("Security", StringComparison.OrdinalIgnoreCase) &&
+                tag.Score == 8)));
+
+        Assert.Empty(authentication.DependsOn);
+        Assert.Same(introduction, Assert.Single(authentication.After));
+    }
+
     [Fact]
     public void SelectEvents_WithPureRelevanceKeepsSimilarHighScoringItems()
     {

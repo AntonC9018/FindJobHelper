@@ -1040,7 +1040,7 @@ internal static class ExperienceSelectionEngine
                         .OrderBy(x => _listOrders.GetValueOrDefault(x.Key, int.MaxValue)))
                     {
                         var sortedItems = items
-                            .TopologicalSort(x => x.MustBeAfter)
+                            .TopologicalSort(ExperienceListSorter.OrderingPredecessors)
                             .ToImmutableArray();
 
                         actualCount += sortedItems.Length;
@@ -1160,10 +1160,10 @@ internal static class ExperienceSelectionEngine
             if (!_tempVisiting.Add(item))
             {
                 throw new InvalidOperationException(
-                    "Cycle detected in MustBeAfter relationships while collecting dependency closure.");
+                    "Cycle detected in DependsOn relationships while collecting dependency closure.");
             }
 
-            foreach (var dependency in item.MustBeAfter)
+            foreach (var dependency in item.DependsOn)
             {
                 if (dependency is null)
                 {

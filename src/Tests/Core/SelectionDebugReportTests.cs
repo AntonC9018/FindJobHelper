@@ -56,6 +56,19 @@ public sealed class SelectionDebugReportTests
                             dependencyIndex < selectedIndexes[trace.Item],
                             $"Dependency order violation in {run.Scenario}/{run.Preset}/{eventGroup.Key.Event.Title}: {dependency.Text} must appear before {trace.Item.Text}.");
                     }
+
+                    foreach (var predecessor in trace.Item.After)
+                    {
+                        if (predecessor is null ||
+                            !selectedIndexes.TryGetValue(predecessor, out var predecessorIndex))
+                        {
+                            continue;
+                        }
+
+                        Assert.True(
+                            predecessorIndex < selectedIndexes[trace.Item],
+                            $"Relative order violation in {run.Scenario}/{run.Preset}/{eventGroup.Key.Event.Title}: {predecessor.Text} must appear before {trace.Item.Text}.");
+                    }
                 }
             }
         }
@@ -82,7 +95,7 @@ public sealed class SelectionDebugReportTests
 
         void Push(ExperienceListItem parent)
         {
-            foreach (var dependency in parent.MustBeAfter)
+            foreach (var dependency in parent.DependsOn)
             {
                 if (dependency is null)
                 {

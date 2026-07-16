@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 using MainCli;
@@ -39,6 +41,44 @@ public sealed class SomeTests
 #pragma warning restore CA2000
 
         Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public async Task DbDeserializationRejectsLegacyMustBeAfterSchema()
+    {
+        var item = new ExperienceListItem
+        {
+            Text = RichText.Create($"{new PlainText { Text = "item" }}"),
+            DependsOn = [],
+            After = [],
+        };
+        var database = new ExperienceDatabase
+        {
+            AllPlaces = [],
+            Experiences =
+            [
+                new()
+                {
+                    Title = "test",
+                    Place = new("test"),
+                    DateRange = DateRange.Completed(new(2024), new(2025)),
+                    Type = ExperienceType.Job,
+                    Items = [item],
+                },
+            ],
+        };
+
+        using var serialized = new MemoryStream();
+        await database.Serialize(serialized, CancellationToken.None);
+        var json = Encoding.UTF8.GetString(serialized.ToArray());
+        var legacyJson = json.Replace(
+            "\"DependsOn\"",
+            "\"MustBeAfter\"",
+            StringComparison.Ordinal);
+        await using var legacyInput = new MemoryStream(Encoding.UTF8.GetBytes(legacyJson));
+
+        await Assert.ThrowsAsync<JsonException>(() =>
+            ExperienceDatabaseSerializer.Deserialize(legacyInput, CancellationToken.None));
     }
 
     [Fact]

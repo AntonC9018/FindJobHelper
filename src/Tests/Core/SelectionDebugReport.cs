@@ -214,9 +214,9 @@ internal static class SelectionDebugReport
             return $"required by: {dependencyOf.Text.ToMarkdownString()}";
         }
 
-        return trace.Item.MustBeAfter.IsDefaultOrEmpty
+        return trace.Item.DependsOn.IsDefaultOrEmpty
             ? ""
-            : $"requires {trace.Item.MustBeAfter.Length}";
+            : $"requires {trace.Item.DependsOn.Length}";
     }
 
     private static string FormatDebugTags(

@@ -335,7 +335,7 @@ public sealed class PageHeightSelectionTests
         {
             Text = RichText.Create($"{new PlainText { Text = text }}"),
             Tags = [new(tag, score)],
-            MustBeAfter = [.. dependencies],
+            DependsOn = [.. dependencies],
         };
 
     private static string[] Texts(ImmutableArray<Event> events)

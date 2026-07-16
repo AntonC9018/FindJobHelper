@@ -686,7 +686,7 @@ public sealed class ExperienceSearchTests
     {
         var tag = new Tag("a");
         var dependency = Item("dependency");
-        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
         var builder = NewBuilder(new()
         {
             [tag] = 1,
@@ -720,7 +720,7 @@ public sealed class ExperienceSearchTests
     {
         var tag = new Tag("a");
         var dependency = Item("dependency", (tag, 1));
-        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
         var builder = NewBuilder(new()
         {
             [tag] = 1,
@@ -747,7 +747,7 @@ public sealed class ExperienceSearchTests
     {
         var tag = new Tag("a");
         var dependency = Item("dependency");
-        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
         var builder = NewBuilder(new()
         {
             [tag] = 1,
@@ -851,7 +851,7 @@ public sealed class ExperienceSearchTests
     {
         var tag = new Tag("a");
         var first = Item("first", (tag, 10));
-        var second = ItemAfter("second", [first], (tag, 9));
+        var second = ItemDependingOn("second", [first], (tag, 9));
         SetDependencies(first, second);
         var builder = NewBuilder(new()
         {
@@ -872,7 +872,7 @@ public sealed class ExperienceSearchTests
                 first,
                 second),
         ]));
-        Assert.Contains("Cycle detected in MustBeAfter", exception.Message);
+        Assert.Contains("Cycle detected in DependsOn", exception.Message);
     }
 
     [Fact]
@@ -880,8 +880,8 @@ public sealed class ExperienceSearchTests
     {
         var tag = new Tag("a");
         var dependency = Item("dependency");
-        var first = ItemAfter("first", [dependency], (tag, 10));
-        var second = ItemAfter("second", [dependency], (tag, 9));
+        var first = ItemDependingOn("first", [dependency], (tag, 10));
+        var second = ItemDependingOn("second", [dependency], (tag, 9));
         var builder = NewBuilder(new()
         {
             [tag] = 1,
@@ -911,7 +911,7 @@ public sealed class ExperienceSearchTests
     {
         var tag = new Tag("a");
         var dependency = Item("dependency", (tag, 1));
-        var dependent = ItemAfter("dependent", [dependency], (tag, 10));
+        var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
         var builder = NewBuilder(new()
         {
             [tag] = 1,
@@ -935,6 +935,152 @@ public sealed class ExperienceSearchTests
         ]);
 
         Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_AfterDoesNotSelectUnmatchedPredecessor()
+    {
+        var tag = new Tag("a");
+        var predecessor = Item("predecessor");
+        var ordered = ItemAfter("ordered", [predecessor], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                ordered,
+                predecessor),
+        ]);
+
+        Assert.Equal(new[] { "ordered" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(SelectionItemReason.Direct, Assert.Single(result.Diagnostics.Items).Reason);
+        Assert.Equal(1, Assert.Single(result.Diagnostics.Budgets).ActualCount);
+    }
+
+    [Fact]
+    public void Search_AfterOrdersPredecessorWhenBothAreSelected()
+    {
+        var tag = new Tag("a");
+        var predecessor = Item("predecessor", (tag, 9));
+        var ordered = ItemAfter("ordered", [predecessor], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 2);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                ordered,
+                predecessor),
+        ]);
+
+        Assert.Equal(new[] { "predecessor", "ordered" }, Texts(result.Get(WorkKey)));
+        Assert.All(
+            result.Diagnostics.Items,
+            trace => Assert.Equal(SelectionItemReason.Direct, trace.Reason));
+    }
+
+    [Fact]
+    public void Search_AfterSupportsTransitiveOrderingAmongSelectedItems()
+    {
+        var tag = new Tag("a");
+        var first = Item("first", (tag, 8));
+        var second = ItemAfter("second", [first], (tag, 9));
+        var third = ItemAfter("third", [second], (tag, 10));
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 3);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                third,
+                second,
+                first),
+        ]);
+
+        Assert.Equal(new[] { "first", "second", "third" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_OrderOnlyCycleThrows()
+    {
+        var tag = new Tag("a");
+        var first = Item("first", (tag, 10));
+        var second = ItemAfter("second", [first], (tag, 9));
+        SetAfter(first, second);
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 2);
+
+        var search = builder.Build();
+        var exception = Assert.Throws<InvalidOperationException>(() => search.Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                first,
+                second),
+        ]));
+
+        Assert.Contains("Cycle detected in ordering relationships", exception.Message);
+    }
+
+    [Fact]
+    public void Search_MixedDependencyAndOrderingCycleThrows()
+    {
+        var tag = new Tag("a");
+        var first = Item("first", (tag, 10));
+        var second = ItemAfter("second", [first]);
+        SetDependencies(first, second);
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var search = builder.Build();
+        var exception = Assert.Throws<InvalidOperationException>(() => search.Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                first,
+                second),
+        ]));
+
+        Assert.Contains("Cycle detected in ordering relationships", exception.Message);
     }
 
     private static SearchBuilder NewBuilder(WeightedTags tags)
@@ -990,10 +1136,10 @@ public sealed class ExperienceSearchTests
         string text,
         params (Tag Tag, int Score)[] tags)
     {
-        return ItemAfter(text, [], tags);
+        return ItemDependingOn(text, [], tags);
     }
 
-    private static ExperienceListItem ItemAfter(
+    private static ExperienceListItem ItemDependingOn(
         string text,
         ExperienceListItem[] dependencies,
         params (Tag Tag, int Score)[] tags)
@@ -1004,8 +1150,20 @@ public sealed class ExperienceSearchTests
             Tags = tags
                 .Select(x => new TagReference(x.Tag, x.Score))
                 .ToImmutableArray(),
-            MustBeAfter = dependencies.ToImmutableArray(),
+            DependsOn = dependencies.ToImmutableArray(),
         };
+    }
+
+    private static ExperienceListItem ItemAfter(
+        string text,
+        ExperienceListItem[] predecessors,
+        params (Tag Tag, int Score)[] tags)
+    {
+        var item = Item(text, tags);
+        typeof(ExperienceListItem)
+            .GetProperty(nameof(ExperienceListItem.After))!
+            .SetValue(item, predecessors.ToImmutableArray());
+        return item;
     }
 
     private static void SetDependencies(
@@ -1013,7 +1171,16 @@ public sealed class ExperienceSearchTests
         params ExperienceListItem[] dependencies)
     {
         typeof(ExperienceListItem)
-            .GetProperty(nameof(ExperienceListItem.MustBeAfter))!
+            .GetProperty(nameof(ExperienceListItem.DependsOn))!
             .SetValue(item, dependencies.ToImmutableArray());
+    }
+
+    private static void SetAfter(
+        ExperienceListItem item,
+        params ExperienceListItem[] predecessors)
+    {
+        typeof(ExperienceListItem)
+            .GetProperty(nameof(ExperienceListItem.After))!
+            .SetValue(item, predecessors.ToImmutableArray());
     }
 }
