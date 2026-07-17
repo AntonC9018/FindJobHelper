@@ -217,7 +217,7 @@
 % Keep adjacent bullet baselines about 1.5 normal lines apart. The same value
 % is reused by production rendering and hidden height measurement.
 \newlength{\cveventitemspacing}
-\setlength{\cveventitemspacing}{\baselineskip}
+\setlength{\cveventitemspacing}{0.5\baselineskip}
 
 % Each bullet is an intrinsic vertical unit. This preserves the visual list
 % while making every selected item's observed height exactly additive.
@@ -353,7 +353,7 @@
 % Space between CV sections. Change this one value to tune every section
 % boundary, including the boundary between the document header and first section.
 \newlength{\cvsectionspacing}
-\setlength{\cvsectionspacing}{\baselineskip}
+\setlength{\cvsectionspacing}{0.6\baselineskip}
 
 % Build an intrinsic production-width box. This primitive intentionally has no
 % page-state inspection and never inserts the resulting box into the page stream.
