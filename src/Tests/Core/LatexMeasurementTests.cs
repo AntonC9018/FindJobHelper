@@ -7,6 +7,12 @@ namespace FindJobHelper.Core.Tests;
 public sealed class LatexMeasurementTests
 {
     [Fact]
+    public void SnapshotExposesOnlyTheCurrentMeasurementContract()
+    {
+        Assert.Single(typeof(CvMeasurementSnapshot).GetConstructors());
+    }
+
+    [Fact]
     public void Enumeration_AssignsDeterministicPositionBasedIds()
     {
         var database = CreateDatabase(
@@ -45,6 +51,8 @@ public sealed class LatexMeasurementTests
             new Dictionary<ExperienceListId, LatexHeight>(),
             new Dictionary<Section, LatexHeight>(),
             new Dictionary<Section, LatexHeight>(),
+            new Dictionary<Section, LatexHeight>(),
+            LatexHeight.Zero,
             LatexHeight.Zero,
             LatexHeight.Zero);
         var missing = new ExperienceItemId(new ExperienceListId(3), 4);
@@ -52,6 +60,28 @@ public sealed class LatexMeasurementTests
         var exception = Assert.Throws<KeyNotFoundException>(() => snapshot.GetExperienceItemHeight(missing));
 
         Assert.Contains(missing.ToString(), exception.Message);
+    }
+
+    [Fact]
+    public void SnapshotKeepsDocumentPartsSeparateAndDerivesFreshSectionHeight()
+    {
+        var snapshot = new CvMeasurementSnapshot(
+            new Dictionary<ExperienceItemId, LatexHeight>(),
+            new Dictionary<ExperienceListId, LatexHeight>(),
+            new Dictionary<ExperienceListId, LatexHeight>(),
+            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(40) },
+            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(10) },
+            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(15) },
+            new(5),
+            new(6),
+            new(100));
+
+        Assert.Equal(5, snapshot.DocumentHeader.ScaledPoints);
+        Assert.Equal(6, snapshot.DocumentFooter.ScaledPoints);
+        Assert.Equal(45, snapshot.GetFreshPageCompleteSectionHeight(Section.WorkExperience).ScaledPoints);
+        Assert.Equal(
+            45,
+            snapshot.DeriveFreshPageSectionHeight(Section.WorkExperience, new(40)).ScaledPoints);
     }
 
     [Fact]
@@ -95,13 +125,13 @@ public sealed class LatexMeasurementTests
 
         Assert.Equal(101, result[new MeasurementCorrelationId(1)].ScaledPoints);
         Assert.Equal(100, result[new MeasurementCorrelationId(2)].ScaledPoints);
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<CvMeasurementException>(() =>
             LatexMeasurementResultParser.ParseAndValidate([lines[0], lines[0]], requests));
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<CvMeasurementException>(() =>
             LatexMeasurementResultParser.ParseAndValidate(
                 [lines[0].Replace("corr=M00000002", "corr=M00000009"), lines[1]],
                 requests));
-        Assert.Throws<InvalidOperationException>(() =>
+        Assert.Throws<CvMeasurementException>(() =>
             LatexMeasurementResultParser.ParseAndValidate(
                 [lines[0].Replace("kind=SectionChrome", "kind=DocumentChrome"), lines[1]],
                 requests));
@@ -124,6 +154,24 @@ public sealed class LatexMeasurementTests
         Assert.DoesNotContain("enumitem", source);
         Assert.DoesNotContain("geometry", source);
         Assert.DoesNotContain("setmainfont", source);
+    }
+
+    [Fact]
+    public void ProductionSectionUsesLabelledAtomicCurrentAndFreshWrappers()
+    {
+        var rendered = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderProductionSection(
+                Section.WorkExperience,
+                CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience)));
+        var template = File.ReadAllText(ProductionTemplatePath);
+
+        Assert.Contains(@"\begin{flowblock}{ WorkExperience }", rendered, StringComparison.Ordinal);
+        Assert.Contains(@"\newcommand{\cvflowblockcurrentcontent}", template, StringComparison.Ordinal);
+        Assert.Contains(@"\newcommand{\cvflowblockfreshcontent}", template, StringComparison.Ordinal);
+        Assert.Contains(@"\cvsetflowcontentbox{\flowcurrentbox}{\cvflowblockcurrentcontent{\BODY}}", template, StringComparison.Ordinal);
+        Assert.Contains(@"\cvsetflowcontentbox{\flowfreshbox}{\cvflowblockfreshcontent{\BODY}}", template, StringComparison.Ordinal);
+        Assert.Contains(CvLatexErrors.SectionPageOverflowMarker, template, StringComparison.Ordinal);
+        Assert.DoesNotContain("Large blocks become breakable", template, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -188,12 +236,16 @@ public sealed class LatexMeasurementTests
         Assert.Equal(
             cold.GetExperienceItemHeight(new ExperienceItemId(new ExperienceListId(0), 0)),
             cold.GetExperienceItemHeight(new ExperienceItemId(new ExperienceListId(0), 1)));
-        Assert.Equal(cold.DocumentChrome, warm.DocumentChrome);
+        Assert.Equal(cold.DocumentHeader, warm.DocumentHeader);
+        Assert.Equal(cold.DocumentFooter, warm.DocumentFooter);
         Assert.Equal(cold.ExperienceItems, warm.ExperienceItems);
         Assert.Equal(cold.ExperienceHeadings, warm.ExperienceHeadings);
         Assert.Equal(cold.ExperienceChrome, warm.ExperienceChrome);
-        Assert.Equal(cold.CompleteSections, warm.CompleteSections);
-        Assert.Equal(cold.SectionChrome, warm.SectionChrome);
+        Assert.Equal(cold.CurrentPageCompleteSections, warm.CurrentPageCompleteSections);
+        Assert.Equal(cold.DocumentHeader, warm.DocumentHeader);
+        Assert.Equal(cold.DocumentFooter, warm.DocumentFooter);
+        Assert.Equal(cold.CurrentPageSectionChrome, warm.CurrentPageSectionChrome);
+        Assert.Equal(cold.FreshPageSectionChrome, warm.FreshPageSectionChrome);
     }
 
     [Fact]
@@ -242,7 +294,7 @@ public sealed class LatexMeasurementTests
         var database = CreateDatabase(CreateRichText(new PlainText { Text = "item" }));
         var model = CreateEmptyModel();
         var failing = new ThrowingRunner();
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        await Assert.ThrowsAsync<CvMeasurementException>(() =>
             new LatexMeasurementService(fixture.CachePath, failing, 1)
                 .MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None));
         var retry = new RecordingRunner();
@@ -352,12 +404,12 @@ public sealed class LatexMeasurementTests
             documentModel.WorkExperiences,
             "Experience",
             false);
-        FormattableString completeDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
+        FormattableString completeDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(Section.WorkExperience, completeWorkSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var completeProjectSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
             [@event],
             "Personal Projects",
             false);
-        FormattableString twoSectionDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(completeWorkSection)}{CvLatexFragmentRenderer.RenderProductionSection(completeProjectSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
+        FormattableString twoSectionDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(Section.WorkExperience, completeWorkSection)}{CvLatexFragmentRenderer.RenderProductionSection(Section.PersonalProjects, completeProjectSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var requests = new[]
         {
             Request(1, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(list), LatexMeasurementMode.ExperienceChromeWithoutPermanentItems),
@@ -378,6 +430,8 @@ public sealed class LatexMeasurementTests
             Request(16, LatexMeasurementKind.CompleteSection, twoSectionDocument, LatexMeasurementMode.PageStart),
             Request(17, LatexMeasurementKind.ExperienceHeading, CvLatexFragmentRenderer.RenderExperienceHeading(list), LatexMeasurementMode.Box),
             Request(18, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(headingOnlyEvent, false), LatexMeasurementMode.Box),
+            Request(19, LatexMeasurementKind.FreshPageSectionChrome, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.FreshPageSectionChrome),
+            Request(20, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience", false), LatexMeasurementMode.FreshPageFlowBlock),
         };
         var runner = new XeLatexMeasurementRunner();
 
@@ -401,6 +455,15 @@ public sealed class LatexMeasurementTests
         Assert.Equal(measured[new(17)], measured[new(18)]);
         Assert.Equal(measured[new(1)], measured[new(17)]);
         Assert.Equal(
+            measured[new(20)].ScaledPoints,
+            measured[new(19)].ScaledPoints + measured[new(4)].ScaledPoints);
+        Assert.Equal(
+            measured[new(20)].ScaledPoints,
+            measured[new(6)].ScaledPoints
+            - measured[new(5)].ScaledPoints
+            + measured[new(19)].ScaledPoints);
+        Assert.True(measured[new(19)].ScaledPoints >= measured[new(5)].ScaledPoints);
+        Assert.Equal(
             measured[new(14)].ScaledPoints,
             measured[new(12)].ScaledPoints
             + measured[new(13)].ScaledPoints
@@ -415,10 +478,10 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public async Task LatexLog_ReportsOneAndMultiplePageProductionDocuments()
+    public async Task ProductionRendersControlledAtomicSectionsOnExactlyTwoPages()
     {
         var shortDirectory = Path.Combine(Path.GetTempPath(), $"fjh-short-pages-{Guid.NewGuid():N}");
-        var longDirectory = Path.Combine(Path.GetTempPath(), $"fjh-long-pages-{Guid.NewGuid():N}");
+        var twoPageDirectory = Path.Combine(Path.GetTempPath(), $"fjh-two-pages-{Guid.NewGuid():N}");
         try
         {
             var shortModel = CreateEmptyModel();
@@ -429,32 +492,28 @@ public sealed class LatexMeasurementTests
                 OutputDirectory = shortDirectory,
                 Model = shortModel,
                 CancellationToken = CancellationToken.None,
+                PageCount = CvPageCount.OnePage,
             });
 
-            var longModel = CreateEmptyModel();
-            longModel.SectionOrder = [Section.WorkExperience];
-            longModel.WorkExperiences = Enumerable.Range(1, 24)
-                .Select(position => new Event
-                {
-                    Title = $"Measured event {position}",
-                    Place = Place.Personal,
-                    DateRange = DateRange.Completed(new(2020), new(2021)),
-                    SubItems =
-                    [
-                        new(0, new LatexString("A production bullet used to force a genuine multi-page document.")),
-                    ],
-                })
-                .ToImmutableArray();
+            var twoPageModel = CreateEmptyModel();
+            twoPageModel.SectionOrder =
+            [
+                Section.WorkExperience,
+                Section.PersonalProjects,
+            ];
+            twoPageModel.WorkExperiences = CreateRenderedEvents("Work", 12);
+            twoPageModel.PersonalProjects = CreateRenderedEvents("Project", 12);
             await CvTemplate.Generate(new()
             {
                 ConfigFilePath = ProductionTemplatePath,
-                OutputDirectory = longDirectory,
-                Model = longModel,
+                OutputDirectory = twoPageDirectory,
+                Model = twoPageModel,
                 CancellationToken = CancellationToken.None,
+                PageCount = CvPageCount.Exact(2),
             });
 
             Assert.Equal(1, ReadPageCount(shortDirectory));
-            Assert.True(ReadPageCount(longDirectory) > 1);
+            Assert.Equal(2, ReadPageCount(twoPageDirectory));
         }
         finally
         {
@@ -462,11 +521,110 @@ public sealed class LatexMeasurementTests
             {
                 Directory.Delete(shortDirectory, recursive: true);
             }
-            if (Directory.Exists(longDirectory))
+            if (Directory.Exists(twoPageDirectory))
             {
-                Directory.Delete(longDirectory, recursive: true);
+                Directory.Delete(twoPageDirectory, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task OversizedSingleSectionRaisesNamedOverflowInsteadOfSplitting()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"fjh-section-overflow-{Guid.NewGuid():N}");
+        try
+        {
+            var model = CreateEmptyModel();
+            model.SectionOrder = [Section.WorkExperience];
+            model.WorkExperiences = CreateRenderedEvents("Oversized", 24);
+
+            var exception = await Assert.ThrowsAsync<CvSectionPageOverflowException>(() =>
+                CvTemplate.Generate(new()
+                {
+                    ConfigFilePath = ProductionTemplatePath,
+                    OutputDirectory = outputDirectory,
+                    Model = model,
+                    CancellationToken = CancellationToken.None,
+                }));
+
+            Assert.Contains("WorkExperience", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("single page", exception.Message, StringComparison.Ordinal);
+            var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
+            Assert.Contains(CvLatexErrors.SectionPageOverflowMarker, log, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ExactRenderedPageCountRejectsBothTooFewAndTooManyPages()
+    {
+        var tooFewDirectory = Path.Combine(Path.GetTempPath(), $"fjh-too-few-pages-{Guid.NewGuid():N}");
+        var tooManyDirectory = Path.Combine(Path.GetTempPath(), $"fjh-too-many-pages-{Guid.NewGuid():N}");
+        try
+        {
+            var onePageModel = CreateEmptyModel();
+            onePageModel.SectionOrder = [];
+            var tooFew = await Assert.ThrowsAsync<RenderedPageCountMismatchException>(() =>
+                CvTemplate.Generate(new()
+                {
+                    ConfigFilePath = ProductionTemplatePath,
+                    OutputDirectory = tooFewDirectory,
+                    Model = onePageModel,
+                    CancellationToken = CancellationToken.None,
+                    PageCount = CvPageCount.Exact(2),
+                }));
+            Assert.Equal(
+                "Configured pageCount 2, but the rendered PDF contains 1 pages",
+                tooFew.Message);
+
+            var twoPageModel = CreateEmptyModel();
+            twoPageModel.SectionOrder =
+            [
+                Section.WorkExperience,
+                Section.PersonalProjects,
+            ];
+            twoPageModel.WorkExperiences = CreateRenderedEvents("Work", 12);
+            twoPageModel.PersonalProjects = CreateRenderedEvents("Project", 12);
+            var tooMany = await Assert.ThrowsAsync<RenderedPageCountMismatchException>(() =>
+                CvTemplate.Generate(new()
+                {
+                    ConfigFilePath = ProductionTemplatePath,
+                    OutputDirectory = tooManyDirectory,
+                    Model = twoPageModel,
+                    CancellationToken = CancellationToken.None,
+                    PageCount = CvPageCount.OnePage,
+                }));
+            Assert.Equal(
+                "Configured pageCount 1, but the rendered PDF contains 2 pages",
+                tooMany.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(tooFewDirectory))
+            {
+                Directory.Delete(tooFewDirectory, recursive: true);
+            }
+            if (Directory.Exists(tooManyDirectory))
+            {
+                Directory.Delete(tooManyDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("Output written on main.pdf (1 page, 123 bytes).", 1)]
+    [InlineData("Output written on main.xdv (37 pages, 123 bytes).", 37)]
+    public void LatexPageCountParserReadsProductionLogLine(string log, int expected)
+    {
+        Assert.True(LatexLogPageCountParser.TryParse(log, out var actual));
+        Assert.Equal(expected, actual);
+        Assert.False(LatexLogPageCountParser.TryParse("No pages of output.", out _));
     }
 
     [Fact]
@@ -487,7 +645,7 @@ public sealed class LatexMeasurementTests
             ];
             model.CategorizedInfos = [new(Category.Location, "Example City, Example Country")];
 
-            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            var exception = await Assert.ThrowsAsync<CvMetadataOverflowException>(() =>
                 CvTemplate.Generate(new()
                 {
                     ConfigFilePath = ProductionTemplatePath,
@@ -550,14 +708,25 @@ public sealed class LatexMeasurementTests
     private static int ReadPageCount(string outputDirectory)
     {
         var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
-        var match = System.Text.RegularExpressions.Regex.Match(
-            log,
-            @"Output written on main\.(?:pdf|xdv) \((\d+) pages?\b");
         Assert.True(
-            match.Success,
+            LatexLogPageCountParser.TryParse(log, out var pageCount),
             $"LaTeX log did not contain its standard output page-count line. Output lines: {string.Join(" | ", log.Split('\n').Where(static line => line.Contains("Output", StringComparison.OrdinalIgnoreCase)))}");
-        return int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        return pageCount;
     }
+
+    private static ImmutableArray<Event> CreateRenderedEvents(string prefix, int count)
+        => Enumerable.Range(1, count)
+            .Select(position => new Event
+            {
+                Title = $"{prefix} event {position}",
+                Place = Place.Personal,
+                DateRange = DateRange.Completed(new(2020), new(2021)),
+                SubItems =
+                [
+                    new(0, new LatexString("A production bullet used to create a controlled atomic section.")),
+                ],
+            })
+            .ToImmutableArray();
 
     private static string ResultLine(LatexMeasurementRequest request, long height)
         => $"FJH1|corr={request.CorrelationId}|rule={request.CacheKey.RuleVersion}|kind={request.CacheKey.Kind}|sha256={request.CacheKey.ContentHash}|height-sp={height}";
@@ -631,7 +800,7 @@ public sealed class LatexMeasurementTests
             _ = templatePath;
             _ = cancellationToken;
             RequestCount = requests.Count;
-            throw new InvalidOperationException("simulated compilation failure");
+            throw new CvMeasurementException("simulated compilation failure");
         }
     }
 

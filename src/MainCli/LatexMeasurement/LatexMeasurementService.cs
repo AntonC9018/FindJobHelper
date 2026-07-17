@@ -94,15 +94,15 @@ public sealed class LatexMeasurementService
         }
 
         graph.VerifyComplete(database);
-        var documentChrome = new LatexHeight(checked(
-            graph.DocumentHeader!.Value.ScaledPoints + graph.DocumentFooter!.Value.ScaledPoints));
         return CvMeasurementSnapshot.CreateFrozen(
             graph.ExperienceItems,
             graph.ExperienceHeadings,
             graph.ExperienceChrome,
-            graph.CompleteSections,
-            graph.SectionChrome,
-            documentChrome,
+            graph.CurrentPageCompleteSections,
+            graph.CurrentPageSectionChrome,
+            graph.FreshPageSectionChrome,
+            graph.DocumentHeader!.Value,
+            graph.DocumentFooter!.Value,
             graph.UsablePageHeight!.Value);
     }
 
@@ -155,11 +155,16 @@ public sealed class LatexMeasurementService
                 CreateFragmentKey(LatexMeasurementKind.SectionChrome, chrome, section),
                 chrome,
                 LatexMeasurementMode.SectionChrome,
-                MeasurementDestination.ForSectionChrome(section));
+                MeasurementDestination.ForCurrentPageSectionChrome(section));
+            graph.Add(
+                CreateFragmentKey(LatexMeasurementKind.FreshPageSectionChrome, chrome, section),
+                chrome,
+                LatexMeasurementMode.FreshPageSectionChrome,
+                MeasurementDestination.ForFreshPageSectionChrome(section));
 
             if (CvLatexFragmentRenderer.IsSectionEmpty(section, currentModel))
             {
-                graph.CompleteSections.Add(section, LatexHeight.Zero);
+                graph.CurrentPageCompleteSections.Add(section, LatexHeight.Zero);
                 continue;
             }
 
@@ -215,7 +220,7 @@ public sealed class LatexMeasurementService
     {
         if (results.Count != requests.Count)
         {
-            throw new InvalidOperationException(
+            throw new CvMeasurementException(
                 $"The measurement runner returned {results.Count} results for {requests.Count} requests.");
         }
 
@@ -223,12 +228,12 @@ public sealed class LatexMeasurementService
         {
             if (!results.TryGetValue(request.CorrelationId, out var height))
             {
-                throw new InvalidOperationException(
+                throw new CvMeasurementException(
                     $"The measurement runner omitted correlation '{request.CorrelationId}'.");
             }
             if (height.ScaledPoints < 0)
             {
-                throw new InvalidOperationException(
+                throw new CvMeasurementException(
                     $"The measurement runner returned a negative height for '{request.CorrelationId}'.");
             }
         }
@@ -240,8 +245,9 @@ public sealed class LatexMeasurementService
         public Dictionary<ExperienceItemId, LatexHeight> ExperienceItems { get; } = new();
         public Dictionary<ExperienceListId, LatexHeight> ExperienceHeadings { get; } = new();
         public Dictionary<ExperienceListId, LatexHeight> ExperienceChrome { get; } = new();
-        public Dictionary<Section, LatexHeight> CompleteSections { get; } = new();
-        public Dictionary<Section, LatexHeight> SectionChrome { get; } = new();
+        public Dictionary<Section, LatexHeight> CurrentPageCompleteSections { get; } = new();
+        public Dictionary<Section, LatexHeight> CurrentPageSectionChrome { get; } = new();
+        public Dictionary<Section, LatexHeight> FreshPageSectionChrome { get; } = new();
         public LatexHeight? DocumentHeader { get; private set; }
         public LatexHeight? DocumentFooter { get; private set; }
         public LatexHeight? UsablePageHeight { get; private set; }
@@ -254,7 +260,8 @@ public sealed class LatexMeasurementService
         {
             if (key.RuleVersion != ruleVersion)
             {
-                throw new InvalidOperationException("A request graph key used the wrong rule version.");
+                throw new CvMeasurementException(
+                    "A request graph key used the wrong rule version.");
             }
 
             if (!WorkItems.TryGetValue(key, out var workItem))
@@ -265,7 +272,7 @@ public sealed class LatexMeasurementService
             else if (workItem.RenderedFragment != renderedFragment
                      || workItem.Mode != mode)
             {
-                throw new InvalidOperationException(
+                throw new CvMeasurementException(
                     $"Hash collision detected for {key.Kind} key '{key.ContentHash}'.");
             }
 
@@ -290,10 +297,13 @@ public sealed class LatexMeasurementService
                         ExperienceChrome[destination.ExperienceListId] = height;
                         break;
                     case MeasurementDestinationKind.CompleteSection:
-                        CompleteSections[destination.Section] = height;
+                        CurrentPageCompleteSections[destination.Section] = height;
                         break;
-                    case MeasurementDestinationKind.SectionChrome:
-                        SectionChrome[destination.Section] = height;
+                    case MeasurementDestinationKind.CurrentPageSectionChrome:
+                        CurrentPageSectionChrome[destination.Section] = height;
+                        break;
+                    case MeasurementDestinationKind.FreshPageSectionChrome:
+                        FreshPageSectionChrome[destination.Section] = height;
                         break;
                     case MeasurementDestinationKind.DocumentHeader:
                         DocumentHeader = height;
@@ -315,32 +325,72 @@ public sealed class LatexMeasurementService
             var expectedItems = database.Experiences.Sum(static list => list.Items.Length);
             if (ExperienceItems.Count != expectedItems)
             {
-                throw new InvalidOperationException(
+                throw new CvMeasurementInvariantException(
                     $"Incomplete measurement snapshot: expected {expectedItems} experience items, found {ExperienceItems.Count}.");
             }
             if (ExperienceChrome.Count != database.Experiences.Length)
             {
-                throw new InvalidOperationException("Incomplete measurement snapshot: experience chrome is missing.");
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: experience chrome is missing.");
             }
             if (ExperienceHeadings.Count != database.Experiences.Length)
             {
-                throw new InvalidOperationException("Incomplete measurement snapshot: experience headings are missing.");
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: experience headings are missing.");
             }
-            if (CompleteSections.Count != Enum.GetValues<Section>().Length)
+            if (CurrentPageCompleteSections.Count != Enum.GetValues<Section>().Length)
             {
-                throw new InvalidOperationException("Incomplete measurement snapshot: complete sections are missing.");
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: complete sections are missing.");
             }
-            if (SectionChrome.Count != Enum.GetValues<Section>().Length)
+            if (CurrentPageSectionChrome.Count != Enum.GetValues<Section>().Length
+                || FreshPageSectionChrome.Count != Enum.GetValues<Section>().Length)
             {
-                throw new InvalidOperationException("Incomplete measurement snapshot: section chrome is missing.");
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: section chrome is missing.");
             }
             if (DocumentHeader is null || DocumentFooter is null)
             {
-                throw new InvalidOperationException("Incomplete measurement snapshot: document chrome is missing.");
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: document chrome is missing.");
             }
             if (UsablePageHeight is null)
             {
-                throw new InvalidOperationException("Incomplete measurement snapshot: usable page height is missing.");
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: usable page height is missing.");
+            }
+
+            foreach (var identified in database.EnumerateExperienceLists())
+            {
+                if (ExperienceChrome[identified.Id].ScaledPoints
+                    < ExperienceHeadings[identified.Id].ScaledPoints)
+                {
+                    throw new CvMeasurementInvariantException(
+                        $"Measured experience chrome for '{identified.Value.Title}' is smaller than its heading.");
+                }
+            }
+
+            foreach (var section in Enum.GetValues<Section>())
+            {
+                var currentChrome = CurrentPageSectionChrome[section].ScaledPoints;
+                var freshChrome = FreshPageSectionChrome[section].ScaledPoints;
+                var complete = CurrentPageCompleteSections[section].ScaledPoints;
+                if (currentChrome < 0 || freshChrome < 0 || complete < 0)
+                {
+                    throw new CvMeasurementInvariantException(
+                        $"Measured heights for section '{section}' cannot be negative.");
+                }
+                if (freshChrome < currentChrome)
+                {
+                    throw new CvMeasurementInvariantException(
+                        $"Fresh-page wrapper for section '{section}' is shorter than its current-page wrapper.");
+                }
+                if (complete > 0
+                    && checked(complete - currentChrome + freshChrome) < 0)
+                {
+                    throw new CvMeasurementInvariantException(
+                        $"Derived fresh-page height for section '{section}' cannot be negative.");
+                }
             }
         }
     }
@@ -362,7 +412,8 @@ public sealed class LatexMeasurementService
         ExperienceHeading,
         ExperienceChrome,
         CompleteSection,
-        SectionChrome,
+        CurrentPageSectionChrome,
+        FreshPageSectionChrome,
         DocumentHeader,
         DocumentFooter,
         UsablePageHeight,
@@ -386,8 +437,11 @@ public sealed class LatexMeasurementService
         public static MeasurementDestination ForCompleteSection(Section section)
             => new(MeasurementDestinationKind.CompleteSection, default, default, section);
 
-        public static MeasurementDestination ForSectionChrome(Section section)
-            => new(MeasurementDestinationKind.SectionChrome, default, default, section);
+        public static MeasurementDestination ForCurrentPageSectionChrome(Section section)
+            => new(MeasurementDestinationKind.CurrentPageSectionChrome, default, default, section);
+
+        public static MeasurementDestination ForFreshPageSectionChrome(Section section)
+            => new(MeasurementDestinationKind.FreshPageSectionChrome, default, default, section);
 
         public static MeasurementDestination ForDocumentHeader()
             => new(MeasurementDestinationKind.DocumentHeader, default, default, default);

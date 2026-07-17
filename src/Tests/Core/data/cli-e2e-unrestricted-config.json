@@ -1,5 +1,5 @@
 {
-  "pageCount": 2,
+  "limitToOnePage": false,
   "requiredTags": [
     { "name": ".NET", "weight": 1.0 }
   ],

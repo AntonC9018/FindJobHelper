@@ -6,9 +6,39 @@ namespace FindJobHelper.Core.Tests;
 public sealed class CvSelectionConfigurationTests
 {
     [Fact]
+    public void CvPageCount_HasExplicitExactAndUnrestrictedSemantics()
+    {
+        var unrestricted = CvPageCount.Unrestricted;
+        var exact = CvPageCount.Exact(3);
+
+        Assert.True(unrestricted.IsUnrestricted);
+        Assert.False(unrestricted.IsExact);
+        Assert.Null(unrestricted.ExactCount);
+        Assert.True(exact.IsExact);
+        Assert.False(exact.IsUnrestricted);
+        Assert.Equal(3, exact.ExactCount);
+        Assert.Equal("Exactly 3 pages", exact.ToString());
+        Assert.Throws<ArgumentOutOfRangeException>(() => CvPageCount.Exact(0));
+    }
+
+    [Fact]
+    public void DomainConfiguration_DoesNotExposeJsonPresenceTracking()
+    {
+        var propertyNames = typeof(CvSelectionConfiguration)
+            .GetProperties()
+            .Select(static property => property.Name)
+            .ToArray();
+
+        Assert.Contains(nameof(CvSelectionConfiguration.PageCount), propertyNames);
+        Assert.DoesNotContain("LimitToOnePage", propertyNames);
+        Assert.DoesNotContain("IsLimitToOnePageSpecified", propertyNames);
+        Assert.DoesNotContain("IsPageCountSpecified", propertyNames);
+    }
+
+    [Fact]
     public async Task LoadAsync_MapsSelectionConfiguration()
     {
-        var configuration = await CvSelectionConfiguration.LoadAsync(
+        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
             FixturePath,
             CancellationToken.None);
         var tagsDatabase = TagsDatabaseFactory.Create().TagsDatabase;
@@ -33,7 +63,8 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal(0, configuration.Selection.Education.RecencyBoost);
         Assert.Equal(0, configuration.Selection.WorkExperience.RecencyBoost);
         Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
-        Assert.True(configuration.LimitToOnePage);
+        Assert.Equal(CvPageCount.OnePage, configuration.PageCount);
+        Assert.Equal(CvPageCount.OnePage, search.PageCount);
     }
 
     [Fact]
@@ -54,7 +85,7 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task BuildSearch_AlwaysIncludesEveryWorkExperienceHeading()
     {
-        var configuration = await CvSelectionConfiguration.LoadAsync(
+        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
             FixturePath,
             CancellationToken.None);
         var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
@@ -74,7 +105,7 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
-    public async Task LoadAsync_LimitToOnePageDefaultsToTrueAndMapsFalse()
+    public async Task LoadAsync_LegacyPageFlagDefaultsToOnePageAndMapsFalseToUnrestricted()
     {
         var json = await ReadFixtureAsync();
         var omitted = json.Replace("  \"limitToOnePage\": true,\r\n", "", StringComparison.Ordinal)
@@ -84,8 +115,66 @@ public sealed class CvSelectionConfigurationTests
             "\"limitToOnePage\": false",
             StringComparison.Ordinal);
 
-        Assert.True((await LoadAsync(omitted)).LimitToOnePage);
-        Assert.False((await LoadAsync(disabled)).LimitToOnePage);
+        var omittedConfiguration = await LoadAsync(omitted);
+        var disabledConfiguration = await LoadAsync(disabled);
+        var tags = TagsDatabaseFactory.Create().TagsDatabase;
+
+        Assert.Equal(CvPageCount.OnePage, omittedConfiguration.PageCount);
+        Assert.Equal(CvPageCount.OnePage, omittedConfiguration.BuildSearch(tags).PageCount);
+        Assert.Equal(CvPageCount.Unrestricted, disabledConfiguration.PageCount);
+        Assert.Equal(CvPageCount.Unrestricted, disabledConfiguration.BuildSearch(tags).PageCount);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(int.MaxValue)]
+    public async Task LoadAsync_MapsAnyPositivePageCount(int pageCount)
+    {
+        var json = (await ReadFixtureAsync()).Replace(
+            "\"limitToOnePage\": true",
+            $"\"pageCount\": {pageCount}",
+            StringComparison.Ordinal);
+
+        var configuration = await LoadAsync(json);
+        var search = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
+
+        Assert.Equal(CvPageCount.Exact(pageCount), configuration.PageCount);
+        Assert.Equal(CvPageCount.Exact(pageCount), search.PageCount);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("null")]
+    [InlineData("2.5")]
+    [InlineData("\"2\"")]
+    [InlineData("true")]
+    [InlineData("2147483648")]
+    public async Task LoadAsync_RejectsInvalidPageCount(string value)
+    {
+        var json = (await ReadFixtureAsync()).Replace(
+            "\"limitToOnePage\": true",
+            $"\"pageCount\": {value}",
+            StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(json, buildSearch: false);
+
+        Assert.Contains("pageCount", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsPageCountTogetherWithLegacyFlag()
+    {
+        var json = (await ReadFixtureAsync()).Replace(
+            "\"limitToOnePage\": true,",
+            "\"limitToOnePage\": true,\n  \"pageCount\": 2,",
+            StringComparison.Ordinal);
+
+        var exception = await LoadInvalidAsync(json, buildSearch: false);
+
+        Assert.Contains("cannot both be supplied", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -278,7 +367,9 @@ public sealed class CvSelectionConfigurationTests
             await File.WriteAllTextAsync(path, json);
             var exception = await Assert.ThrowsAsync<CvConfigurationException>(async () =>
             {
-                var configuration = await CvSelectionConfiguration.LoadAsync(path, CancellationToken.None);
+                var configuration = await CvSelectionConfigurationLoader.LoadAsync(
+                    path,
+                    CancellationToken.None);
                 if (buildSearch)
                 {
                     configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
@@ -298,7 +389,7 @@ public sealed class CvSelectionConfigurationTests
         try
         {
             await File.WriteAllTextAsync(path, json);
-            return await CvSelectionConfiguration.LoadAsync(path, CancellationToken.None);
+            return await CvSelectionConfigurationLoader.LoadAsync(path, CancellationToken.None);
         }
         finally
         {

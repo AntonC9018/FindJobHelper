@@ -6,6 +6,7 @@ namespace FindJobHelper.Core.Tests;
 
 public sealed class PageHeightSelectionTests
 {
+    private static readonly ExperienceKey EducationKey = new("Education");
     private static readonly ExperienceKey WorkKey = new("Work");
     private static readonly ExperienceKey ProjectsKey = new("Projects");
 
@@ -146,7 +147,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [10],
             (WorkKey, Section.WorkExperience));
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var exception = Assert.Throws<RequiredExperienceHeadingLayoutException>(() =>
             RequiredWorkHeadingsSearch(tag, maximum: 0).Run(database, policy));
 
         Assert.Contains("required job", exception.Message, StringComparison.Ordinal);
@@ -184,15 +185,26 @@ public sealed class PageHeightSelectionTests
             new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(1) },
             new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(1) },
             new Dictionary<Section, LatexHeight> { [Section.Languages] = new(20) },
-            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(1) },
+            new Dictionary<Section, LatexHeight>
+            {
+                [Section.Languages] = new(5),
+                [Section.WorkExperience] = new(1),
+            },
+            new Dictionary<Section, LatexHeight>
+            {
+                [Section.Languages] = new(5),
+                [Section.WorkExperience] = new(1),
+            },
             new LatexHeight(10),
+            LatexHeight.Zero,
             new LatexHeight(29));
 
-        var exception = Assert.Throws<InvalidOperationException>(() => new PageHeightSelectionAdmissionPolicy(
+        var exception = Assert.Throws<FixedCvContentLayoutException>(() => new PageLayoutSelectionAdmissionPolicy(
             database,
             snapshot,
             new CvExperienceSectionBindings(new("UnusedEducation"), WorkKey, new("UnusedProjects")),
-            [Section.Languages, Section.WorkExperience]));
+            [Section.Languages, Section.WorkExperience],
+            CvPageCount.OnePage));
 
         Assert.Contains("Fixed CV content", exception.Message, StringComparison.Ordinal);
     }
@@ -203,7 +215,7 @@ public sealed class PageHeightSelectionTests
         var tag = new Tag("match");
         var database = Database(Experience("work", ExperienceType.Job, Item("point", tag, 10)));
 
-        var exception = Assert.Throws<InvalidOperationException>(() => PolicyWithListHeights(
+        var exception = Assert.Throws<CvMeasurementInvariantException>(() => PolicyWithListHeights(
             database,
             pageHeight: 50,
             itemHeights: [1],
@@ -212,6 +224,159 @@ public sealed class PageHeightSelectionTests
             (WorkKey, Section.WorkExperience)));
 
         Assert.Contains("smaller than its heading", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Selection_SkipsCandidateThatWouldRequireThirdConfiguredPageAndAcceptsLaterFit()
+    {
+        var tag = new Tag("match");
+        var education = Experience("education", ExperienceType.BachelorsDegree);
+        var work = Experience("work", ExperienceType.Job, Item("too tall", tag, 10));
+        var project = Experience("project", ExperienceType.Project, Item("later fit", tag, 9));
+        var database = Database(education, work, project);
+        var groups = new[]
+        {
+            (EducationKey, Section.Education),
+            (WorkKey, Section.WorkExperience),
+            (ProjectsKey, Section.PersonalProjects),
+        };
+        var policy = MultiPagePolicy(
+            database,
+            pageHeight: 50,
+            headerHeight: 35,
+            footerHeight: 0,
+            itemHeights: [30, 5],
+            currentChromeHeight: 5,
+            freshChromeHeight: 10,
+            pageCount: CvPageCount.Exact(2),
+            groups);
+
+        var result = SearchWithRequiredHeadings(tag).Run(database, policy);
+
+        Assert.DoesNotContain("too tall", Texts(result.Get(WorkKey)));
+        Assert.Equal(new[] { "later fit" }, Texts(result.Get(ProjectsKey)));
+        Assert.Equal(2, policy.PredictedPageCount);
+    }
+
+    [Fact]
+    public void Selection_UnrestrictedModeAllowsMorePagesButKeepsSectionsAtomic()
+    {
+        var tag = new Tag("match");
+        var education = Experience("education", ExperienceType.BachelorsDegree);
+        var work = Experience("work", ExperienceType.Job, Item("third-page trigger", tag, 10));
+        var project = Experience("project", ExperienceType.Project, Item("also selected", tag, 9));
+        var database = Database(education, work, project);
+        var groups = new[]
+        {
+            (EducationKey, Section.Education),
+            (WorkKey, Section.WorkExperience),
+            (ProjectsKey, Section.PersonalProjects),
+        };
+        var policy = MultiPagePolicy(
+            database,
+            pageHeight: 50,
+            headerHeight: 35,
+            footerHeight: 0,
+            itemHeights: [30, 5],
+            currentChromeHeight: 5,
+            freshChromeHeight: 10,
+            pageCount: CvPageCount.Unrestricted,
+            groups);
+
+        var result = SearchWithRequiredHeadings(tag).Run(database, policy);
+
+        Assert.Equal(new[] { "third-page trigger" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(new[] { "also selected" }, Texts(result.Get(ProjectsKey)));
+        Assert.Equal(3, policy.PredictedPageCount);
+    }
+
+    [Fact]
+    public void Selection_UnrestrictedModeStillRejectsAnOversizedIndividualSection()
+    {
+        var tag = new Tag("match");
+        var database = Database(
+            Experience("work", ExperienceType.Job, Item("oversized", tag, 10)));
+        var policy = MultiPagePolicy(
+            database,
+            pageHeight: 50,
+            headerHeight: 0,
+            footerHeight: 0,
+            itemHeights: [40],
+            currentChromeHeight: 5,
+            freshChromeHeight: 10,
+            pageCount: CvPageCount.Unrestricted,
+            [(WorkKey, Section.WorkExperience)]);
+
+        var result = Search(tag, (WorkKey, ExperienceType.Job, 0, 1)).Run(database, policy);
+
+        Assert.Empty(result.Get(WorkKey));
+        Assert.Equal(1, policy.PredictedPageCount);
+    }
+
+    [Fact]
+    public void Policy_ExactConfiguredCountFailsWhenSelectionUsesFewerPages()
+    {
+        var tag = new Tag("match");
+        var database = Database(
+            Experience("work", ExperienceType.Job, Item("small", tag, 10)));
+        var policy = MultiPagePolicy(
+            database,
+            pageHeight: 100,
+            headerHeight: 10,
+            footerHeight: 0,
+            itemHeights: [5],
+            currentChromeHeight: 5,
+            freshChromeHeight: 10,
+            pageCount: CvPageCount.Exact(2),
+            [(WorkKey, Section.WorkExperience)]);
+        _ = Search(tag, (WorkKey, ExperienceType.Job, 0, 1)).Run(database, policy);
+
+        var exception = Assert.Throws<PredictedPageCountMismatchException>(
+            policy.RequireExactPageCount);
+
+        Assert.Equal(2, exception.ConfiguredPageCount);
+        Assert.Equal(1, exception.PredictedPageCount);
+    }
+
+    [Fact]
+    public void Policy_RejectsStaticSectionWhoseFreshPageRepresentationIsTooTall()
+    {
+        var tag = new Tag("match");
+        var database = Database(
+            Experience("work", ExperienceType.Job, Item("small", tag, 10)));
+        var identifiedItem = Assert.Single(database.EnumerateExperienceItems());
+        var identifiedList = Assert.Single(database.EnumerateExperienceLists());
+        var currentChrome = new Dictionary<Section, LatexHeight>
+        {
+            [Section.Languages] = new(5),
+            [Section.WorkExperience] = new(5),
+        };
+        var freshChrome = new Dictionary<Section, LatexHeight>
+        {
+            [Section.Languages] = new(20),
+            [Section.WorkExperience] = new(10),
+        };
+        var snapshot = new CvMeasurementSnapshot(
+            new Dictionary<ExperienceItemId, LatexHeight> { [identifiedItem.Id] = new(1) },
+            new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(5) },
+            new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(5) },
+            new Dictionary<Section, LatexHeight> { [Section.Languages] = new(40) },
+            currentChrome,
+            freshChrome,
+            LatexHeight.Zero,
+            LatexHeight.Zero,
+            new(50));
+
+        var exception = Assert.Throws<FixedCvContentLayoutException>(() =>
+            new PageLayoutSelectionAdmissionPolicy(
+                database,
+                snapshot,
+                Bindings([(WorkKey, Section.WorkExperience)]),
+                [Section.Languages, Section.WorkExperience],
+                CvPageCount.Unrestricted));
+
+        Assert.Contains("Languages", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("fresh page", exception.Message, StringComparison.Ordinal);
     }
 
     private static ExperienceSearch Search(
@@ -249,7 +414,38 @@ public sealed class PageHeightSelectionTests
         return builder.Build();
     }
 
-    private static PageHeightSelectionAdmissionPolicy Policy(
+    private static ExperienceSearch SearchWithRequiredHeadings(Tag tag)
+    {
+        var builder = new SearchBuilder();
+        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Configure(
+            EducationKey,
+            static experience => experience.Type.IsDegree(),
+            static options =>
+            {
+                options.TotalItemBudget = 1;
+                options.IncludeEmptyLists = true;
+            });
+        builder.Configure(
+            WorkKey,
+            static experience => experience.Type == ExperienceType.Job,
+            static options =>
+            {
+                options.TotalItemBudget = 1;
+                options.IncludeEmptyLists = true;
+            });
+        builder.Configure(
+            ProjectsKey,
+            static experience => experience.Type == ExperienceType.Project,
+            static options =>
+            {
+                options.TotalItemBudget = 1;
+                options.IncludeEmptyLists = true;
+            });
+        return builder.Build();
+    }
+
+    private static PageLayoutSelectionAdmissionPolicy Policy(
         ExperienceDatabase database,
         long pageHeight,
         long[] itemHeights,
@@ -265,7 +461,7 @@ public sealed class PageHeightSelectionTests
             groups);
     }
 
-    private static PageHeightSelectionAdmissionPolicy PolicyWithListHeights(
+    private static PageLayoutSelectionAdmissionPolicy PolicyWithListHeights(
         ExperienceDatabase database,
         long pageHeight,
         long[] itemHeights,
@@ -289,13 +485,56 @@ public sealed class PageHeightSelectionTests
             groups.Select(static group => group.Section).Distinct().ToDictionary(
                 static section => section,
                 static _ => new LatexHeight(5)),
+            groups.Select(static group => group.Section).Distinct().ToDictionary(
+                static section => section,
+                static _ => new LatexHeight(5)),
             new LatexHeight(10),
+            LatexHeight.Zero,
             new LatexHeight(pageHeight));
         return new(
             database,
             snapshot,
             Bindings(groups),
-            groups.Select(static group => group.Section).ToImmutableArray());
+            groups.Select(static group => group.Section).ToImmutableArray(),
+            CvPageCount.OnePage);
+    }
+
+    private static PageLayoutSelectionAdmissionPolicy MultiPagePolicy(
+        ExperienceDatabase database,
+        long pageHeight,
+        long headerHeight,
+        long footerHeight,
+        long[] itemHeights,
+        long currentChromeHeight,
+        long freshChromeHeight,
+        CvPageCount pageCount,
+        params (ExperienceKey Key, Section Section)[] groups)
+    {
+        var items = database.EnumerateExperienceItems().ToArray();
+        var lists = database.EnumerateExperienceLists().ToArray();
+        Assert.Equal(items.Length, itemHeights.Length);
+        var sections = groups.Select(static group => group.Section).Distinct().ToArray();
+        var snapshot = new CvMeasurementSnapshot(
+            items.Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
+                .ToDictionary(static x => x.Id, static x => x.Height),
+            lists.ToDictionary(static list => list.Id, static _ => new LatexHeight(5)),
+            lists.ToDictionary(static list => list.Id, static _ => new LatexHeight(5)),
+            new Dictionary<Section, LatexHeight>(),
+            sections.ToDictionary(
+                static section => section,
+                _ => new LatexHeight(currentChromeHeight)),
+            sections.ToDictionary(
+                static section => section,
+                _ => new LatexHeight(freshChromeHeight)),
+            new(headerHeight),
+            new(footerHeight),
+            new(pageHeight));
+        return new(
+            database,
+            snapshot,
+            Bindings(groups),
+            groups.Select(static group => group.Section).ToImmutableArray(),
+            pageCount);
     }
 
     private static CvExperienceSectionBindings Bindings(

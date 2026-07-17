@@ -61,7 +61,9 @@ public sealed class CvGenerationCommand
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
 
-        var configuration = await CvSelectionConfiguration.LoadAsync(configPath, cancellationToken);
+        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
+            configPath,
+            cancellationToken);
         var fullOutputDirectory = Path.GetFullPath(outputDirectory);
         var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
         var searchConfiguration = configuration.BuildSearch(tagsDatabase);
@@ -72,7 +74,7 @@ public sealed class CvGenerationCommand
             "cv_template_config.tex");
         if (!File.Exists(templatePath))
         {
-            throw new InvalidOperationException($"CV template file was not found: '{templatePath}'.");
+            throw new FileNotFoundException("CV template file was not found.", templatePath);
         }
 
         await using var serviceProvider = await AppConfiguration.CreateApp(cancellationToken);
@@ -126,26 +128,20 @@ public sealed class CvGenerationCommand
             SectionOrder = searchConfiguration.SectionOrder,
         };
 
-        SearchResult searchResult;
-        if (searchConfiguration.LimitToOnePage)
-        {
-            var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
-            var measurementSnapshot = await measurementService.MeasureAsync(
-                experienceDatabase,
-                currentModel,
-                templatePath,
-                cancellationToken);
-            var admissionPolicy = new PageHeightSelectionAdmissionPolicy(
-                experienceDatabase,
-                measurementSnapshot,
-                searchConfiguration.Sections,
-                searchConfiguration.SectionOrder);
-            searchResult = searchConfiguration.Search.Run(experienceDatabase, admissionPolicy);
-        }
-        else
-        {
-            searchResult = searchConfiguration.Search.Run(experienceDatabase.Experiences);
-        }
+        var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
+        var measurementSnapshot = await measurementService.MeasureAsync(
+            experienceDatabase,
+            currentModel,
+            templatePath,
+            cancellationToken);
+        var admissionPolicy = new PageLayoutSelectionAdmissionPolicy(
+            experienceDatabase,
+            measurementSnapshot,
+            searchConfiguration.Sections,
+            searchConfiguration.SectionOrder,
+            searchConfiguration.PageCount);
+        var searchResult = searchConfiguration.Search.Run(experienceDatabase, admissionPolicy);
+        admissionPolicy.RequireExactPageCount();
 
         searchConfiguration.Sections.Apply(searchResult, currentModel);
 
@@ -163,6 +159,7 @@ public sealed class CvGenerationCommand
                 CancellationToken = cancellationToken,
                 ConfigFilePath = templatePath,
                 OutputDirectory = stagingDirectory,
+                PageCount = searchConfiguration.PageCount,
             });
 
             Directory.CreateDirectory(fullOutputDirectory);

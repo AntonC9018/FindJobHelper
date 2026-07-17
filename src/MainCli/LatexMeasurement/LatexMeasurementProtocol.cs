@@ -61,17 +61,18 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(
                         $"{result.StandardError}{Environment.NewLine}{result.StandardOutput}"))
                 {
-                    throw new InvalidOperationException(CvLatexErrors.MetadataLeftOverflowMessage);
+                    throw new CvMetadataOverflowException();
                 }
 
-                throw new InvalidOperationException(
+                throw new CvMeasurementException(
                     $"XeLaTeX height measurement failed with exit code {result.ExitCode}: {result.StandardError}{Environment.NewLine}{result.StandardOutput}");
             }
 
             var resultPath = Path.Combine(workingDirectory, resultFileName);
             if (!File.Exists(resultPath))
             {
-                throw new InvalidOperationException("XeLaTeX completed without producing the height result file.");
+                throw new CvMeasurementException(
+                    "XeLaTeX completed without producing the height result file.");
             }
 
             var lines = await File.ReadAllLinesAsync(resultPath, cancellationToken);
@@ -118,7 +119,7 @@ internal static class LatexMeasurementDocument
                     \dimen2=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax
                     \fjhmeasurementpagetotal=\pagetotal
                     {{request.RenderedFragment}}
-                    \begin{flowblock}
+                    \begin{flowblock}{Measurement Sentinel}
                     \cvmeasurementsentinelsection
                     \end{flowblock}
                     \par
@@ -154,7 +155,9 @@ internal static class LatexMeasurementDocument
             {
                 LatexMeasurementMode.Box => @"\cvsetmeasurementbox",
                 LatexMeasurementMode.FlowBlock => @"\cvsetmeasurementsectionbox",
+                LatexMeasurementMode.FreshPageFlowBlock => @"\cvsetmeasurementfreshsectionbox",
                 LatexMeasurementMode.SectionChrome => @"\cvsetmeasurementsectionchromebox",
+                LatexMeasurementMode.FreshPageSectionChrome => @"\cvsetmeasurementfreshsectionchromebox",
                 LatexMeasurementMode.ExperienceItemMarginal => @"\cvsetmeasurementitembox",
                 LatexMeasurementMode.ExperienceChromeWithoutPermanentItems => @"\cvsetmeasurementexperiencechromebox",
                 _ => throw new ArgumentOutOfRangeException(nameof(request.Mode), request.Mode, null),
@@ -197,7 +200,8 @@ internal static class LatexMeasurementResultParser
             var fields = line.Split('|');
             if (fields.Length != 6 || fields[0] != "FJH1")
             {
-                throw new InvalidOperationException($"Malformed LaTeX measurement result line: '{line}'.");
+                throw new CvMeasurementException(
+                    $"Malformed LaTeX measurement result line: '{line}'.");
             }
 
             var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -206,7 +210,8 @@ internal static class LatexMeasurementResultParser
                 var equals = fields[i].IndexOf('=');
                 if (equals <= 0 || !values.TryAdd(fields[i][..equals], fields[i][(equals + 1)..]))
                 {
-                    throw new InvalidOperationException($"Malformed LaTeX measurement result field in '{line}'.");
+                    throw new CvMeasurementException(
+                        $"Malformed LaTeX measurement result field in '{line}'.");
                 }
             }
 
@@ -214,11 +219,13 @@ internal static class LatexMeasurementResultParser
             var correlation = ParseCorrelation(values["corr"], line);
             if (!expected.TryGetValue(correlation, out var request))
             {
-                throw new InvalidOperationException($"Unknown LaTeX measurement correlation '{values["corr"]}'.");
+                throw new CvMeasurementException(
+                    $"Unknown LaTeX measurement correlation '{values["corr"]}'.");
             }
             if (results.ContainsKey(correlation))
             {
-                throw new InvalidOperationException($"Duplicate LaTeX measurement correlation '{values["corr"]}'.");
+                throw new CvMeasurementException(
+                    $"Duplicate LaTeX measurement correlation '{values["corr"]}'.");
             }
 
             if (!int.TryParse(values["rule"], NumberStyles.None, CultureInfo.InvariantCulture, out var rule)
@@ -227,14 +234,14 @@ internal static class LatexMeasurementResultParser
                 || !IsSha256(values["sha256"])
                 || values["sha256"] != request.CacheKey.ContentHash)
             {
-                throw new InvalidOperationException(
+                throw new CvMeasurementException(
                     $"LaTeX measurement metadata mismatch for correlation '{values["corr"]}'.");
             }
 
             if (!long.TryParse(values["height-sp"], NumberStyles.None, CultureInfo.InvariantCulture, out var height)
                 || height < 0)
             {
-                throw new InvalidOperationException(
+                throw new CvMeasurementException(
                     $"Invalid LaTeX measurement height for correlation '{values["corr"]}'.");
             }
 
@@ -244,7 +251,7 @@ internal static class LatexMeasurementResultParser
         if (results.Count != expected.Count)
         {
             var missing = expected.Keys.Where(id => !results.ContainsKey(id));
-            throw new InvalidOperationException(
+            throw new CvMeasurementException(
                 $"Missing LaTeX measurement results for: {string.Join(", ", missing)}.");
         }
 
@@ -258,7 +265,7 @@ internal static class LatexMeasurementResultParser
             || !int.TryParse(value.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out var id)
             || id <= 0)
         {
-            throw new InvalidOperationException($"Malformed correlation token in '{line}'.");
+            throw new CvMeasurementException($"Malformed correlation token in '{line}'.");
         }
         return new(id);
     }
@@ -270,7 +277,8 @@ internal static class LatexMeasurementResultParser
     {
         if (values.Count != keys.Length || keys.Any(key => !values.ContainsKey(key)))
         {
-            throw new InvalidOperationException($"Malformed LaTeX measurement metadata in '{line}'.");
+            throw new CvMeasurementException(
+                $"Malformed LaTeX measurement metadata in '{line}'.");
         }
     }
 

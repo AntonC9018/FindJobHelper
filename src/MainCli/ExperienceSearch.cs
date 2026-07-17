@@ -367,10 +367,26 @@ internal interface ISelectionAdmissionPolicy
 {
     bool PrioritizeMinimums { get; }
 
-    bool CanAccept(SelectionAdmission admission);
+    SelectionAdmissionDecision Evaluate(SelectionAdmission admission);
 
     void Commit(SelectionAdmission admission);
 }
+
+internal readonly record struct SelectionAdmissionDecision(
+    SelectionAdmissionRejection? Rejection)
+{
+    public bool IsAccepted => Rejection is null;
+
+    public static SelectionAdmissionDecision Accepted => default;
+
+    public static SelectionAdmissionDecision Reject(string reason)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+        return new(new(reason));
+    }
+}
+
+internal sealed record SelectionAdmissionRejection(string Reason);
 
 internal readonly record struct SelectionAdmission(
     ExperienceSelectionGroup Group,
@@ -387,7 +403,8 @@ internal sealed class UnlimitedSelectionAdmissionPolicy : ISelectionAdmissionPol
 
     public bool PrioritizeMinimums => false;
 
-    public bool CanAccept(SelectionAdmission admission) => true;
+    public SelectionAdmissionDecision Evaluate(SelectionAdmission admission)
+        => SelectionAdmissionDecision.Accepted;
 
     public void Commit(SelectionAdmission admission)
     {
@@ -1005,11 +1022,12 @@ internal static class ExperienceSelectionEngine
             int listIndex)
         {
             var admission = new SelectionAdmission(group, list, []);
-            if (!_admissionPolicy.CanAccept(admission))
+            var decision = _admissionPolicy.Evaluate(admission);
+            if (!decision.IsAccepted)
             {
-                throw new InvalidOperationException(
-                    $"Required experience headings exceed the usable one-page height; " +
-                    $"the heading for '{list.Title}' could not be included.");
+                throw new RequiredExperienceHeadingLayoutException(
+                    list.Title.Value,
+                    decision.Rejection!.Reason);
             }
 
             ref var groupResults = ref CollectionsMarshal.GetValueRefOrAddDefault(
@@ -1043,7 +1061,7 @@ internal static class ExperienceSelectionEngine
 
             var pendingItems = _temp.Select(static pending => pending.Item).ToArray();
             var admission = new SelectionAdmission(candidate.Group, candidate.List, pendingItems);
-            if (!_admissionPolicy.CanAccept(admission))
+            if (!_admissionPolicy.Evaluate(admission).IsAccepted)
             {
                 return false;
             }

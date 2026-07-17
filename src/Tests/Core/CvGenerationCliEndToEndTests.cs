@@ -95,7 +95,7 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     [Fact]
-    public async Task Generate_DisabledOnePageLimitPublishesUnrestrictedPdf()
+    public async Task Generate_ExactTwoPageFixturePublishesPdf()
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-multipage-e2e-{Guid.NewGuid():N}");
         try
@@ -111,6 +111,58 @@ public sealed class CvGenerationCliEndToEndTests
                 $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
             Assert.True(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
             Assert.Single(Directory.GetFiles(outputDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_LegacyFalsePublishesUnrestrictedAtomicPdf()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-unrestricted-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                UnrestrictedFixturePath,
+                "--output-directory",
+                outputDirectory);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
+            Assert.Single(Directory.GetFiles(outputDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_UnattainableExactCountFailsWithoutPublishingPdf()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-unattainable-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                UnattainableFixturePath,
+                "--output-directory",
+                outputDirectory);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains("Configured pageCount 2", result.StandardError, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
         }
         finally
         {
@@ -159,6 +211,16 @@ public sealed class CvGenerationCliEndToEndTests
         AppContext.BaseDirectory,
         "data",
         "cli-e2e-multipage-config.json");
+
+    private static string UnrestrictedFixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-unrestricted-config.json");
+
+    private static string UnattainableFixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-unattainable-config.json");
 
     private sealed record ProcessResult(int ExitCode, string StandardOutput, string StandardError);
 }

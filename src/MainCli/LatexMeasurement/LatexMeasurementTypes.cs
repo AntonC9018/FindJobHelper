@@ -12,15 +12,40 @@ public readonly record struct LatexHeight(long ScaledPoints)
     public static LatexHeight Zero { get; } = new(0);
 }
 
-public sealed record CvMeasurementSnapshot(
-    IReadOnlyDictionary<ExperienceItemId, LatexHeight> ExperienceItems,
-    IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceHeadings,
-    IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceChrome,
-    IReadOnlyDictionary<Section, LatexHeight> CompleteSections,
-    IReadOnlyDictionary<Section, LatexHeight> SectionChrome,
-    LatexHeight DocumentChrome,
-    LatexHeight UsablePageHeight)
+public sealed record CvMeasurementSnapshot
 {
+    public CvMeasurementSnapshot(
+        IReadOnlyDictionary<ExperienceItemId, LatexHeight> experienceItems,
+        IReadOnlyDictionary<ExperienceListId, LatexHeight> experienceHeadings,
+        IReadOnlyDictionary<ExperienceListId, LatexHeight> experienceChrome,
+        IReadOnlyDictionary<Section, LatexHeight> currentPageCompleteSections,
+        IReadOnlyDictionary<Section, LatexHeight> currentPageSectionChrome,
+        IReadOnlyDictionary<Section, LatexHeight> freshPageSectionChrome,
+        LatexHeight documentHeader,
+        LatexHeight documentFooter,
+        LatexHeight usablePageHeight)
+    {
+        ExperienceItems = experienceItems;
+        ExperienceHeadings = experienceHeadings;
+        ExperienceChrome = experienceChrome;
+        CurrentPageCompleteSections = currentPageCompleteSections;
+        CurrentPageSectionChrome = currentPageSectionChrome;
+        FreshPageSectionChrome = freshPageSectionChrome;
+        DocumentHeader = documentHeader;
+        DocumentFooter = documentFooter;
+        UsablePageHeight = usablePageHeight;
+    }
+
+    public IReadOnlyDictionary<ExperienceItemId, LatexHeight> ExperienceItems { get; }
+    public IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceHeadings { get; }
+    public IReadOnlyDictionary<ExperienceListId, LatexHeight> ExperienceChrome { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> CurrentPageCompleteSections { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> CurrentPageSectionChrome { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> FreshPageSectionChrome { get; }
+    public LatexHeight DocumentHeader { get; }
+    public LatexHeight DocumentFooter { get; }
+    public LatexHeight UsablePageHeight { get; }
+
     public LatexHeight GetExperienceItemHeight(ExperienceItemId id)
         => GetRequired(ExperienceItems, id, "experience item");
 
@@ -30,27 +55,64 @@ public sealed record CvMeasurementSnapshot(
     public LatexHeight GetExperienceChromeHeight(ExperienceListId id)
         => GetRequired(ExperienceChrome, id, "experience list chrome");
 
-    public LatexHeight GetCompleteSectionHeight(Section section)
-        => GetRequired(CompleteSections, section, "complete section");
+    public LatexHeight GetCurrentPageCompleteSectionHeight(Section section)
+        => GetRequired(CurrentPageCompleteSections, section, "current-page complete section");
 
-    public LatexHeight GetSectionChromeHeight(Section section)
-        => GetRequired(SectionChrome, section, "section chrome");
+    public LatexHeight GetCurrentPageSectionChromeHeight(Section section)
+        => GetRequired(CurrentPageSectionChrome, section, "current-page section chrome");
+
+    public LatexHeight GetFreshPageSectionChromeHeight(Section section)
+        => GetRequired(FreshPageSectionChrome, section, "fresh-page section chrome");
+
+    public LatexHeight DeriveFreshPageSectionHeight(
+        Section section,
+        LatexHeight currentPageSectionHeight)
+    {
+        if (currentPageSectionHeight.ScaledPoints < 0)
+        {
+            throw new CvMeasurementInvariantException(
+                $"Current-page height for section '{section}' cannot be negative.");
+        }
+        if (currentPageSectionHeight.ScaledPoints == 0)
+        {
+            return LatexHeight.Zero;
+        }
+
+        var height = checked(
+            currentPageSectionHeight.ScaledPoints
+            - GetCurrentPageSectionChromeHeight(section).ScaledPoints
+            + GetFreshPageSectionChromeHeight(section).ScaledPoints);
+        if (height < 0)
+        {
+            throw new CvMeasurementInvariantException(
+                $"Derived fresh-page height for section '{section}' cannot be negative.");
+        }
+
+        return new(height);
+    }
+
+    public LatexHeight GetFreshPageCompleteSectionHeight(Section section)
+        => DeriveFreshPageSectionHeight(section, GetCurrentPageCompleteSectionHeight(section));
 
     internal static CvMeasurementSnapshot CreateFrozen(
         IDictionary<ExperienceItemId, LatexHeight> experienceItems,
         IDictionary<ExperienceListId, LatexHeight> experienceHeadings,
         IDictionary<ExperienceListId, LatexHeight> experienceChrome,
-        IDictionary<Section, LatexHeight> completeSections,
-        IDictionary<Section, LatexHeight> sectionChrome,
-        LatexHeight documentChrome,
+        IDictionary<Section, LatexHeight> currentPageCompleteSections,
+        IDictionary<Section, LatexHeight> currentPageSectionChrome,
+        IDictionary<Section, LatexHeight> freshPageSectionChrome,
+        LatexHeight documentHeader,
+        LatexHeight documentFooter,
         LatexHeight usablePageHeight)
         => new(
             experienceItems.ToFrozenDictionary(),
             experienceHeadings.ToFrozenDictionary(),
             experienceChrome.ToFrozenDictionary(),
-            completeSections.ToFrozenDictionary(),
-            sectionChrome.ToFrozenDictionary(),
-            documentChrome,
+            currentPageCompleteSections.ToFrozenDictionary(),
+            currentPageSectionChrome.ToFrozenDictionary(),
+            freshPageSectionChrome.ToFrozenDictionary(),
+            documentHeader,
+            documentFooter,
             usablePageHeight);
 
     private static LatexHeight GetRequired<TKey>(
@@ -80,6 +142,7 @@ internal enum LatexMeasurementKind
     ExperienceHeading,
     ExperienceChrome,
     SectionChrome,
+    FreshPageSectionChrome,
     StaticSection,
     CompleteSection,
     DocumentHeader,
@@ -91,7 +154,9 @@ internal enum LatexMeasurementMode
 {
     Box,
     FlowBlock,
+    FreshPageFlowBlock,
     SectionChrome,
+    FreshPageSectionChrome,
     ExperienceItemMarginal,
     ExperienceChromeWithoutPermanentItems,
     DocumentHeader,

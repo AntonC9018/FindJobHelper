@@ -328,23 +328,11 @@
   }}%
 }
 
-% \usepackage{varwidth}
-% \usepackage{environ}
-%
-% \NewEnviron{flowblock}{%
-%     \BODY\par
-% }
-% \NewEnviron{flowblock}{%
-%     \begin{varwidth}[t]{\linewidth}
-%         \BODY
-%     \end{varwidth}%
-%     \hspace{1em plus 1fill}\allowbreak
-% }
 \usepackage{varwidth}
 \usepackage{needspace}
 \usepackage{environ}
-\newsavebox{\flowbox}
-\newsavebox{\flowfitbox}
+\newsavebox{\flowcurrentbox}
+\newsavebox{\flowfreshbox}
 \newsavebox{\cvmeasurementbox}
 \newsavebox{\cvmeasurementreferencebox}
 \newsavebox{\cvmeasurementcandidatebox}
@@ -373,15 +361,26 @@
     \vspace*{1.5\baselineskip}%
 }
 
-% The complete representation used when a section fits on the current page.
-% Production and measurement must use this exact wrapper so all leading and
-% trailing glue is charged once.
-\newcommand{\cvflowblockfitcontent}[1]{%
-    \cvflowblockfitskip
-    #1
+\newcommand{\cvflowblocktrailingglue}{%
     \par
     \hspace{1em plus 1fill}\allowbreak
     \par
+}
+
+% Complete section representations shared by production and measurement.
+% The fresh-page form deliberately owns every bit of page-top and boundary
+% spacing so it can be boxed and checked as one atomic unit.
+\newcommand{\cvflowblockcurrentcontent}[1]{%
+    \cvflowblockfitskip
+    #1
+    \cvflowblocktrailingglue
+}
+
+\newcommand{\cvflowblockfreshcontent}[1]{%
+    \cvflowblocknewpageskip
+    \cvflowblockfitskip
+    #1
+    \cvflowblocktrailingglue
 }
 
 % Hidden measurement entry points. The caller reads \ht/\dp from
@@ -391,9 +390,15 @@
 }
 
 \newcommand{\cvsetmeasurementsectionbox}[1]{%
-    \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfitcontent{#1}}%
+    \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockcurrentcontent{#1}}%
     % Production contributes 1pt at each flowblock boundary. Charge it to
     % the section; document-header measurement cancels it for the first one.
+    \dimen0=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox+1pt\relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+\newcommand{\cvsetmeasurementfreshsectionbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfreshcontent{#1}}%
     \dimen0=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox+1pt\relax
     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
@@ -411,7 +416,22 @@
 % before the same event primitive used in production.
 \newcommand{\cvsetmeasurementsectionchromebox}[1]{%
     \cvsetflowcontentbox{\cvmeasurementcandidatebox}{%
-        \cvflowblockfitcontent{#1\cvmeasurementsentinelevent}%
+        \cvflowblockcurrentcontent{#1\cvmeasurementsentinelevent}%
+    }%
+    \cvsetflowcontentbox{\cvmeasurementreferencebox}{%
+        \cvmeasurementsentinelevent
+    }%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
+        -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
+        +1pt
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+\newcommand{\cvsetmeasurementfreshsectionchromebox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementcandidatebox}{%
+        \cvflowblockfreshcontent{#1\cvmeasurementsentinelevent}%
     }%
     \cvsetflowcontentbox{\cvmeasurementreferencebox}{%
         \cvmeasurementsentinelevent
@@ -441,15 +461,15 @@
     \cvsetmeasurementbox{#1}%
 }
 
-\NewEnviron{flowblock}{%
+% #1 is a stable section label used in overflow diagnostics.
+\NewEnviron{flowblock}[1]{%
     \par
 
-    % Measure both the raw body and the exact fit representation.
-    \cvsetflowcontentbox{\flowbox}{\BODY}%
-    \cvsetflowcontentbox{\flowfitbox}{\cvflowblockfitcontent{\BODY}}%
+    \cvsetflowcontentbox{\flowcurrentbox}{\cvflowblockcurrentcontent{\BODY}}%
+    \cvsetflowcontentbox{\flowfreshbox}{\cvflowblockfreshcontent{\BODY}}%
 
     \setlength{\flowheight}{%
-        \dimexpr\ht\flowfitbox+\dp\flowfitbox\relax
+        \dimexpr\ht\flowcurrentbox+\dp\flowcurrentbox+1pt\relax
     }
 
     % Remaining vertical space on current page
@@ -457,20 +477,15 @@
 
     % If the complete fit representation fits here, use the measured box.
     \ifdim\flowheight>\dimen0
-        \newpage
-        \cvflowblocknewpageskip
-
-        % Large blocks become breakable.
-        \dimen2=\dimexpr\ht\flowbox+\dp\flowbox\relax
+        % The fresh representation includes page-top spacing, section spacing,
+        % and trailing glue. It must fit as one box or generation fails.
+        \dimen2=\dimexpr\ht\flowfreshbox+\dp\flowfreshbox+1pt\relax
         \ifdim\dimen2>\textheight
-            \BODY
-        \else
-            \usebox{\flowbox}%
+            \PackageError{FindJobHelper}{FJH_SECTION_PAGE_OVERFLOW: #1}{The complete section, including fresh-page spacing, must fit on one page.}%
         \fi
-
-        \par
-        \hspace{1em plus 1fill}\allowbreak
+        \newpage
+        \usebox{\flowfreshbox}%
     \else
-        \usebox{\flowfitbox}%
+        \usebox{\flowcurrentbox}%
     \fi
 }

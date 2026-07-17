@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using CliWrap;
 using CodegenCS;
 using CodegenCS.IO;
@@ -17,6 +18,7 @@ public record struct GenerateParams()
     public required CvDataModel Model;
     public required CancellationToken CancellationToken;
     public bool IsDebug = false;
+    public CvPageCount PageCount;
 }
 
 public sealed record GeneratedCvArtifacts(string PdfPath);
@@ -24,10 +26,51 @@ public sealed record GeneratedCvArtifacts(string PdfPath);
 internal static class CvLatexErrors
 {
     public const string MetadataLeftOverflowMarker = "FJH_METADATA_LEFT_OVERFLOW";
-    public const string MetadataLeftOverflowMessage = "Left-side metadata must fit within its column.";
+    public const string MetadataLeftOverflowMessage = CvMetadataOverflowException.ErrorMessage;
+    public const string SectionPageOverflowMarker = "FJH_SECTION_PAGE_OVERFLOW";
 
     public static bool ContainsMetadataLeftOverflowMarker(string output)
         => output.Contains(MetadataLeftOverflowMarker, StringComparison.Ordinal);
+
+    public static bool ContainsSectionPageOverflowMarker(string output)
+        => output.Contains(SectionPageOverflowMarker, StringComparison.Ordinal);
+
+    public static CvSectionPageOverflowException CreateSectionPageOverflowException(string output)
+    {
+        var match = Regex.Match(
+            output,
+            @"FJH_SECTION_PAGE_OVERFLOW:\s*([^\r\n.]+)",
+            RegexOptions.CultureInvariant);
+        var label = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+        return new(label.Length == 0 ? null : label);
+    }
+}
+
+internal static partial class LatexLogPageCountParser
+{
+    [GeneratedRegex(
+        @"Output written on main\.(?:pdf|xdv) \((\d+) pages?\b",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex PageCountRegex();
+
+    public static bool TryParse(string latexLog, out int pageCount)
+    {
+        ArgumentNullException.ThrowIfNull(latexLog);
+        var matches = PageCountRegex().Matches(latexLog);
+        if (matches.Count > 0
+            && int.TryParse(
+                matches[^1].Groups[1].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out pageCount)
+            && pageCount > 0)
+        {
+            return true;
+        }
+
+        pageCount = 0;
+        return false;
+    }
 }
 
 public static class CvTemplate
@@ -36,7 +79,6 @@ public static class CvTemplate
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(p.ConfigFilePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(p.OutputDirectory);
-
         var outputDirectory = new DirectoryInfo(p.OutputDirectory);
         outputDirectory.Create();
 
@@ -49,16 +91,23 @@ public static class CvTemplate
 
         var languages = Languages(p.Model.Languages);
 
-        FormattableString Events1(ImmutableArray<Event> e, string sectionName)
+        FormattableString Events1(
+            ImmutableArray<Event> e,
+            Section section,
+            string sectionName)
         {
             return Events(
                 isDebug: p.IsDebug,
+                section: section,
                 sectionName: sectionName,
                 events: e);
         }
-        var experience = Events1(p.Model.WorkExperiences, "Experience");
-        var education = Events1(p.Model.Educations, "Education");
-        var personalProjects = Events1(p.Model.PersonalProjects, "Personal Projects") ;
+        var experience = Events1(p.Model.WorkExperiences, Section.WorkExperience, "Experience");
+        var education = Events1(p.Model.Educations, Section.Education, "Education");
+        var personalProjects = Events1(
+            p.Model.PersonalProjects,
+            Section.PersonalProjects,
+            "Personal Projects");
         var sections = new List<FormattableString>();
         foreach (var section in p.Model.SectionOrder)
         {
@@ -113,20 +162,44 @@ public static class CvTemplate
         if (!result.IsSuccess)
         {
             var latexLogPath = Path.Join(outputDirectory.FullName, "main.log");
-            if (File.Exists(latexLogPath)
-                && CvLatexErrors.ContainsMetadataLeftOverflowMarker(File.ReadAllText(latexLogPath)))
+            var latexLog = File.Exists(latexLogPath)
+                ? await File.ReadAllTextAsync(latexLogPath, p.CancellationToken)
+                : string.Empty;
+            if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
             {
-                throw new InvalidOperationException(CvLatexErrors.MetadataLeftOverflowMessage);
+                throw new CvMetadataOverflowException();
+            }
+            if (CvLatexErrors.ContainsSectionPageOverflowMarker(latexLog))
+            {
+                throw CvLatexErrors.CreateSectionPageOverflowException(latexLog);
             }
 
-            throw new InvalidOperationException("Latex execution failure");
+            throw new CvLatexCompilationException("LaTeX execution failed.");
+        }
+
+        if (p.PageCount.ExactCount is { } requiredPageCount)
+        {
+            var latexLogPath = Path.Join(outputDirectory.FullName, "main.log");
+            if (!File.Exists(latexLogPath)
+                || !LatexLogPageCountParser.TryParse(
+                    await File.ReadAllTextAsync(latexLogPath, p.CancellationToken),
+                    out var renderedPageCount))
+            {
+                throw new RenderedPageCountUnavailableException(requiredPageCount);
+            }
+            if (renderedPageCount != requiredPageCount)
+            {
+                throw new RenderedPageCountMismatchException(
+                    requiredPageCount,
+                    renderedPageCount);
+            }
         }
 
         var pdfOutputName = ReplaceExtension(latexFileName, ".pdf");
         var pdfOutputPath = Path.Join(outputDirectory.FullName, pdfOutputName);
         if (!File.Exists(pdfOutputPath))
         {
-            throw new InvalidOperationException("Latex completed without creating a PDF.");
+            throw new CvPdfNotProducedException();
         }
 
         return new(pdfOutputPath);
@@ -136,7 +209,7 @@ public static class CvTemplate
         ImmutableArray<LanguageProficiencyInfo> languages)
     {
         var inner = CvLatexFragmentRenderer.RenderLanguagesSectionInner(languages);
-        var wrapped = CvLatexFragmentRenderer.RenderProductionSection(inner);
+        var wrapped = CvLatexFragmentRenderer.RenderProductionSection(Section.Languages, inner);
         return $"{wrapped}";
     }
 
@@ -228,11 +301,12 @@ public static class CvTemplate
 
     private static FormattableString Events(
         bool isDebug,
+        Section section,
         ImmutableArray<Event> events,
         string sectionName)
     {
         var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(events, sectionName, isDebug);
-        var wrapped = CvLatexFragmentRenderer.RenderProductionSection(inner);
+        var wrapped = CvLatexFragmentRenderer.RenderProductionSection(section, inner);
         return $"{wrapped}";
     }
 

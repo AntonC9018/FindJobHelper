@@ -50,7 +50,14 @@ internal static class CvLatexFragmentRenderer
         };
     }
 
-    public static FormattableString RenderProductionSection(FormattableString innerLatex)
+    public static FormattableString RenderProductionSection(
+        Section section,
+        FormattableString innerLatex)
+        => RenderProductionSection(section.ToString(), innerLatex);
+
+    private static FormattableString RenderProductionSection(
+        string sectionLabel,
+        FormattableString innerLatex)
     {
         if (innerLatex.Format.Length == 0)
         {
@@ -58,7 +65,7 @@ internal static class CvLatexFragmentRenderer
         }
 
         return $$"""
-            \begin{flowblock}
+            \begin{flowblock}{ {{new LatexEscapedString(sectionLabel)}} }
             {{innerLatex}}
             \end{flowblock}
             """;
@@ -161,9 +168,6 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderSectionChrome(Section section)
         => $@"\cvsection{{{new LatexEscapedString(GetSectionTitle(section))}}}";
-
-    public static FormattableString RenderDocumentChrome(CvDataModel model)
-        => $"{RenderDocumentHeader(model)}{RenderDocumentFooter(model)}";
 
     public static FormattableString RenderDocumentHeader(CvDataModel model)
     {

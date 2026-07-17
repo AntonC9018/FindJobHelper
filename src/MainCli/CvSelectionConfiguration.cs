@@ -44,9 +44,37 @@ public sealed class CvConfigurationException : Exception
     }
 }
 
-public sealed class CvSelectionConfiguration
+internal sealed class JsonCvSelectionConfiguration
 {
-    public bool LimitToOnePage { get; init; } = true;
+    private bool _limitToOnePage = true;
+    private int? _pageCount;
+
+    public bool LimitToOnePage
+    {
+        get => _limitToOnePage;
+        init
+        {
+            _limitToOnePage = value;
+            IsLimitToOnePageSpecified = true;
+        }
+    }
+
+    public int? PageCount
+    {
+        get => _pageCount;
+        init
+        {
+            _pageCount = value;
+            IsPageCountSpecified = true;
+        }
+    }
+
+    [JsonIgnore]
+    internal bool IsLimitToOnePageSpecified { get; private set; }
+
+    [JsonIgnore]
+    internal bool IsPageCountSpecified { get; private set; }
+
     public required List<RequiredTagConfiguration> RequiredTags { get; init; }
     public required List<string> Skills { get; init; }
     public required List<string> Technologies { get; init; }
@@ -54,138 +82,19 @@ public sealed class CvSelectionConfiguration
     public required SelectionConfiguration Selection { get; init; }
     public required List<Section> SectionOrder { get; init; }
 
-    public static async Task<CvSelectionConfiguration> LoadAsync(
-        string filePath,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        var fullPath = Path.GetFullPath(filePath);
-        if (!File.Exists(fullPath))
-        {
-            throw new CvConfigurationException($"Configuration file was not found: '{fullPath}'.");
-        }
-
-        try
-        {
-            await using var input = File.OpenRead(fullPath);
-            var result = await JsonSerializer.DeserializeAsync<CvSelectionConfiguration>(
-                input,
-                JsonOptions,
-                cancellationToken);
-            if (result is null)
-            {
-                throw new CvConfigurationException("The configuration file must contain a JSON object.");
-            }
-
-            result.ValidateShape();
-            return result;
-        }
-        catch (JsonException ex)
-        {
-            throw new CvConfigurationException(
-                $"Configuration file '{fullPath}' is invalid: {ex.Message}",
-                ex);
-        }
-    }
-
-    public ConfiguredCvSearch BuildSearch(TagsDatabase tagsDatabase)
-    {
-        ArgumentNullException.ThrowIfNull(tagsDatabase);
-        ValidateShape();
-
-        var tagInputs = RequiredTags
-            .Select(tag => (tag.Name, tag.Weight))
-            .ToArray();
-
-        WeightedTags weightedTags;
-        var unknownTags = new List<string>();
-        foreach (var tag in RequiredTags)
-        {
-            try
-            {
-                _ = tagsDatabase.Find(tag.Name);
-            }
-            catch (InvalidOperationException)
-            {
-                unknownTags.Add($"Required tag '{tag.Name}' was not found in the tag database.");
-            }
-        }
-
-        if (unknownTags.Count > 0)
-        {
-            throw new CvConfigurationException(unknownTags);
-        }
-
-        try
-        {
-            weightedTags = tagsDatabase.Weighted(tagInputs);
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new CvConfigurationException(ex.Message, ex);
-        }
-
-        var mmr = new MmrOptions(
-            Mmr.RelevanceWeight,
-            Mmr.SaturationQuota,
-            Mmr.SaturationPenalty);
-        try
-        {
-            mmr.Validate();
-        }
-        catch (ArgumentOutOfRangeException ex)
-        {
-            throw new CvConfigurationException($"Invalid MMR configuration: {ex.Message}", ex);
-        }
-
-        var educationKey = new ExperienceKey("Education");
-        var workKey = new ExperienceKey("Work");
-        var personalProjectsKey = new ExperienceKey("PersonalProjects");
-
-        var builder = new SearchBuilder();
-        builder.Tags(weightedTags);
-        builder.Mmr(mmr);
-        builder.ConfigureDefaults(Selection.Default.Apply);
-        builder.Configure(
-            educationKey,
-            predicate: static experience => experience.Type.IsDegree(),
-            Selection.Education.Apply);
-        builder.Configure(
-            workKey,
-            predicate: static experience => experience.Type == ExperienceType.Job,
-            options =>
-            {
-                Selection.WorkExperience.Apply(options);
-                options.IncludeEmptyLists = true;
-            });
-        builder.Configure(
-            personalProjectsKey,
-            predicate: static experience => experience.Type == ExperienceType.Project,
-            Selection.PersonalProjects.Apply);
-
-        try
-        {
-            return new(
-                builder.Build(),
-                new(educationKey, workKey, personalProjectsKey),
-                Skills.Select(static skill => new RegularString(skill)).ToImmutableArray(),
-                Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
-                [.. SectionOrder],
-                LimitToOnePage);
-        }
-        catch (ArgumentOutOfRangeException ex)
-        {
-            throw new CvConfigurationException($"Invalid selection configuration: {ex.Message}", ex);
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new CvConfigurationException($"Invalid selection configuration: {ex.Message}", ex);
-        }
-    }
-
-    private void ValidateShape()
+    public CvSelectionConfiguration ToDomain()
     {
         var errors = new List<string>();
+        if (IsLimitToOnePageSpecified && IsPageCountSpecified)
+        {
+            errors.Add("'limitToOnePage' and 'pageCount' cannot both be supplied.");
+        }
+
+        if (IsPageCountSpecified && PageCount is null or <= 0)
+        {
+            errors.Add("'pageCount' must be a positive 32-bit integer.");
+        }
+
         if (RequiredTags is null || RequiredTags.Count == 0)
         {
             errors.Add("'requiredTags' must contain at least one tag.");
@@ -278,6 +187,63 @@ public sealed class CvSelectionConfiguration
         {
             throw new CvConfigurationException(errors);
         }
+
+        return new(
+            ResolvePageCount(),
+            [.. RequiredTags!],
+            [.. Skills!],
+            [.. Technologies!],
+            Mmr!,
+            Selection!,
+            [.. SectionOrder!]);
+    }
+
+    private CvPageCount ResolvePageCount()
+    {
+        if (IsPageCountSpecified)
+        {
+            return CvPageCount.Exact(PageCount!.Value);
+        }
+
+        return IsLimitToOnePageSpecified && !LimitToOnePage
+            ? CvPageCount.Unrestricted
+            : CvPageCount.OnePage;
+    }
+}
+
+public static class CvSelectionConfigurationLoader
+{
+    public static async Task<CvSelectionConfiguration> LoadAsync(
+        string filePath,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var fullPath = Path.GetFullPath(filePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new CvConfigurationException($"Configuration file was not found: '{fullPath}'.");
+        }
+
+        try
+        {
+            await using var input = File.OpenRead(fullPath);
+            var json = await JsonSerializer.DeserializeAsync<JsonCvSelectionConfiguration>(
+                input,
+                JsonOptions,
+                cancellationToken);
+            if (json is null)
+            {
+                throw new CvConfigurationException("The configuration file must contain a JSON object.");
+            }
+
+            return json.ToDomain();
+        }
+        catch (JsonException ex)
+        {
+            throw new CvConfigurationException(
+                $"Configuration file '{fullPath}' is invalid: {ex.Message}",
+                ex);
+        }
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -290,6 +256,134 @@ public sealed class CvSelectionConfiguration
             new JsonStringEnumConverter<Section>(allowIntegerValues: false),
         },
     };
+}
+
+public sealed class CvSelectionConfiguration
+{
+    internal CvSelectionConfiguration(
+        CvPageCount pageCount,
+        ImmutableArray<RequiredTagConfiguration> requiredTags,
+        ImmutableArray<string> skills,
+        ImmutableArray<string> technologies,
+        MmrConfiguration mmr,
+        SelectionConfiguration selection,
+        ImmutableArray<Section> sectionOrder)
+    {
+        PageCount = pageCount;
+        RequiredTags = requiredTags;
+        Skills = skills;
+        Technologies = technologies;
+        Mmr = mmr;
+        Selection = selection;
+        SectionOrder = sectionOrder;
+    }
+
+    public CvPageCount PageCount { get; }
+
+    public ImmutableArray<RequiredTagConfiguration> RequiredTags { get; }
+
+    public ImmutableArray<string> Skills { get; }
+
+    public ImmutableArray<string> Technologies { get; }
+
+    public MmrConfiguration Mmr { get; }
+
+    public SelectionConfiguration Selection { get; }
+
+    public ImmutableArray<Section> SectionOrder { get; }
+
+    public ConfiguredCvSearch BuildSearch(TagsDatabase tagsDatabase)
+    {
+        ArgumentNullException.ThrowIfNull(tagsDatabase);
+        var tagInputs = RequiredTags
+            .Select(tag => (tag.Name, tag.Weight))
+            .ToArray();
+
+        WeightedTags weightedTags;
+        var unknownTags = new List<string>();
+        foreach (var tag in RequiredTags)
+        {
+            try
+            {
+                _ = tagsDatabase.Find(tag.Name);
+            }
+            catch (InvalidOperationException)
+            {
+                unknownTags.Add($"Required tag '{tag.Name}' was not found in the tag database.");
+            }
+        }
+
+        if (unknownTags.Count > 0)
+        {
+            throw new CvConfigurationException(unknownTags);
+        }
+
+        try
+        {
+            weightedTags = tagsDatabase.Weighted(tagInputs);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new CvConfigurationException(ex.Message, ex);
+        }
+
+        var mmr = new MmrOptions(
+            Mmr.RelevanceWeight,
+            Mmr.SaturationQuota,
+            Mmr.SaturationPenalty);
+        try
+        {
+            mmr.Validate();
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new CvConfigurationException($"Invalid MMR configuration: {ex.Message}", ex);
+        }
+
+        var educationKey = new ExperienceKey("Education");
+        var workKey = new ExperienceKey("Work");
+        var personalProjectsKey = new ExperienceKey("PersonalProjects");
+
+        var builder = new SearchBuilder();
+        builder.Tags(weightedTags);
+        builder.Mmr(mmr);
+        builder.ConfigureDefaults(Selection.Default.Apply);
+        builder.Configure(
+            educationKey,
+            predicate: static experience => experience.Type.IsDegree(),
+            Selection.Education.Apply);
+        builder.Configure(
+            workKey,
+            predicate: static experience => experience.Type == ExperienceType.Job,
+            options =>
+            {
+                Selection.WorkExperience.Apply(options);
+                options.IncludeEmptyLists = true;
+            });
+        builder.Configure(
+            personalProjectsKey,
+            predicate: static experience => experience.Type == ExperienceType.Project,
+            Selection.PersonalProjects.Apply);
+
+        try
+        {
+            return new(
+                builder.Build(),
+                new(educationKey, workKey, personalProjectsKey),
+                Skills.Select(static skill => new RegularString(skill)).ToImmutableArray(),
+                Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
+                SectionOrder,
+                PageCount);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            throw new CvConfigurationException($"Invalid selection configuration: {ex.Message}", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new CvConfigurationException($"Invalid selection configuration: {ex.Message}", ex);
+        }
+    }
 }
 
 public sealed class RequiredTagConfiguration
@@ -376,4 +470,4 @@ public sealed record ConfiguredCvSearch(
     ImmutableArray<RegularString> Skills,
     ImmutableArray<RegularString> Technologies,
     ImmutableArray<Section> SectionOrder,
-    bool LimitToOnePage);
+    CvPageCount PageCount);
