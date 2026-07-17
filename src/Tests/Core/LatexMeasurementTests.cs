@@ -140,6 +140,7 @@ public sealed class LatexMeasurementTests
         [
             new(Category.Location, "Example City, Example Country"),
             new(Category.Email, "person@example.test"),
+            new(Category.Phone, "202-555-0100"),
         ];
 
         var header = CvLatexFragmentRenderer.Materialize(
@@ -147,9 +148,13 @@ public sealed class LatexMeasurementTests
 
         Assert.Contains(@"\begin{cvmetasectiontable}", header);
         Assert.Contains(@"\end{cvmetasectiontable}", header);
+        Assert.DoesNotContain(@"\rule[-1mm]{1mm}{0.9cm}", header);
         Assert.Equal(3, CountOccurrences(header, @"\metasection{"));
         Assert.Contains(@"\textbf{Skills:}", header);
         Assert.Contains(@"\textbf{Technologies:}", header);
+        Assert.Contains(@"\textbf{Location:} Example City, Example Country", header);
+        Assert.Contains(@"\textbf{Email:} person@example.test", header);
+        Assert.Contains(@"\textbf{Phone:} 202-555-0100", header);
     }
 
     [Fact]

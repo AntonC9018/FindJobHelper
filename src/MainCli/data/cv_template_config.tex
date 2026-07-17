@@ -166,9 +166,10 @@
     \vskip6pt
 }
 
-% Metadata is a two-column table with a visible divider. The left column gets
-% three quarters of the available width; the right column is kept compact for
-% contact details. Keep these dimensions shared by rendering and validation.
+% Metadata is a two-column table. The left column gets three quarters of the
+% available width; the right column is kept compact and left-aligned for
+% labelled contact details. Keep these dimensions shared by rendering and
+% validation.
 \newlength{\cvmetasectionleftwidth}
 \newlength{\cvmetasectionrightwidth}
 
@@ -187,9 +188,8 @@
     \footnotesize
     \setlength{\cvmetasectionleftwidth}{0.75\linewidth}%
     \setlength{\cvmetasectionrightwidth}{%
-        \dimexpr\linewidth-\cvmetasectionleftwidth-2\tabcolsep-\arrayrulewidth\relax}%
-    \arrayrulecolor{softcol}%
-    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{\cvmetasectionleftwidth}|>{\raggedleft\arraybackslash}p{\cvmetasectionrightwidth}@{}}%
+        \dimexpr\linewidth-\cvmetasectionleftwidth-2\tabcolsep\relax}%
+    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{\cvmetasectionleftwidth}>{\raggedright\arraybackslash}p{\cvmetasectionrightwidth}@{}}%
 }{%
     \end{tabular}%
     \endgroup

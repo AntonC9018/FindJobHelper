@@ -180,7 +180,7 @@ internal static class CvLatexFragmentRenderer
         return $$$"""
             \vspace{-8pt}
             \begin{center}
-            \HUGE \textsc{ {{{model.Name.Last}}} {{{model.Name.First}}} } \textcolor{sectcol}{\rule[-1mm]{1mm}{0.9cm}} \textsc{Resume}\\[2pt]
+            \HUGE \textsc{ {{{model.Name.Last}}} {{{model.Name.First}}} } \textsc{Resume}\\[2pt]
             \small {{{model.Profession.Value}}}
             \end{center}
             \vspace{6pt}
@@ -247,7 +247,9 @@ internal static class CvLatexFragmentRenderer
         {
             var info = i < model.CategorizedInfos.Length ? model.CategorizedInfos[i] : default;
             var list = i < model.CategorizedInfoLists.Length ? model.CategorizedInfoLists[i] : default;
-            FormattableString infoText = info == default ? Empty : FormatCategoryValue(info.Category, info.Value);
+            FormattableString infoText = info == default
+                ? Empty
+                : $@"\textbf{{{new LatexEscapedString(info.Category.DisplayName)}:}} {FormatCategoryValue(info.Category, info.Value)}";
             FormattableString listText = list == default
                 ? Empty
                 : $@"\textbf{{{new LatexEscapedString(list.Category.DisplayName)}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
