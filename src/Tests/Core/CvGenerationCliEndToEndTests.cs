@@ -122,6 +122,33 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     [Fact]
+    public async Task Generate_Entry19WithNoMinimumScoreLimitHonorsExactPageCount()
+    {
+        var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-entry-19-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                Entry19FixturePath,
+                "--output-directory",
+                outputDirectory);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
+            Assert.Single(Directory.GetFiles(outputDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Generate_LegacyFalsePublishesUnrestrictedAtomicPdf()
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-unrestricted-e2e-{Guid.NewGuid():N}");
@@ -211,6 +238,11 @@ public sealed class CvGenerationCliEndToEndTests
         AppContext.BaseDirectory,
         "data",
         "cli-e2e-multipage-config.json");
+
+    private static string Entry19FixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-entry-19-config.json");
 
     private static string UnrestrictedFixturePath => Path.Combine(
         AppContext.BaseDirectory,

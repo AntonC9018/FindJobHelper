@@ -193,11 +193,20 @@ public sealed class LatexMeasurementService
 
         var documentFooter = CvLatexFragmentRenderer.Materialize(
             CvLatexFragmentRenderer.RenderDocumentFooter(currentModel));
-        graph.Add(
-            CreateFragmentKey(LatexMeasurementKind.DocumentFooter, documentFooter),
-            documentFooter,
-            LatexMeasurementMode.Box,
-            MeasurementDestination.ForDocumentFooter());
+        if (documentFooter.Length == 0)
+        {
+            graph.Populate(
+                [MeasurementDestination.ForDocumentFooter()],
+                LatexHeight.Zero);
+        }
+        else
+        {
+            graph.Add(
+                CreateFragmentKey(LatexMeasurementKind.DocumentFooter, documentFooter),
+                documentFooter,
+                LatexMeasurementMode.Box,
+                MeasurementDestination.ForDocumentFooter());
+        }
 
         const string usablePageFragment = @"\rule{0pt}{\textheight}";
         graph.Add(

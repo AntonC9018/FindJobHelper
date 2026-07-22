@@ -157,6 +157,25 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public void DocumentHeaderMeasurementFlushesPageGlueWithoutFixedSizeCorrection()
+    {
+        var request = Request(
+            1,
+            LatexMeasurementKind.DocumentHeader,
+            "header",
+            LatexMeasurementMode.DocumentHeader);
+
+        var source = LatexMeasurementDocument.Generate(
+            "C:/template.tex",
+            "results.txt",
+            [request]);
+
+        Assert.Contains(@"\nointerlineskip\vbox{}", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\cvmeasurementsentinelsection", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("2.5pt", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ProductionSectionUsesLabelledAtomicCurrentAndFreshWrappers()
     {
         var rendered = CvLatexFragmentRenderer.Materialize(
@@ -170,6 +189,9 @@ public sealed class LatexMeasurementTests
         Assert.Contains(@"\newcommand{\cvflowblockfreshcontent}", template, StringComparison.Ordinal);
         Assert.Contains(@"\cvsetflowcontentbox{\flowcurrentbox}{\cvflowblockcurrentcontent{\BODY}}", template, StringComparison.Ordinal);
         Assert.Contains(@"\cvsetflowcontentbox{\flowfreshbox}{\cvflowblockfreshcontent{\BODY}}", template, StringComparison.Ordinal);
+        Assert.Contains(@"\nointerlineskip\box\flowcurrentbox", template, StringComparison.Ordinal);
+        Assert.Contains(@"\nointerlineskip\box\flowfreshbox", template, StringComparison.Ordinal);
+        Assert.DoesNotContain("+1pt", template, StringComparison.Ordinal);
         Assert.Contains(CvLatexErrors.SectionPageOverflowMarker, template, StringComparison.Ordinal);
         Assert.DoesNotContain("Large blocks become breakable", template, StringComparison.Ordinal);
     }
@@ -231,8 +253,12 @@ public sealed class LatexMeasurementTests
         Assert.Equal(1, runner.CallCount);
         Assert.Single(runner.Batches[0].Where(static request => request.CacheKey.Kind == LatexMeasurementKind.ExperienceItem));
         Assert.Single(runner.Batches[0].Where(static request => request.CacheKey.Kind == LatexMeasurementKind.ExperienceHeading));
+        Assert.DoesNotContain(
+            runner.Batches[0],
+            static request => request.CacheKey.Kind == LatexMeasurementKind.DocumentFooter);
         Assert.Equal(2, cold.ExperienceItems.Count);
         Assert.Single(cold.ExperienceHeadings);
+        Assert.Equal(LatexHeight.Zero, cold.DocumentFooter);
         Assert.Equal(
             cold.GetExperienceItemHeight(new ExperienceItemId(new ExperienceListId(0), 0)),
             cold.GetExperienceItemHeight(new ExperienceItemId(new ExperienceListId(0), 1)));
@@ -424,7 +450,6 @@ public sealed class LatexMeasurementTests
             Request(10, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(linkedList.Items[0]), LatexMeasurementMode.ExperienceItemMarginal),
             Request(11, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(linkedEvent, false), LatexMeasurementMode.Box),
             Request(12, LatexMeasurementKind.DocumentHeader, CvLatexFragmentRenderer.RenderDocumentHeader(documentModel), LatexMeasurementMode.DocumentHeader),
-            Request(13, LatexMeasurementKind.DocumentFooter, CvLatexFragmentRenderer.RenderDocumentFooter(documentModel), LatexMeasurementMode.Box),
             Request(14, LatexMeasurementKind.CompleteSection, completeDocument, LatexMeasurementMode.PageStart),
             Request(15, LatexMeasurementKind.CompleteSection, completeProjectSection, LatexMeasurementMode.FlowBlock),
             Request(16, LatexMeasurementKind.CompleteSection, twoSectionDocument, LatexMeasurementMode.PageStart),
@@ -466,12 +491,10 @@ public sealed class LatexMeasurementTests
         Assert.Equal(
             measured[new(14)].ScaledPoints,
             measured[new(12)].ScaledPoints
-            + measured[new(13)].ScaledPoints
             + measured[new(6)].ScaledPoints);
         Assert.Equal(
             measured[new(16)].ScaledPoints,
             measured[new(12)].ScaledPoints
-            + measured[new(13)].ScaledPoints
             + measured[new(6)].ScaledPoints
             + measured[new(15)].ScaledPoints);
         Assert.True(measured[new(7)].ScaledPoints > measured[new(6)].ScaledPoints);

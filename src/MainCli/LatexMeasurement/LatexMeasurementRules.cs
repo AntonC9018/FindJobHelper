@@ -3,5 +3,5 @@ namespace FindJobHelper.CVGeneration;
 public static class LatexMeasurementRules
 {
     // Increment when template layout or measurement semantics change.
-    public const int CurrentVersion = 16;
+    public const int CurrentVersion = 17;
 }

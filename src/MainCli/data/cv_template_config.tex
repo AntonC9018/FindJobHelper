@@ -391,25 +391,14 @@
 
 \newcommand{\cvsetmeasurementsectionbox}[1]{%
     \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockcurrentcontent{#1}}%
-    % Production contributes 1pt at each flowblock boundary. Charge it to
-    % the section; document-header measurement cancels it for the first one.
-    \dimen0=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox+1pt\relax
-    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
 
 \newcommand{\cvsetmeasurementfreshsectionbox}[1]{%
     \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfreshcontent{#1}}%
-    \dimen0=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox+1pt\relax
-    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
 
 \newcommand{\cvmeasurementsentinelevent}{%
     \cvevent{}{}{Personal}{}{}%
-}
-
-\newcommand{\cvmeasurementsentinelsection}{%
-    \cvsection{Measurement Sentinel}%
-    \cvmeasurementsentinelevent
 }
 
 % Measure section chrome as its observed marginal contribution immediately
@@ -424,7 +413,6 @@
     \dimen0=\dimexpr
         \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
         -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
-        +1pt
         \relax
     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
@@ -439,7 +427,6 @@
     \dimen0=\dimexpr
         \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
         -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
-        +1pt
         \relax
     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
@@ -469,7 +456,7 @@
     \cvsetflowcontentbox{\flowfreshbox}{\cvflowblockfreshcontent{\BODY}}%
 
     \setlength{\flowheight}{%
-        \dimexpr\ht\flowcurrentbox+\dp\flowcurrentbox+1pt\relax
+        \dimexpr\ht\flowcurrentbox+\dp\flowcurrentbox\relax
     }
 
     % Remaining vertical space on current page
@@ -479,13 +466,16 @@
     \ifdim\flowheight>\dimen0
         % The fresh representation includes page-top spacing, section spacing,
         % and trailing glue. It must fit as one box or generation fails.
-        \dimen2=\dimexpr\ht\flowfreshbox+\dp\flowfreshbox+1pt\relax
+        \dimen2=\dimexpr\ht\flowfreshbox+\dp\flowfreshbox\relax
         \ifdim\dimen2>\textheight
             \PackageError{FindJobHelper}{FJH_SECTION_PAGE_OVERFLOW: #1}{The complete section, including fresh-page spacing, must fit on one page.}%
         \fi
         \newpage
-        \usebox{\flowfreshbox}%
+        % Insert the measured box directly in vertical mode, preventing TeX
+        % from adding an unmeasured interline skip around it.
+        \nointerlineskip\box\flowfreshbox
     \else
-        \usebox{\flowcurrentbox}%
+        % The current-page representation follows the same exact-box rule.
+        \nointerlineskip\box\flowcurrentbox
     \fi
 }

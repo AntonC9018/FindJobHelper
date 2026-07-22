@@ -110,31 +110,7 @@ internal static class LatexMeasurementDocument
 
         foreach (var request in requests)
         {
-            if (request.Mode == LatexMeasurementMode.DocumentHeader)
-            {
-                source.AppendLine($$"""
-                    \clearpage
-                    \begingroup
-                    \cvsetmeasurementsectionbox{\cvmeasurementsentinelsection}
-                    \dimen2=\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax
-                    \fjhmeasurementpagetotal=\pagetotal
-                    {{request.RenderedFragment}}
-                    \begin{flowblock}{Measurement Sentinel}
-                    \cvmeasurementsentinelsection
-                    \end{flowblock}
-                    \par
-                    % The fresh-page header/boxed-section boundary suppresses
-                    % 2.5pt that exists when the section is boxed in isolation.
-                    \dimen0=\dimexpr\pagetotal-\fjhmeasurementpagetotal-\dimen2-2.5pt\relax
-                    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}
-                    \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
-                    \endgroup
-                    \clearpage
-                    """);
-                continue;
-            }
-
-            if (request.Mode == LatexMeasurementMode.PageStart)
+            if (request.Mode is LatexMeasurementMode.DocumentHeader or LatexMeasurementMode.PageStart)
             {
                 source.AppendLine($$"""
                     \clearpage
@@ -142,6 +118,9 @@ internal static class LatexMeasurementDocument
                     \fjhmeasurementpagetotal=\pagetotal
                     {{request.RenderedFragment}}
                     \par
+                    % A zero-height box makes TeX account for pending vertical
+                    % glue without adding an assumed measurement correction.
+                    \nointerlineskip\vbox{}
                     \dimen0=\dimexpr\pagetotal-\fjhmeasurementpagetotal\relax
                     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}
                     \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
