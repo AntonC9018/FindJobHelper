@@ -1,0 +1,623 @@
+using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
+
+namespace FindJobHelper.Core;
+
+// Assumes these types already exist:
+// - RegularString, LatexString, NullableLatexString
+// - Place, DateRange, OptionalDateParts
+
+
+// Tag reference with score for a specific experience item
+public readonly record struct TagReference(Tag Tag, int Score);
+
+// Experience item with its own tags and ordering constraints
+public sealed class ExperienceListItem
+{
+    public required RichText Text { get; init; }
+    public ImmutableArray<TagReference> Tags { get; init; } = ImmutableArray<TagReference>.Empty;
+    public ImmutableArray<RegularString> Urls { get; init; } = ImmutableArray<RegularString>.Empty;
+    [JsonRequired]
+    public ImmutableArray<ExperienceListItem> DependsOn { get; init; } = ImmutableArray<ExperienceListItem>.Empty;
+    [JsonRequired]
+    public ImmutableArray<ExperienceListItem> After { get; init; } = ImmutableArray<ExperienceListItem>.Empty;
+}
+
+public sealed record class MmrOptions(
+    float RelevanceWeight,
+    int SaturationQuota,
+    float SaturationPenalty)
+{
+    public static MmrOptions Default { get; } = new(
+        RelevanceWeight: 0.72f,
+        SaturationQuota: 2,
+        SaturationPenalty: 0.18f);
+
+    public void Validate()
+    {
+        if (float.IsNaN(RelevanceWeight) || RelevanceWeight is < 0 or > 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(RelevanceWeight),
+                RelevanceWeight,
+                "MMR relevance weight must be between 0 and 1.");
+        }
+
+        if (SaturationQuota < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(SaturationQuota),
+                SaturationQuota,
+                "Saturation quota must be at least 1.");
+        }
+
+        if (float.IsNaN(SaturationPenalty) || SaturationPenalty < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(SaturationPenalty),
+                SaturationPenalty,
+                "Saturation penalty must be non-negative.");
+        }
+    }
+}
+
+public static class ExperienceListSorter
+{
+    private sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T>
+        where T : class
+    {
+        public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+        public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj!);
+    }
+
+    public static List<T> TopologicalSort<T>(
+        this IEnumerable<T> items,
+        Func<T, IEnumerable<T>> predecessors)
+
+        where T : class
+    {
+        // Materialize input so we can iterate multiple times
+        var nodeList = items.ToList();
+
+        var comparer = new ReferenceEqualityComparer<T>();
+
+        // Map each node -> in-degree (number of dependencies inside the provided set)
+        var inDegree = new Dictionary<T, int>(nodeList.Count, comparer);
+        var adjacency = new Dictionary<T, List<T>>(comparer);
+
+        // Initialize inDegree for all nodes
+        foreach (var node in nodeList)
+        {
+            inDegree[node] = 0;
+        }
+
+        // Build graph from the nearest selected predecessors. Traversing
+        // through absent nodes preserves transitive constraints such as
+        // A after B after C when only A and C are selected.
+        var nodeSet = new HashSet<T>(nodeList, comparer);
+
+        foreach (var node in nodeList)
+        {
+            var nodePredecessors = new HashSet<T>(comparer);
+            foreach (var predecessor in SelectedPredecessors(node))
+            {
+                if (!nodePredecessors.Add(predecessor))
+                {
+                    continue;
+                }
+
+                if (!adjacency.TryGetValue(predecessor, out var list))
+                {
+                    list = new List<T>();
+                    adjacency[predecessor] = list;
+                }
+
+                list.Add(node);
+                inDegree[node] += 1;
+            }
+        }
+
+        IEnumerable<T> SelectedPredecessors(T node)
+        {
+            var visited = new HashSet<T>(comparer);
+            var pending = new Stack<T>();
+            PushPredecessors(node);
+
+            while (pending.TryPop(out var predecessor))
+            {
+                if (predecessor is null || !visited.Add(predecessor))
+                {
+                    continue;
+                }
+
+                if (nodeSet.Contains(predecessor))
+                {
+                    yield return predecessor;
+                    continue;
+                }
+
+                PushPredecessors(predecessor);
+            }
+
+            void PushPredecessors(T item)
+            {
+                foreach (var predecessor in predecessors(item))
+                {
+                    if (predecessor is not null)
+                    {
+                        pending.Push(predecessor);
+                    }
+                }
+            }
+        }
+
+        var originalIndexes = new Dictionary<T, int>(nodeList.Count, comparer);
+        for (var i = 0; i < nodeList.Count; i++)
+        {
+            originalIndexes[nodeList[i]] = i;
+        }
+
+        // Queue of nodes with zero in-degree, preferring the original order
+        // whenever dependency constraints allow it.
+        var q = new PriorityQueue<T, int>();
+        foreach (var (node, degree) in inDegree)
+        {
+            if (degree == 0)
+            {
+                q.Enqueue(node, originalIndexes[node]);
+            }
+        }
+
+        var result = new List<T>();
+
+        while (q.Count > 0)
+        {
+            var n = q.Dequeue();
+            result.Add(n);
+
+            if (!adjacency.TryGetValue(n, out var dependents))
+            {
+                continue;
+            }
+
+            foreach (var d in dependents)
+            {
+                inDegree[d] -= 1;
+                if (inDegree[d] == 0)
+                {
+                    q.Enqueue(d, originalIndexes[d]);
+                }
+            }
+        }
+
+        // If not all nodes are processed, there's a cycle
+        if (result.Count != nodeList.Count)
+        {
+            throw new InvalidOperationException("Cycle detected in ordering relationships.");
+        }
+
+        return result;
+    }
+
+    public static ImmutableArray<Event> AllEvents(
+        this IEnumerable<ExperienceList> lists)
+    {
+        var r = lists.Select(list =>
+        {
+            var items = list.Items
+                .TopologicalSort(OrderingPredecessors)
+                .Select(it => (it, 0.0f));
+            return new OutputEvent(list, TotalScore: 0, items);
+        });
+        return ToOutput(r);
+    }
+
+    internal static IEnumerable<ExperienceListItem> OrderingPredecessors(
+        ExperienceListItem item)
+    {
+        return item.DependsOn.Concat(item.After);
+    }
+
+    private readonly record struct OutputEvent(
+        ExperienceList List,
+        float TotalScore,
+        IEnumerable<(
+            ExperienceListItem Item,
+            float Score)> Items);
+
+    private static ImmutableArray<Event> ToOutput(IEnumerable<OutputEvent> s)
+    {
+         var builder = ImmutableArray.CreateBuilder<Event>();
+         var subBuilder = ImmutableArray.CreateBuilder<SubEvent>();
+
+         foreach (var t in s)
+         {
+             foreach (var x in t.Items)
+             {
+                 var latexStr = x.Item.Text.ToLatexString();
+                 subBuilder.Add(new(x.Score, latexStr));
+             }
+
+             builder.Add(new()
+             {
+                 DateRange = t.List.DateRange,
+                 Place = t.List.Place,
+                 Title = t.List.Title,
+                 Text = t.List.Description,
+                 DebugScore = t.TotalScore,
+                 SubItems = subBuilder.ToImmutable(),
+                 Urls = t.List.Urls,
+             });
+             subBuilder.Clear();
+         }
+
+         return builder.DrainToImmutable();
+    }
+
+}
+
+public enum ExperienceType
+{
+    Job,
+    Project,
+    BachelorsDegree,
+    MastersDegree,
+}
+
+public static class ExperienceTypeExtensions
+{
+    public static bool IsDegree(this ExperienceType t)
+        => t is ExperienceType.BachelorsDegree or ExperienceType.MastersDegree;
+
+}
+
+// Experience list
+public sealed class ExperienceList
+{
+    public required RegularString Title { get; init; }
+    public required Place Place { get; init; }
+    public required DateRange DateRange { get; init; }
+    public required ExperienceType Type { get; init; }
+    public NullableLatexString Description { get; init; } = NullableLatexString.Null;
+    public required ImmutableArray<ExperienceListItem> Items { get; init; }
+    public ImmutableArray<RegularString> Urls { get; init; } = ImmutableArray<RegularString>.Empty;
+}
+
+/// <summary>
+/// A process-local identifier derived from an experience list's position in the
+/// immutable database. Runtime identifiers are deliberately not persisted.
+/// </summary>
+public readonly record struct ExperienceListId(int Position);
+
+/// <summary>
+/// A process-local identifier derived from an item's position in its parent list.
+/// </summary>
+public readonly record struct ExperienceItemId(
+    ExperienceListId ListId,
+    int Position);
+
+public readonly record struct IdentifiedExperienceList(
+    ExperienceListId Id,
+    ExperienceList Value);
+
+public readonly record struct IdentifiedExperienceItem(
+    ExperienceItemId Id,
+    ExperienceListId ListId,
+    ExperienceList List,
+    ExperienceListItem Value);
+
+// Builder for individual experience item
+public sealed class ExperienceItemBuilder
+{
+    private RichText? _text;
+    private readonly ImmutableArray<TagReference>.Builder _tags = ImmutableArray.CreateBuilder<TagReference>();
+    private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
+    private readonly List<ExperienceItemBuilder> _dependsOn = new();
+    private readonly List<ExperienceItemBuilder> _after = new();
+
+    public void Text(RichTextInterpolatedStringHandler h)
+    {
+        _text = h.Build();
+    }
+
+    public void Tag(Tag tag, int score)
+    {
+        _tags.Add(new TagReference(tag, score));
+    }
+
+    public void Url(string url)
+    {
+        _urls.Add(new RegularString(url));
+    }
+
+    public ExperienceItemBuilder DependsOn(ExperienceItemBuilder other)
+    {
+        _dependsOn.Add(other);
+        return this;
+    }
+
+    public ExperienceItemBuilder After(ExperienceItemBuilder other)
+    {
+        _after.Add(other);
+        return this;
+    }
+
+    internal ExperienceListItem Build(Dictionary<ExperienceItemBuilder, ExperienceListItem> builtItems)
+    {
+        if (_text is null)
+        {
+            throw new InvalidOperationException("Text is required for an experience item");
+        }
+
+        var dependsOn = Resolve(_dependsOn);
+        var after = Resolve(_after);
+
+        return new ExperienceListItem
+        {
+            Text = _text,
+            Tags = _tags.DrainToImmutable(),
+            Urls = _urls.DrainToImmutable(),
+            DependsOn = dependsOn,
+            After = after,
+        };
+
+        ImmutableArray<ExperienceListItem> Resolve(
+            IEnumerable<ExperienceItemBuilder> references)
+        {
+            return references
+                .Select(builder => builtItems.TryGetValue(builder, out var item)
+                    ? item
+                    : throw new InvalidOperationException("Referenced item has not been built yet"))
+                .ToImmutableArray();
+        }
+    }
+}
+
+// public interface IExperienceBuilder
+// {
+//     public void Url(string url);
+//     public void Tag(Tag tag, int score);
+// }
+
+// Builder for experience list
+public sealed class ExperienceListBuilder
+{
+    private string? _title;
+    private Place _place;
+    private DateRange? _dateRange;
+    private ExperienceType _type;
+    private readonly List<ExperienceItemBuilder> _itemBuilders = new();
+    private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
+    private NullableLatexString _description = NullableLatexString.Null;
+
+    internal ExperienceListBuilder(ExperienceType type)
+    {
+        _type = type;
+    }
+
+    public void Title(string title)
+    {
+        _title = title;
+    }
+
+    public void Place(Place place)
+    {
+        _place = place;
+    }
+
+    public void DateRange(DateRange dateRange)
+    {
+        _dateRange = dateRange;
+    }
+
+    public void Description(string description)
+    {
+        _description = new NullableLatexString(description);
+    }
+
+    public ExperienceItemBuilder Item(Action<ExperienceItemBuilder> configure)
+    {
+        var builder = new ExperienceItemBuilder();
+        configure(builder);
+        _itemBuilders.Add(builder);
+        return builder;
+    }
+
+    public void Url(string url)
+    {
+        _urls.Add(new RegularString(url));
+    }
+
+    internal ExperienceList Build()
+    {
+        if (_title is null)
+        {
+            throw new InvalidOperationException("Title is required");
+        }
+
+        if (_place == default)
+        {
+            throw new InvalidOperationException("Place is required");
+        }
+
+        if (_dateRange is null)
+        {
+            throw new InvalidOperationException("DateRange is required");
+        }
+
+        var builtItems = new Dictionary<ExperienceItemBuilder, ExperienceListItem>();
+
+        // Build items in declaration order so relationships can reference
+        // previously declared items.
+        foreach (var builder in _itemBuilders)
+        {
+            var item = builder.Build(builtItems);
+            builtItems[builder] = item;
+        }
+
+        return new ExperienceList
+        {
+            Title = new RegularString(_title),
+            Place = _place,
+            DateRange = _dateRange.Value,
+            Type = _type,
+            Description = _description,
+            Items = [.. builtItems.Values],
+            Urls = _urls.DrainToImmutable(),
+        };
+    }
+}
+
+// Immutable built experience database
+public sealed class ExperienceDatabase
+{
+    public required ImmutableArray<Place> AllPlaces { get; init; }
+    public required ImmutableArray<ExperienceList> Experiences { get; init; }
+
+    public IEnumerable<IdentifiedExperienceList> EnumerateExperienceLists()
+    {
+        for (var listPosition = 0; listPosition < Experiences.Length; listPosition++)
+        {
+            yield return new(
+                new ExperienceListId(listPosition),
+                Experiences[listPosition]);
+        }
+    }
+
+    public IEnumerable<IdentifiedExperienceItem> EnumerateExperienceItems()
+    {
+        foreach (var identifiedList in EnumerateExperienceLists())
+        {
+            var items = identifiedList.Value.Items;
+            for (var itemPosition = 0; itemPosition < items.Length; itemPosition++)
+            {
+                yield return new(
+                    new ExperienceItemId(identifiedList.Id, itemPosition),
+                    identifiedList.Id,
+                    identifiedList.Value,
+                    items[itemPosition]);
+            }
+        }
+    }
+}
+
+public sealed class WeightedTags : Dictionary<Tag, float>
+{
+    public bool IsEmpty => Count == 0;
+}
+
+public sealed class ScoredTags : Dictionary<Tag, float>
+{
+    public float Sum { get; }
+
+    public ScoredTags(IEnumerable<(Tag Tag, float Score)> x)
+    {
+        foreach (var i in x)
+        {
+            Sum += i.Score;
+            Add(i.Tag, i.Score);
+        }
+    }
+    public bool IsEmpty => Count == 0;
+}
+
+// Main database builder
+public sealed class ExperienceDatabaseBuilder
+{
+    private readonly ImmutableArray<Place>.Builder _allPlaces = ImmutableArray.CreateBuilder<Place>();
+    private readonly ImmutableArray<ExperienceList>.Builder _experiences = ImmutableArray.CreateBuilder<ExperienceList>();
+
+    public ExperienceDatabase Build()
+    {
+        return new ExperienceDatabase
+        {
+            AllPlaces = _allPlaces.ToImmutable(),
+            Experiences = _experiences.ToImmutable(),
+        };
+    }
+
+    public Place Place(Place place)
+    {
+        _allPlaces.Add(place);
+        return place;
+    }
+
+    public Place Place(string name)
+    {
+        var place = new Place
+        {
+            Name = name,
+        };
+        return Place(place);
+    }
+
+    private void Create(ExperienceType type, Action<ExperienceListBuilder> configure)
+    {
+        var builder = new ExperienceListBuilder(type);
+        configure(builder);
+        var experience = builder.Build();
+        _experiences.Add(experience);
+    }
+
+    public void Job(Action<ExperienceListBuilder> configure)
+    {
+        Create(ExperienceType.Job, configure);
+    }
+
+    public void PersonalProject(Action<ExperienceListBuilder> configure)
+    {
+        Create(ExperienceType.Project, configure);
+    }
+
+    public void BachelorsDegree(Action<ExperienceListBuilder> configure)
+    {
+        Create(ExperienceType.BachelorsDegree, configure);
+    }
+
+    public void MastersDegree(Action<ExperienceListBuilder> configure)
+    {
+        Create(ExperienceType.MastersDegree, configure);
+    }
+}
+
+public static class ExperienceDatabaseSerializer
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        ReferenceHandler = ReferenceHandler.Preserve,
+        Converters =
+        {
+            new JsonStringEnumConverter<ExperienceType>(),
+        },
+    };
+
+    extension (ExperienceDatabase db)
+    {
+        public async Task Serialize(Stream output, CancellationToken cancellationToken)
+        {
+            await JsonSerializer.SerializeAsync(
+                options: Options,
+                value: db,
+                utf8Json: output,
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    public static async Task<ExperienceDatabase> Deserialize(Stream input, CancellationToken cancellationToken)
+    {
+        var ret = await JsonSerializer.DeserializeAsync<ExperienceDatabase>(
+            options: Options,
+            utf8Json: input,
+            cancellationToken: cancellationToken);
+        if (ret == null)
+        {
+            throw new InvalidOperationException("File did not contain a db object.");
+        }
+        return ret;
+    }
+}
