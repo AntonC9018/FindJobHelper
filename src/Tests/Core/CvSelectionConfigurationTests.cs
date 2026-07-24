@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FindJobHelper.CVGeneration;
 using MainCli;
 
@@ -279,6 +280,44 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
+    public async Task LoadAsync_AllowsEmptySelectionAndDefaultsEverySection()
+    {
+        var json = ReplaceSelection(await ReadFixtureAsync(), new JsonObject());
+
+        var configuration = await LoadAsync(json);
+
+        Assert.All(configuration.Selection.Options, options =>
+        {
+            Assert.Equal(0, options.MinTotalItemBudget);
+            Assert.Null(options.TotalItemBudget);
+            Assert.Equal(0, options.ScoreLowerBound);
+            Assert.Equal(0, options.RecencyBoost);
+        });
+
+        _ = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
+    }
+
+    [Fact]
+    public async Task LoadAsync_AllowsPartialSectionConfiguration()
+    {
+        var json = ReplaceSelection(
+            await ReadFixtureAsync(),
+            new JsonObject
+            {
+                ["workExperience"] = new JsonObject
+                {
+                    ["recencyBoost"] = 0.25,
+                },
+            });
+
+        var configuration = await LoadAsync(json);
+
+        Assert.Null(configuration.Selection.Education.TotalItemBudget);
+        Assert.Equal(0.25f, configuration.Selection.WorkExperience.RecencyBoost);
+        Assert.Null(configuration.Selection.PersonalProjects.TotalItemBudget);
+    }
+
+    [Fact]
     public async Task LoadAsync_RejectsDuplicateSections()
     {
         var json = await ReadFixtureAsync();
@@ -398,6 +437,14 @@ public sealed class CvSelectionConfigurationTests
     }
 
     private static Task<string> ReadFixtureAsync() => File.ReadAllTextAsync(FixturePath);
+
+    private static string ReplaceSelection(string json, JsonObject selection)
+    {
+        var configuration = JsonNode.Parse(json)?.AsObject()
+            ?? throw new InvalidOperationException("The test fixture must contain a JSON object.");
+        configuration["selection"] = selection;
+        return configuration.ToJsonString();
+    }
 
     private static string FixturePath => Path.Combine(
         AppContext.BaseDirectory,
