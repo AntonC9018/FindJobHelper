@@ -487,6 +487,13 @@ public sealed class ExperienceItemRequirementBuilder
         return _item.SetRequired(ItemRequirement.IfAny);
     }
 
+    public ExperienceItemBuilder BeforeAny()
+    {
+        _item.SetRequired(ItemRequirement.IfAny);
+        _item.Order.Move().ToFront();
+        return _item;
+    }
+
     public ExperienceItemBuilder Always()
     {
         return _item.SetRequired(ItemRequirement.Always);

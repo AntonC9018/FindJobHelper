@@ -19,8 +19,8 @@ public sealed class ExperienceItemBuilderTests
             experience.Item(x =>
             {
                 x.Text($"conditional");
-                x.Required().IfAny().Required().IfAny();
-                x.Order.After(intro).Move().ToFront();
+                x.Required().BeforeAny().Required().BeforeAny();
+                x.Order.After(intro);
             });
             experience.Item(x =>
             {
@@ -46,6 +46,7 @@ public sealed class ExperienceItemBuilderTests
         var other = new ExperienceItemBuilder();
 
         Assert.Same(item, item.Required().IfAny());
+        Assert.Same(item, item.Required().BeforeAny());
         Assert.Same(item.Order, item.Order.After(other));
         Assert.Same(item.Order, item.Order.Move().ToFront());
     }
