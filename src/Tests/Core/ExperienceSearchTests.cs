@@ -1048,14 +1048,46 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_EnabledGroupAlwaysIncludesEveryThesisTenItem()
+    public void Search_IfAnyIsScopedToTheSameExperience()
     {
-        var matchingTag = new Tag("matching");
-        var thesisTag = new Tag("thesis");
-        var otherTag = new Tag("other");
+        var tag = new Tag("match");
         var builder = NewBuilder(new()
         {
-            [matchingTag] = 1,
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "matched",
+                ExperienceType.Job,
+                2025,
+                Item("selected", (tag, 10)),
+                RequiredItem("same-list conditional", ItemRequirement.IfAny)),
+            Experience(
+                "unmatched",
+                ExperienceType.Job,
+                2024,
+                RequiredItem("other-list conditional", ItemRequirement.IfAny)),
+        ]);
+
+        var events = result.Get(WorkKey);
+        Assert.Equal("matched", Assert.Single(events).Title.Value);
+        Assert.Equal(
+            new[] { "selected", "same-list conditional" },
+            Texts(events));
+    }
+
+    [Fact]
+    public void Search_EmptyHeadingDoesNotTriggerOnlyIfAnyItem()
+    {
+        var tag = new Tag("match");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
         });
         builder.Configure(
             WorkKey,
@@ -1063,33 +1095,180 @@ public sealed class ExperienceSearchTests
             opts =>
             {
                 opts.TotalItemBudget = 1;
-                opts.RecencyBoost = 0.5f;
+                opts.IncludeEmptyLists = true;
             });
 
         var result = builder.Build().Run([
             Experience(
-                "master",
+                "heading only",
                 ExperienceType.Job,
                 2025,
-                Item("selected", (matchingTag, 10)),
-                Item("master thesis", (thesisTag, 10)),
-                Item("lower-scored thesis", (thesisTag, 9)),
-                Item("different tag", (otherTag, 10))),
-            Experience(
-                "bachelor",
-                ExperienceType.Job,
-                2024,
-                Item("bachelor thesis", (thesisTag, 10))),
+                RequiredItem("conditional", ItemRequirement.IfAny)),
         ]);
 
-        var events = result.Get(WorkKey);
-        Assert.Equal(new[] { "master", "bachelor" }, events.Select(x => x.Title.ToString()));
-        Assert.Equal(new[] { "master thesis", "bachelor thesis" }, Texts(events));
+        Assert.Empty(Assert.Single(result.Get(WorkKey)).SubItems);
+        Assert.Empty(result.Diagnostics.Items);
+    }
+
+    [Fact]
+    public void Search_SelectingSoleIfAnyItemNormallyIsAllowed()
+    {
+        var tag = new Tag("match");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                RequiredItem(
+                    "conditional match",
+                    ItemRequirement.IfAny,
+                    (tag, 10))),
+        ]);
+
+        Assert.Equal(new[] { "conditional match" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(
+            SelectionItemReason.Direct,
+            Assert.Single(result.Diagnostics.Items).Reason);
+    }
+
+    [Fact]
+    public void Search_SelectingOneIfAnyItemTriggersOtherIfAnySiblings()
+    {
+        var tag = new Tag("match");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                RequiredItem(
+                    "matched conditional",
+                    ItemRequirement.IfAny,
+                    (tag, 10)),
+                RequiredItem(
+                    "unmatched conditional",
+                    ItemRequirement.IfAny)),
+        ]);
+
+        Assert.Equal(
+            new[] { "matched conditional", "unmatched conditional" },
+            Texts(result.Get(WorkKey)));
         Assert.Equal(
             new[]
             {
                 SelectionItemReason.Direct,
-                SelectionItemReason.Direct,
+                SelectionItemReason.RequiredIfAny,
+            },
+            result.Diagnostics.Items.Select(trace => trace.Reason).ToArray());
+    }
+
+    [Fact]
+    public void Search_IfAnyClosureIncludesMultipleItemsAndDependenciesOnce()
+    {
+        var tag = new Tag("match");
+        var dependency = Item("shared dependency");
+        var first = RequiredItemDependingOn(
+            "first conditional",
+            ItemRequirement.IfAny,
+            [dependency],
+            (tag, 1));
+        var second = RequiredItemDependingOn(
+            "second conditional",
+            ItemRequirement.IfAny,
+            [dependency]);
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts =>
+            {
+                opts.TotalItemBudget = 1;
+                opts.ScoreLowerBound = 5;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                dependency,
+                first,
+                second,
+                Item("selected", (tag, 10))),
+        ]);
+
+        var texts = Texts(result.Get(WorkKey));
+        Assert.Equal(4, texts.Length);
+        Assert.Equal(4, texts.Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains("selected", texts);
+        Assert.Contains("shared dependency", texts);
+        Assert.Contains("first conditional", texts);
+        Assert.Contains("second conditional", texts);
+
+        var reasons = result.Diagnostics.Items.ToDictionary(
+            trace => trace.Item.Text.ToString(),
+            trace => trace.Reason);
+        Assert.Equal(SelectionItemReason.Direct, reasons["selected"]);
+        Assert.Equal(SelectionItemReason.Dependency, reasons["shared dependency"]);
+        Assert.Equal(SelectionItemReason.RequiredIfAny, reasons["first conditional"]);
+        Assert.Equal(SelectionItemReason.RequiredIfAny, reasons["second conditional"]);
+
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(1, budget.RequestedMaximum);
+        Assert.Equal(4, budget.ActualCount);
+        Assert.Equal(-3, budget.RemainingMaximumBudget);
+    }
+
+    [Fact]
+    public void Search_AlwaysWorksWithoutTagMatchAndTriggersIfAny()
+    {
+        var queryTag = new Tag("query");
+        var builder = NewBuilder(new()
+        {
+            [queryTag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                RequiredItem("always", ItemRequirement.Always),
+                RequiredItem("conditional", ItemRequirement.IfAny)),
+        ]);
+
+        Assert.Equal(
+            new[] { "always", "conditional" },
+            Texts(result.Get(WorkKey)));
+        Assert.Equal(
+            new[]
+            {
+                SelectionItemReason.RequiredAlways,
+                SelectionItemReason.RequiredIfAny,
             },
             result.Diagnostics.Items.Select(x => x.Reason).ToArray());
 
@@ -1100,10 +1279,9 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_ZeroBudgetGroupDoesNotIncludeThesisItems()
+    public void Search_ZeroBudgetGroupSuppressesAlwaysItems()
     {
         var matchingTag = new Tag("matching");
-        var thesisTag = new Tag("thesis");
         var builder = NewBuilder(new()
         {
             [matchingTag] = 1,
@@ -1118,10 +1296,73 @@ public sealed class ExperienceSearchTests
                 "disabled",
                 ExperienceType.Job,
                 2025,
-                Item("thesis", (thesisTag, 10))),
+                RequiredItem("always", ItemRequirement.Always)),
         ]);
 
         Assert.Empty(result.Get(WorkKey));
+    }
+
+    [Fact]
+    public void Search_ThesisTagHasNoImplicitRequirementBehavior()
+    {
+        var matchingTag = new Tag("matching");
+        var thesisTag = new Tag("Thesis");
+        var builder = NewBuilder(new()
+        {
+            [matchingTag] = 1,
+        });
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 1);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("selected", (matchingTag, 10)),
+                Item("ordinary thesis tag", (thesisTag, 10))),
+        ]);
+
+        Assert.Equal(new[] { "selected" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_RequiredContentIsRegisteredWithMmr()
+    {
+        var repeatedTag = new Tag("repeated");
+        var diverseTag = new Tag("diverse");
+        var builder = NewBuilder(new()
+        {
+            [repeatedTag] = 1,
+            [diverseTag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0.9f,
+            SaturationQuota: 1,
+            SaturationPenalty: 0.5f));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            opts => opts.TotalItemBudget = 2);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                RequiredItem(
+                    "always",
+                    ItemRequirement.Always,
+                    (repeatedTag, 10)),
+                Item("redundant", (repeatedTag, 9)),
+                Item("diverse", (diverseTag, 5))),
+        ]);
+
+        Assert.Equal(
+            new[] { "always", "diverse" },
+            Texts(result.Get(WorkKey)));
     }
 
     [Fact]
@@ -1478,6 +1719,31 @@ public sealed class ExperienceSearchTests
         };
     }
 
+    private static ExperienceListItem RequiredItem(
+        string text,
+        ItemRequirement requirement,
+        params (Tag Tag, int Score)[] tags)
+    {
+        return RequiredItemDependingOn(text, requirement, [], tags);
+    }
+
+    private static ExperienceListItem RequiredItemDependingOn(
+        string text,
+        ItemRequirement requirement,
+        ExperienceListItem[] dependencies,
+        params (Tag Tag, int Score)[] tags)
+    {
+        return new()
+        {
+            Text = RichText.Create($"{new PlainText { Text = text }}"),
+            Tags = tags
+                .Select(x => new TagReference(x.Tag, x.Score))
+                .ToImmutableArray(),
+            DependsOn = dependencies.ToImmutableArray(),
+            Required = requirement,
+        };
+    }
+
     private static ExperienceListItem ItemAfter(
         string text,
         ExperienceListItem[] predecessors,
@@ -1485,8 +1751,11 @@ public sealed class ExperienceSearchTests
     {
         var item = Item(text, tags);
         typeof(ExperienceListItem)
-            .GetProperty(nameof(ExperienceListItem.After))!
-            .SetValue(item, predecessors.ToImmutableArray());
+            .GetProperty(nameof(ExperienceListItem.Order))!
+            .SetValue(item, new ItemOrder
+            {
+                After = predecessors.ToImmutableArray(),
+            });
         return item;
     }
 
@@ -1504,7 +1773,10 @@ public sealed class ExperienceSearchTests
         params ExperienceListItem[] predecessors)
     {
         typeof(ExperienceListItem)
-            .GetProperty(nameof(ExperienceListItem.After))!
-            .SetValue(item, predecessors.ToImmutableArray());
+            .GetProperty(nameof(ExperienceListItem.Order))!
+            .SetValue(item, new ItemOrder
+            {
+                After = predecessors.ToImmutableArray(),
+            });
     }
 }

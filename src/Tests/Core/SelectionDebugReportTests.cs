@@ -45,6 +45,21 @@ public sealed class SelectionDebugReportTests
                     .Select((item, index) => (item, index))
                     .ToDictionary(x => x.item, x => x.index);
 
+                var encounteredNonFront = false;
+                foreach (var item in selected)
+                {
+                    if (item.Order.Move == ItemMove.ToFront)
+                    {
+                        Assert.False(
+                            encounteredNonFront,
+                            $"Front-prefix violation in {run.Scenario}/{run.Preset}/{eventGroup.Key.Event.Title}: {item.Text} appeared after an ordinary item.");
+                    }
+                    else
+                    {
+                        encounteredNonFront = true;
+                    }
+                }
+
                 foreach (var trace in eventGroup)
                 {
                     foreach (var dependency in TransitiveDependencies(trace.Item))
@@ -94,7 +109,7 @@ public sealed class SelectionDebugReportTests
 
         void Push(ExperienceListItem parent)
         {
-            foreach (var predecessor in parent.DependsOn.Concat(parent.After))
+            foreach (var predecessor in parent.DependsOn.Concat(parent.Order.After))
             {
                 if (predecessor is not null)
                 {

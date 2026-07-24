@@ -50,7 +50,12 @@ public sealed class SomeTests
         {
             Text = RichText.Create($"{new PlainText { Text = "item" }}"),
             DependsOn = [],
-            After = [],
+            Required = ItemRequirement.None,
+            Order = new()
+            {
+                Move = ItemMove.None,
+                After = [],
+            },
         };
         var database = new ExperienceDatabase
         {

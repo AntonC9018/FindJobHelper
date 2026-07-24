@@ -8,13 +8,16 @@ namespace FindJobHelper.Core.Tests;
 public sealed class ExperienceListSorterTests
 {
     [Fact]
-    public void AllEvents_AfterOrdersItemsWithoutChangingSelection()
+    public void AllEvents_OrderAfterOrdersItemsWithoutChangingSelection()
     {
         var predecessor = Item(Text("predecessor"));
         var ordered = new ExperienceListItem
         {
             Text = RichText.Create($"{Text("ordered")}"),
-            After = [predecessor],
+            Order = new()
+            {
+                After = [predecessor],
+            },
         };
         var list = new ExperienceList
         {
@@ -34,21 +37,120 @@ public sealed class ExperienceListSorterTests
     }
 
     [Fact]
-    public void Factory_ExampleCo BetaAuthenticationIsOnlyOrderedAfterBackendIntroduction()
+    public void AllEvents_SelectedFrontItemAppearsFirst()
     {
-        var (tags, _) = TagsDatabaseFactory.Create();
-        var database = ExperienceDatabaseFactory.Create(tags);
-        var backend = Assert.Single(database.Experiences.Where(x =>
-            x.Title.Value == "Backend Developer" &&
-            x.Place.Name.Value == "ExampleCo Beta"));
-        var introduction = backend.Items[0];
-        var authentication = Assert.Single(backend.Items.Where(x =>
-            x.Tags.Any(tag =>
-                tag.Tag.Name.Equals("Security", StringComparison.OrdinalIgnoreCase) &&
-                tag.Score == 8)));
+        var ordinary = Item(Text("ordinary"));
+        var front = FrontItem(Text("front"));
+        var list = List(ordinary, front);
 
-        Assert.Empty(authentication.DependsOn);
-        Assert.Same(introduction, Assert.Single(authentication.After));
+        var texts = Assert.Single(new[] { list }.AllEvents())
+            .SubItems
+            .Select(x => x.String.ToString())
+            .ToArray();
+
+        Assert.Equal(new[] { "front", "ordinary" }, texts);
+    }
+
+    [Fact]
+    public void AllEvents_ExplicitRelationshipCanReorderFrontItems()
+    {
+        var secondFront = FrontItem(Text("second front"));
+        var firstFront = new ExperienceListItem
+        {
+            Text = RichText.Create($"{Text("first front")}"),
+            Order = new()
+            {
+                Move = ItemMove.ToFront,
+                After = [secondFront],
+            },
+        };
+        var list = List(
+            firstFront,
+            secondFront,
+            Item(Text("ordinary")));
+
+        var texts = Assert.Single(new[] { list }.AllEvents())
+            .SubItems
+            .Select(x => x.String.ToString())
+            .ToArray();
+
+        Assert.Equal(
+            new[] { "second front", "first front", "ordinary" },
+            texts);
+    }
+
+    [Fact]
+    public void Search_UnmatchedFrontItemRemainsUnselected()
+    {
+        var tag = new Tag("match");
+
+        var texts = SelectTexts(
+            tags: new WeightedTags { [tag] = 1 },
+            budget: 1,
+            scoreLowerBound: 0,
+            mmr: MmrOptions.Default,
+            items:
+            [
+                FrontItem(Text("front")),
+                Item(Text("selected"), (tag, 10)),
+            ]);
+
+        Assert.Equal(new[] { "selected" }, texts);
+    }
+
+    [Fact]
+    public void Search_MultipleFrontItemsFormStableDeclarationOrderPrefix()
+    {
+        var tag = new Tag("match");
+
+        var texts = SelectTexts(
+            tags: new WeightedTags { [tag] = 1 },
+            budget: 3,
+            scoreLowerBound: 0,
+            mmr: new(
+                RelevanceWeight: 1,
+                SaturationQuota: 1,
+                SaturationPenalty: 0),
+            items:
+            [
+                FrontItem(Text("front-first"), (tag, 8)),
+                Item(Text("ordinary"), (tag, 10)),
+                FrontItem(Text("front-second"), (tag, 9)),
+            ]);
+
+        Assert.Equal(
+            new[] { "front-first", "front-second", "ordinary" },
+            texts);
+    }
+
+    [Fact]
+    public void Search_ContradictoryFrontAndAfterRelationshipsThrowCycle()
+    {
+        var tag = new Tag("match");
+        var ordinary = Item(Text("ordinary"), (tag, 10));
+        var front = new ExperienceListItem
+        {
+            Text = RichText.Create($"{Text("front")}"),
+            Tags = [new(tag, 9)],
+            Order = new()
+            {
+                Move = ItemMove.ToFront,
+                After = [ordinary],
+            },
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SelectTexts(
+                tags: new WeightedTags { [tag] = 1 },
+                budget: 2,
+                scoreLowerBound: 0,
+                mmr: MmrOptions.Default,
+                items: [ordinary, front]));
+
+        Assert.Contains(
+            "Cycle detected in ordering relationships",
+            exception.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -208,14 +310,7 @@ public sealed class ExperienceListSorterTests
         MmrOptions mmr,
         params ExperienceListItem[] items)
     {
-        var list = new ExperienceList
-        {
-            Title = "test",
-            Place = new("test"),
-            DateRange = DateRange.Completed(new(Year: 2024), new(Year: 2025)),
-            Items = items.ToImmutableArray(),
-            Type = ExperienceType.Job,
-        };
+        var list = List(items);
 
         var key = new ExperienceKey("Default");
         var builder = new SearchBuilder();
@@ -268,6 +363,38 @@ public sealed class ExperienceListSorterTests
         {
             Text = RichText.Create($"{text}"),
             Tags = tagReferences,
+        };
+    }
+
+    private static ExperienceListItem FrontItem(
+        IRichTextNode text,
+        params (Tag Tag, int Score)[] tags)
+    {
+        var tagReferences = tags
+            .Select(x => new TagReference(x.Tag, x.Score))
+            .ToImmutableArray();
+
+        return new()
+        {
+            Text = RichText.Create($"{text}"),
+            Tags = tagReferences,
+            Order = new()
+            {
+                Move = ItemMove.ToFront,
+            },
+        };
+    }
+
+    private static ExperienceList List(
+        params ExperienceListItem[] items)
+    {
+        return new()
+        {
+            Title = "test",
+            Place = new("test"),
+            DateRange = DateRange.Completed(new(Year: 2024), new(Year: 2025)),
+            Items = items.ToImmutableArray(),
+            Type = ExperienceType.Job,
         };
     }
 

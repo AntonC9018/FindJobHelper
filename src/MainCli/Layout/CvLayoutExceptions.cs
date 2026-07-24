@@ -64,6 +64,38 @@ public sealed class RequiredExperienceHeadingLayoutException : CvLayoutException
     }
 }
 
+public sealed class RequiredExperienceItemLayoutException : CvLayoutException
+{
+    public RequiredExperienceItemLayoutException(
+        string experienceTitle,
+        string itemText,
+        string rejectionReason)
+        : base(FormatMessage(experienceTitle, itemText, rejectionReason))
+    {
+        ExperienceTitle = experienceTitle;
+        ItemText = itemText;
+        RejectionReason = rejectionReason;
+    }
+
+    public string ExperienceTitle { get; }
+
+    public string ItemText { get; }
+
+    public string RejectionReason { get; }
+
+    private static string FormatMessage(
+        string experienceTitle,
+        string itemText,
+        string rejectionReason)
+    {
+        var punctuation = rejectionReason.EndsWith(".", StringComparison.Ordinal)
+            ? string.Empty
+            : ".";
+        return $"Required experience item '{itemText}' from '{experienceTitle}' " +
+            $"could not be included because {rejectionReason}{punctuation}";
+    }
+}
+
 public sealed class CvSelectionCommitException : CvLayoutException
 {
     public CvSelectionCommitException(string message)

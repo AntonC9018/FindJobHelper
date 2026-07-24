@@ -415,6 +415,8 @@ internal enum SelectionItemReason
 {
     Direct,
     Dependency,
+    RequiredIfAny,
+    RequiredAlways,
 }
 
 internal sealed record SelectionItemTrace(
@@ -502,11 +504,11 @@ internal static class ExperienceSelectionEngine
                 itemIndex)))
             .ToList();
 
-        var requiredThesisCandidates = groupedLists
+        var alwaysCandidates = groupedLists
             .Where(x => x.Group.Options.TotalItemBudget > 0)
             .SelectMany(x => x.List.Items
                 .Select((item, itemIndex) => (Item: item, ItemIndex: itemIndex))
-                .Where(x => IsRequiredThesisItem(x.Item))
+                .Where(x => x.Item.Required == ItemRequirement.Always)
                 .Select(i => new MmrCandidate(
                     x.Group,
                     x.List,
@@ -526,7 +528,7 @@ internal static class ExperienceSelectionEngine
                 scoredList.ListIndex);
         }
 
-        if (candidates.Count == 0 && requiredThesisCandidates.Count == 0)
+        if (candidates.Count == 0 && alwaysCandidates.Count == 0)
         {
             return context.Output();
         }
@@ -534,17 +536,26 @@ internal static class ExperienceSelectionEngine
         var ranker = new MmrRanker(
             mmr,
             candidates
-                .Concat(requiredThesisCandidates)
+                .Concat(alwaysCandidates)
                 .Max(x => x.AdjustedRelevance));
 
-        foreach (var x in candidates.Concat(requiredThesisCandidates))
+        // Required items can bypass normal candidate filtering. Keep scores for
+        // every item so all content committed through a required closure is
+        // registered with MMR before subsequent candidates are ranked.
+        foreach (var scoredList in groupedLists)
         {
-            context.Scores.TryAdd(x.Item, x.Matches);
+            foreach (var item in scoredList.List.Items)
+            {
+                context.Scores.TryAdd(item, tags.Match(item.Tags));
+            }
         }
 
-        foreach (var candidate in requiredThesisCandidates)
+        foreach (var candidate in alwaysCandidates)
         {
-            TryAddAndRegister(candidate, allowExceedingBudget: true);
+            TryAddAndRegister(
+                candidate,
+                SelectionItemReason.RequiredAlways,
+                allowExceedingBudget: true);
         }
 
         var rejected = new HashSet<ExperienceListItem>(ItemReferenceComparer.Instance);
@@ -618,10 +629,12 @@ internal static class ExperienceSelectionEngine
 
         bool TryAddAndRegister(
             MmrCandidate candidate,
+            SelectionItemReason reason = SelectionItemReason.Direct,
             bool allowExceedingBudget = false)
         {
             return context.TryAdd(
                 candidate,
+                reason,
                 allowExceedingBudget,
                 added =>
                 {
@@ -989,7 +1002,6 @@ internal static class ExperienceSelectionEngine
         private readonly HashSet<ExperienceListItem> _tempVisited = new(ItemReferenceComparer.Instance);
         private readonly HashSet<ExperienceListItem> _tempVisiting = new(ItemReferenceComparer.Instance);
         private readonly Dictionary<ExperienceList, int> _listOrders = new();
-        private ExperienceListItem? _selectionRoot;
 
         public readonly HashSet<ExperienceListItem> Added = new(ItemReferenceComparer.Instance);
         public readonly Dictionary<ExperienceKey, Dictionary<ExperienceList, List<ExperienceListItem>>> Results = new();
@@ -1042,9 +1054,21 @@ internal static class ExperienceSelectionEngine
 
         public bool TryAdd(
             MmrCandidate candidate,
+            SelectionItemReason reason = SelectionItemReason.Direct,
             bool allowExceedingBudget = false,
             Action<ExperienceListItem>? onAdded = null)
         {
+            if (Added.Contains(candidate.Item))
+            {
+                if (reason == SelectionItemReason.RequiredAlways)
+                {
+                    Reasons[candidate.Item] = reason;
+                    DependencyTargets.Remove(candidate.Item);
+                }
+
+                return true;
+            }
+
             if (!allowExceedingBudget &&
                 _remainingMaximumBudgets[candidate.Group.Key] <= 0)
             {
@@ -1052,7 +1076,7 @@ internal static class ExperienceSelectionEngine
             }
 
             _temp.Clear();
-            CollectSelectionClosure(candidate.List, candidate.Item);
+            CollectSelectionClosure(candidate.List, candidate.Item, reason);
 
             if (_temp.Count == 0)
             {
@@ -1061,8 +1085,17 @@ internal static class ExperienceSelectionEngine
 
             var pendingItems = _temp.Select(static pending => pending.Item).ToArray();
             var admission = new SelectionAdmission(candidate.Group, candidate.List, pendingItems);
-            if (!_admissionPolicy.Evaluate(admission).IsAccepted)
+            var decision = _admissionPolicy.Evaluate(admission);
+            if (!decision.IsAccepted)
             {
+                if (reason == SelectionItemReason.RequiredAlways)
+                {
+                    throw new RequiredExperienceItemLayoutException(
+                        candidate.List.Title.Value,
+                        candidate.Item.Text.ToString(),
+                        decision.Rejection!.Reason);
+                }
+
                 return false;
             }
 
@@ -1113,8 +1146,8 @@ internal static class ExperienceSelectionEngine
                     foreach (var (list, items) in groupResults
                         .OrderBy(x => _listOrders.GetValueOrDefault(x.Key, int.MaxValue)))
                     {
-                        var sortedItems = items
-                            .TopologicalSort(ExperienceListSorter.OrderingPredecessors)
+                        var sortedItems = list
+                            .OrderItems(items)
                             .ToImmutableArray();
 
                         actualCount += sortedItems.Length;
@@ -1189,23 +1222,22 @@ internal static class ExperienceSelectionEngine
 
         private void CollectSelectionClosure(
             ExperienceList list,
-            ExperienceListItem item)
+            ExperienceListItem item,
+            SelectionItemReason reason)
         {
             _tempVisited.Clear();
             _tempVisiting.Clear();
-            _selectionRoot = item;
 
-            foreach (var requiredItem in list.Items.Where(IsRequiredThesisItem))
+            Visit(item, reason);
+
+            foreach (var requiredItem in list.Items.Where(
+                static sibling => sibling.Required == ItemRequirement.IfAny))
             {
-                if (ReferenceEquals(requiredItem, item))
+                if (!ReferenceEquals(requiredItem, item))
                 {
-                    continue;
+                    Visit(requiredItem, SelectionItemReason.RequiredIfAny);
                 }
-
-                Visit(requiredItem, SelectionItemReason.Dependency);
             }
-
-            Visit(item, SelectionItemReason.Direct);
         }
 
         private void Visit(
@@ -1214,15 +1246,6 @@ internal static class ExperienceSelectionEngine
         {
             if (Added.Contains(item))
             {
-                if (reason == SelectionItemReason.Dependency &&
-                    IsRequiredThesisItem(item) &&
-                    _selectionRoot is not null &&
-                    !ReferenceEquals(item, _selectionRoot))
-                {
-                    Reasons[item] = SelectionItemReason.Dependency;
-                    DependencyTargets[item] = _selectionRoot;
-                }
-
                 return;
             }
 
@@ -1251,13 +1274,6 @@ internal static class ExperienceSelectionEngine
             _tempVisited.Add(item);
             _temp.Add(new(item, reason));
         }
-    }
-
-    private static bool IsRequiredThesisItem(ExperienceListItem item)
-    {
-        return item.Tags.Any(tag =>
-            tag.Score == 10 &&
-            tag.Tag.Name.Equals("Thesis", StringComparison.OrdinalIgnoreCase));
     }
 
     private readonly record struct OutputEvent(

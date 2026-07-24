@@ -15,7 +15,35 @@ namespace FindJobHelper.Core;
 // Tag reference with score for a specific experience item
 public readonly record struct TagReference(Tag Tag, int Score);
 
+public enum ItemRequirement
+{
+    None,
+    IfAny,
+    Always,
+}
+
+public enum ItemMove
+{
+    None,
+    ToFront,
+}
+
+public readonly record struct ItemOrder
+{
+    public ItemOrder()
+    {
+    }
+
+    [JsonRequired]
+    public ItemMove Move { get; init; }
+
+    [JsonRequired]
+    public ImmutableArray<ExperienceListItem> After { get; init; } =
+        ImmutableArray<ExperienceListItem>.Empty;
+}
+
 // Experience item with its own tags and ordering constraints
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class ExperienceListItem
 {
     public required RichText Text { get; init; }
@@ -24,7 +52,9 @@ public sealed class ExperienceListItem
     [JsonRequired]
     public ImmutableArray<ExperienceListItem> DependsOn { get; init; } = ImmutableArray<ExperienceListItem>.Empty;
     [JsonRequired]
-    public ImmutableArray<ExperienceListItem> After { get; init; } = ImmutableArray<ExperienceListItem>.Empty;
+    public ItemRequirement Required { get; init; }
+    [JsonRequired]
+    public ItemOrder Order { get; init; } = new();
 }
 
 public sealed record class MmrOptions(
@@ -70,6 +100,8 @@ public static class ExperienceListSorter
     private sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T>
         where T : class
     {
+        public static ReferenceEqualityComparer<T> Instance { get; } = new();
+
         public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
         public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj!);
     }
@@ -208,18 +240,51 @@ public static class ExperienceListSorter
     {
         var r = lists.Select(list =>
         {
-            var items = list.Items
-                .TopologicalSort(OrderingPredecessors)
+            var items = list
+                .OrderItems(list.Items)
                 .Select(it => (it, 0.0f));
             return new OutputEvent(list, TotalScore: 0, items);
         });
         return ToOutput(r);
     }
 
+    internal static List<ExperienceListItem> OrderItems(
+        this ExperienceList list,
+        IEnumerable<ExperienceListItem> selectedItems)
+    {
+        var selected = selectedItems.ToList();
+        var selectedSet = new HashSet<ExperienceListItem>(
+            selected,
+            ReferenceEqualityComparer<ExperienceListItem>.Instance);
+        var frontItems = list.Items
+            .Where(item =>
+                selectedSet.Contains(item) &&
+                item.Order.Move == ItemMove.ToFront)
+            .ToList();
+
+        // Selection order remains the stable order for ordinary items. Front
+        // siblings use declaration order as their stable prefix.
+        var nodes = frontItems
+            .Concat(selected.Where(item => item.Order.Move != ItemMove.ToFront))
+            .ToList();
+
+        return nodes.TopologicalSort(item =>
+        {
+            var predecessors = OrderingPredecessors(item);
+            if (!selectedSet.Contains(item) ||
+                item.Order.Move == ItemMove.ToFront)
+            {
+                return predecessors;
+            }
+
+            return predecessors.Concat(frontItems);
+        });
+    }
+
     internal static IEnumerable<ExperienceListItem> OrderingPredecessors(
         ExperienceListItem item)
     {
-        return item.DependsOn.Concat(item.After);
+        return item.DependsOn.Concat(item.Order.After);
     }
 
     private readonly record struct OutputEvent(
@@ -231,31 +296,31 @@ public static class ExperienceListSorter
 
     private static ImmutableArray<Event> ToOutput(IEnumerable<OutputEvent> s)
     {
-         var builder = ImmutableArray.CreateBuilder<Event>();
-         var subBuilder = ImmutableArray.CreateBuilder<SubEvent>();
+        var builder = ImmutableArray.CreateBuilder<Event>();
+        var subBuilder = ImmutableArray.CreateBuilder<SubEvent>();
 
-         foreach (var t in s)
-         {
-             foreach (var x in t.Items)
-             {
-                 var latexStr = x.Item.Text.ToLatexString();
-                 subBuilder.Add(new(x.Score, latexStr));
-             }
+        foreach (var t in s)
+        {
+            foreach (var x in t.Items)
+            {
+                var latexStr = x.Item.Text.ToLatexString();
+                subBuilder.Add(new(x.Score, latexStr));
+            }
 
-             builder.Add(new()
-             {
-                 DateRange = t.List.DateRange,
-                 Place = t.List.Place,
-                 Title = t.List.Title,
-                 Text = t.List.Description,
-                 DebugScore = t.TotalScore,
-                 SubItems = subBuilder.ToImmutable(),
-                 Urls = t.List.Urls,
-             });
-             subBuilder.Clear();
-         }
+            builder.Add(new()
+            {
+                DateRange = t.List.DateRange,
+                Place = t.List.Place,
+                Title = t.List.Title,
+                Text = t.List.Description,
+                DebugScore = t.TotalScore,
+                SubItems = subBuilder.ToImmutable(),
+                Urls = t.List.Urls,
+            });
+            subBuilder.Clear();
+        }
 
-         return builder.DrainToImmutable();
+        return builder.DrainToImmutable();
     }
 
 }
@@ -318,6 +383,14 @@ public sealed class ExperienceItemBuilder
     private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
     private readonly List<ExperienceItemBuilder> _dependsOn = new();
     private readonly List<ExperienceItemBuilder> _after = new();
+    private ItemRequirement _required;
+
+    public ExperienceItemBuilder()
+    {
+        Order = new(this);
+    }
+
+    public ExperienceItemOrderBuilder Order { get; }
 
     public void Text(RichTextInterpolatedStringHandler h)
     {
@@ -340,10 +413,9 @@ public sealed class ExperienceItemBuilder
         return this;
     }
 
-    public ExperienceItemBuilder After(ExperienceItemBuilder other)
+    public ExperienceItemRequirementBuilder Required()
     {
-        _after.Add(other);
-        return this;
+        return new(this);
     }
 
     internal ExperienceListItem Build(Dictionary<ExperienceItemBuilder, ExperienceListItem> builtItems)
@@ -362,7 +434,12 @@ public sealed class ExperienceItemBuilder
             Tags = _tags.DrainToImmutable(),
             Urls = _urls.DrainToImmutable(),
             DependsOn = dependsOn,
-            After = after,
+            Required = _required,
+            Order = new()
+            {
+                Move = Order.ItemMove,
+                After = after,
+            },
         };
 
         ImmutableArray<ExperienceListItem> Resolve(
@@ -374,6 +451,89 @@ public sealed class ExperienceItemBuilder
                     : throw new InvalidOperationException("Referenced item has not been built yet"))
                 .ToImmutableArray();
         }
+    }
+
+    internal ExperienceItemBuilder SetRequired(ItemRequirement required)
+    {
+        if (_required == ItemRequirement.None || _required == required)
+        {
+            _required = required;
+            return this;
+        }
+
+        throw new InvalidOperationException(
+            $"Experience item requirement is already configured as '{_required}' " +
+            $"and cannot also be configured as '{required}'.");
+    }
+
+    internal void AddAfter(ExperienceItemBuilder other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        _after.Add(other);
+    }
+}
+
+public sealed class ExperienceItemRequirementBuilder
+{
+    private readonly ExperienceItemBuilder _item;
+
+    internal ExperienceItemRequirementBuilder(ExperienceItemBuilder item)
+    {
+        _item = item;
+    }
+
+    public ExperienceItemBuilder IfAny()
+    {
+        return _item.SetRequired(ItemRequirement.IfAny);
+    }
+
+    public ExperienceItemBuilder Always()
+    {
+        return _item.SetRequired(ItemRequirement.Always);
+    }
+}
+
+public sealed class ExperienceItemOrderBuilder
+{
+    private readonly ExperienceItemBuilder _item;
+
+    internal ExperienceItemOrderBuilder(ExperienceItemBuilder item)
+    {
+        _item = item;
+    }
+
+    internal ItemMove ItemMove { get; private set; }
+
+    public ExperienceItemOrderBuilder After(ExperienceItemBuilder other)
+    {
+        _item.AddAfter(other);
+        return this;
+    }
+
+    public ExperienceItemMovementBuilder Move()
+    {
+        return new(this);
+    }
+
+    internal ExperienceItemOrderBuilder SetMove(ItemMove move)
+    {
+        ItemMove = move;
+        return this;
+    }
+}
+
+public sealed class ExperienceItemMovementBuilder
+{
+    private readonly ExperienceItemOrderBuilder _order;
+
+    internal ExperienceItemMovementBuilder(ExperienceItemOrderBuilder order)
+    {
+        _order = order;
+    }
+
+    public ExperienceItemOrderBuilder ToFront()
+    {
+        return _order.SetMove(ItemMove.ToFront);
     }
 }
 
@@ -592,7 +752,9 @@ public static class ExperienceDatabaseSerializer
         ReferenceHandler = ReferenceHandler.Preserve,
         Converters =
         {
-            new JsonStringEnumConverter<ExperienceType>(),
+            new JsonStringEnumConverter<ExperienceType>(allowIntegerValues: false),
+            new JsonStringEnumConverter<ItemRequirement>(allowIntegerValues: false),
+            new JsonStringEnumConverter<ItemMove>(allowIntegerValues: false),
         },
     };
 

@@ -75,6 +75,72 @@ public sealed class PageHeightSelectionTests
     }
 
     [Fact]
+    public void Selection_RejectsIfAnyClosureAtomically()
+    {
+        var tag = new Tag("match");
+        var otherTag = new Tag("other");
+        var candidate = Item("candidate", tag, 10);
+        var conditional = RequiredItem(
+            "conditional",
+            otherTag,
+            10,
+            ItemRequirement.IfAny);
+        var fallback = Item("fallback", tag, 9);
+        var rejectedList = Experience(
+            "rejected",
+            ExperienceType.Job,
+            candidate,
+            conditional);
+        var fallbackList = Experience(
+            "fallback",
+            ExperienceType.Job,
+            fallback);
+        var database = Database(rejectedList, fallbackList);
+        var search = Search(tag, (WorkKey, ExperienceType.Job, 0, 3));
+        var policy = Policy(
+            database,
+            pageHeight: 45,
+            itemHeights: [10, 20, 5],
+            (WorkKey, Section.WorkExperience));
+
+        var result = search.Run(database, policy);
+
+        Assert.Equal(new[] { "fallback" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Selection_RejectedAlwaysDependencyClosureThrowsRequiredItemException()
+    {
+        var tag = new Tag("match");
+        var otherTag = new Tag("other");
+        var dependency = Item("dependency", otherTag, 1);
+        var always = RequiredItem(
+            "always",
+            otherTag,
+            10,
+            ItemRequirement.Always,
+            dependency);
+        var list = Experience("required work", ExperienceType.Job, dependency, always);
+        var database = Database(list);
+        var search = Search(tag, (WorkKey, ExperienceType.Job, 0, 1));
+        var policy = Policy(
+            database,
+            pageHeight: 45,
+            itemHeights: [20, 10],
+            (WorkKey, Section.WorkExperience));
+
+        var exception = Assert.Throws<RequiredExperienceItemLayoutException>(() =>
+            search.Run(database, policy));
+
+        Assert.Equal("required work", exception.ExperienceTitle);
+        Assert.Equal("always", exception.ItemText);
+        Assert.Contains("one-page", exception.RejectionReason, StringComparison.Ordinal);
+        Assert.Contains("required work", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("always", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(exception.RejectionReason, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Selection_PrioritizesSectionMinimumBeforeHigherScoredDiscretionaryItem()
     {
         var tag = new Tag("match");
@@ -575,6 +641,20 @@ public sealed class PageHeightSelectionTests
             Text = RichText.Create($"{new PlainText { Text = text }}"),
             Tags = [new(tag, score)],
             DependsOn = [.. dependencies],
+        };
+
+    private static ExperienceListItem RequiredItem(
+        string text,
+        Tag tag,
+        int score,
+        ItemRequirement requirement,
+        params ExperienceListItem[] dependencies)
+        => new()
+        {
+            Text = RichText.Create($"{new PlainText { Text = text }}"),
+            Tags = [new(tag, score)],
+            DependsOn = [.. dependencies],
+            Required = requirement,
         };
 
     private static string[] Texts(ImmutableArray<Event> events)
