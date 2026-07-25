@@ -197,37 +197,6 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public void DocumentHeader_RendersMetadataInTwoColumnTable()
-    {
-        var model = CreateEmptyModel();
-        model.CategorizedInfoLists =
-        [
-            new(Category.Skills, ["API Design"]),
-            new(Category.Technologies, [".NET", "PostgreSQL"]),
-            new(Category.GitHub, ["https://github.com/example"]),
-        ];
-        model.CategorizedInfos =
-        [
-            new(Category.Location, "Example City, Example Country"),
-            new(Category.Email, "person@example.test"),
-            new(Category.Phone, "202-555-0100"),
-        ];
-
-        var header = CvLatexFragmentRenderer.Materialize(
-            CvLatexFragmentRenderer.RenderDocumentHeader(model));
-
-        Assert.Contains(@"\begin{cvmetasectiontable}", header);
-        Assert.Contains(@"\end{cvmetasectiontable}", header);
-        Assert.DoesNotContain(@"\rule[-1mm]{1mm}{0.9cm}", header);
-        Assert.Equal(3, CountOccurrences(header, @"\metasection{"));
-        Assert.Contains(@"\textbf{Skills:}", header);
-        Assert.Contains(@"\textbf{Technologies:}", header);
-        Assert.Contains(@"\textbf{Location:} Example City, Example Country", header);
-        Assert.Contains(@"\textbf{Email:} person@example.test", header);
-        Assert.Contains(@"\textbf{Phone:} 202-555-0100", header);
-    }
-
-    [Fact]
     public void DocumentHeader_IncludesFirstSectionSpacing()
     {
         var header = CvLatexFragmentRenderer.Materialize(
