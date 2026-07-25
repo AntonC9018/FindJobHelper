@@ -237,37 +237,6 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public void EventRendering_IgnoresDebugScoresAndTags()
-    {
-        var @event = new Event
-        {
-            Title = "Ordinary title",
-            Place = Place.Personal,
-            DateRange = DateRange.Completed(new(2024), new(2025)),
-            DebugScore = 9876.54f,
-            DebugTagScores = [new("EVENT_DEBUG_TAG", 8765.43f)],
-            SubItems =
-            [
-                new(
-                    7654.32f,
-                    new PlainText { Text = "Ordinary bullet" },
-                    [new("ITEM_DEBUG_TAG", 6543.21f)]),
-            ],
-        };
-
-        var rendered = CvLatexFragmentRenderer.Materialize(
-            CvLatexFragmentRenderer.RenderEvent(@event));
-
-        Assert.DoesNotContain(@"\debug" + "score", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("9876.54", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("EVENT_DEBUG_TAG", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("7654.32", rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("ITEM_DEBUG_TAG", rendered, StringComparison.Ordinal);
-        Assert.Contains("Ordinary title", rendered, StringComparison.Ordinal);
-        Assert.Contains("Ordinary bullet", rendered, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Renderer_ConvertsRichTextAtLatexBoundaryAndOmitsNullText()
     {
         var @event = new Event

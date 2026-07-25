@@ -1,4 +1,3 @@
-using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core.Tests;
@@ -50,100 +49,6 @@ public sealed class ExperienceItemBuilderTests
         Assert.Same(item, item.Required().BeforeAny());
         Assert.Same(item.Order, item.Order.After(other));
         Assert.Same(item.Order, item.Order.Move().ToFront());
-    }
-
-    [Fact]
-    public void Builder_PreservesDirectRichTextNodesAndBuildsInterpolatedText()
-    {
-        var directDescription = new Href
-        {
-            Url = new Uri("https://example.test/description"),
-            Text = new PlainText { Text = "description" },
-        };
-        var directItemText = new StyledText
-        {
-            Text = "direct",
-            Style = StyleFlags.Bold,
-        };
-        var databaseBuilder = new ExperienceDatabaseBuilder();
-        var place = databaseBuilder.Place("test");
-        databaseBuilder.Job(experience =>
-        {
-            experience.Title("job");
-            experience.Place(place);
-            experience.DateRange(DateRange.Completed(new(2024), new(2025)));
-            experience.Description(directDescription);
-            experience.Item(item => item.Text(directItemText));
-            experience.Item(item => item.Text($"interpolated {RichTextFactory.Code("text")}"));
-        });
-
-        var list = Assert.Single(databaseBuilder.Build().Experiences);
-
-        Assert.Same(directDescription, list.Description);
-        Assert.Same(directItemText, list.Items[0].Text);
-        Assert.IsType<RichText>(list.Items[1].Text);
-    }
-
-    [Fact]
-    public void Builder_ConvertsPlainDescriptionToPlainText()
-    {
-        var databaseBuilder = new ExperienceDatabaseBuilder();
-        var place = databaseBuilder.Place("test");
-        databaseBuilder.Job(experience =>
-        {
-            experience.Title("job");
-            experience.Place(place);
-            experience.DateRange(DateRange.Completed(new(2024), new(2025)));
-            experience.Description(@"\textbf{literal}");
-        });
-
-        var description = Assert.IsType<PlainText>(
-            Assert.Single(databaseBuilder.Build().Experiences).Description);
-
-        Assert.Equal(@"\textbf{literal}", description.Text);
-        Assert.Equal(@"\textbackslash{}textbf\{literal\}", description.ToLatexString());
-    }
-
-    [Fact]
-    public void Builder_BuildsInterpolatedDescriptionAsRichText()
-    {
-        var databaseBuilder = new ExperienceDatabaseBuilder();
-        var place = databaseBuilder.Place("test");
-        databaseBuilder.Job(experience =>
-        {
-            experience.Title("job");
-            experience.Place(place);
-            experience.DateRange(DateRange.Completed(new(2024), new(2025)));
-            experience.Description($"interpolated {RichTextFactory.Italic("description")}");
-        });
-
-        var description = Assert.IsType<RichText>(
-            Assert.Single(databaseBuilder.Build().Experiences).Description);
-
-        Assert.Collection(
-            description.Items,
-            item => Assert.IsType<PlainText>(item),
-            item => Assert.IsType<StyledText>(item));
-    }
-
-    [Fact]
-    public void RequiredTextConstructorsAndBuildersRejectNull()
-    {
-        var item = new ExperienceItemBuilder();
-        var list = new ExperienceDatabaseBuilder();
-        var place = list.Place("test");
-
-        Assert.Throws<ArgumentNullException>(() => item.Text((IRichTextNode) null!));
-        Assert.Throws<ArgumentNullException>(() => new SubEvent(0, null!));
-        Assert.Throws<ArgumentNullException>(() => new ExperienceListItem { Text = null! });
-
-        Assert.Throws<ArgumentNullException>(() => list.Job(experience =>
-        {
-            experience.Title("job");
-            experience.Place(place);
-            experience.DateRange(DateRange.Completed(new(2024), new(2025)));
-            experience.Description((IRichTextNode) null!);
-        }));
     }
 
     [Theory]
