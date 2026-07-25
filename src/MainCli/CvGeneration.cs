@@ -88,8 +88,8 @@ public static class CvTemplate
         writer.CurlyBracesStyle = CodegenTextWriter.CurlyBracesStyleType.C;
         writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
-        var sections = p.Model.SectionOrder.Select(section => section.Dispatch(
-            p.Model,
+        var sections = p.Model.SectionOrder.Select(section => p.Model.DispatchSection(
+            section,
             Languages,
             events => Events(section, events)));
 
@@ -242,11 +242,11 @@ public enum Section
     PersonalProjects,
 }
 
-internal static class SectionExtensions
+internal static class CvDataModelExtensions
 {
-    internal static TResult Dispatch<TResult>(
-        this Section section,
-        CvDataModel model,
+    internal static TResult DispatchSection<TResult>(
+        this CvDataModel model,
+        Section section,
         Func<ImmutableArray<LanguageProficiencyInfo>, TResult> renderLanguages,
         Func<ImmutableArray<Event>, TResult> renderEvents)
     {

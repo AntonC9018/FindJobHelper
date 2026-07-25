@@ -71,8 +71,8 @@ internal static class CvMarkdownRenderer
 
     private static FormattableString RenderSection(Section section, CvDataModel model)
     {
-        var contents = section.Dispatch(
-            model,
+        var contents = model.DispatchSection(
+            section,
             RenderLanguages,
             RenderEvents);
         return $$"""
