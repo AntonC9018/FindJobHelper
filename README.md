@@ -21,6 +21,20 @@ To print every tag accepted by `requiredTags`, run:
 dotnet run --project src/MainCli/MainCli.csproj -- list-tags
 ```
 
+To inspect why experiences were selected, publish an annotated Markdown CV:
+
+```powershell
+dotnet run --project src/MainCli/MainCli.csproj -- `
+  --config path/to/config.json `
+  --output-directory path/to/output `
+  --debug
+```
+
+This creates `CurmanchiiAnton-debug.md` instead of a PDF. Debug generation still uses
+LaTeX height measurement and the same page-fit admission rules as normal generation,
+so its selected content has page-fit parity with the PDF path, but it skips final
+LaTeX/PDF compilation. Sensitive phone information remains blurred.
+
 ## Configuration
 
 Comments and trailing commas are allowed, but unknown properties are rejected.
@@ -139,5 +153,7 @@ candidate has a positive MMR score, unless a section minimum still needs to be f
 - Weakly related bullets appear: raise `scoreLowerBound`. Tune this carefully because
   it is a hard pre-MMR filter.
 
-Change one dimension at a time. The `--debug` option currently generates the same CV
-with sensitive information blurred.
+Change one dimension at a time. Use `--debug` after each change to inspect aggregate
+and per-bullet scores directly in the generated CV. The annotated Markdown preserves
+the configured section order and selected content, making it easier to see whether tag
+weights, MMR settings, or section budgets need the next adjustment.

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text;
 using CommandDotNet;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
@@ -11,6 +12,8 @@ using Location = FindJobHelper.CVGeneration.Location;
 public sealed class CvGenerationCommand
 {
     private const string FinalPdfFileName = "CurmanchiiAnton.pdf";
+    private const string FinalDebugMarkdownFileName =
+        "CurmanchiiAnton-debug.md";
 
     [Command("list-tags", Description = "List all tags available for CV selection.")]
     public void ListTags()
@@ -152,25 +155,48 @@ public sealed class CvGenerationCommand
 
         try
         {
-            var artifacts = await CvTemplate.Generate(new()
+            string stagedArtifactPath;
+            string finalArtifactFileName;
+            if (isDebug)
             {
-                Model = currentModel,
-                CancellationToken = cancellationToken,
-                ConfigFilePath = templatePath,
-                OutputDirectory = stagingDirectory,
-                PageCount = searchConfiguration.PageCount,
-            });
+                finalArtifactFileName = FinalDebugMarkdownFileName;
+                stagedArtifactPath = Path.Combine(stagingDirectory, finalArtifactFileName);
+                await using var writer = new StreamWriter(
+                    stagedArtifactPath,
+                    append: false,
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
+                {
+                    NewLine = "\n",
+                };
+                CvMarkdownRenderer.Render(currentModel, writer);
+                await writer.FlushAsync(cancellationToken);
+            }
+            else
+            {
+                finalArtifactFileName = FinalPdfFileName;
+                var artifacts = await CvTemplate.Generate(new()
+                {
+                    Model = currentModel,
+                    CancellationToken = cancellationToken,
+                    ConfigFilePath = templatePath,
+                    OutputDirectory = stagingDirectory,
+                    PageCount = searchConfiguration.PageCount,
+                });
+                stagedArtifactPath = artifacts.PdfPath;
+            }
 
             Directory.CreateDirectory(fullOutputDirectory);
-            var publishedPdfPath = Path.Combine(fullOutputDirectory, FinalPdfFileName);
-            File.Move(artifacts.PdfPath, publishedPdfPath, overwrite: true);
+            var publishedArtifactPath = Path.Combine(
+                fullOutputDirectory,
+                finalArtifactFileName);
+            File.Move(stagedArtifactPath, publishedArtifactPath, overwrite: true);
 
             if (openInOs)
             {
-                ExplorerHelper.OpenFolderAndSelectFile(publishedPdfPath);
+                ExplorerHelper.OpenFolderAndSelectFile(publishedArtifactPath);
             }
 
-            Console.WriteLine($"Generated '{publishedPdfPath}'.");
+            Console.WriteLine($"Generated '{publishedArtifactPath}'.");
             return ExitCodes.Success;
         }
         finally
@@ -208,12 +234,12 @@ public sealed class CvGenerationArguments : IArgumentModel
     [Option("config", Description = "Path to the JSON CV selection configuration.")]
     public string Config { get; set; } = null!;
 
-    [Option("output-directory", Description = "Directory where CurmanchiiAnton.pdf will be published.")]
+    [Option("output-directory", Description = "Destination directory for the generated artifact.")]
     public string OutputDirectory { get; set; } = null!;
 
-    [Option("debug", Description = "Generate the CV with sensitive information blurred.")]
+    [Option("debug", Description = "Publish an annotated Markdown CV instead of compiling a PDF.")]
     public bool Debug { get; set; }
 
-    [Option("open", Description = "Open the published PDF after a successful generation.")]
+    [Option("open", Description = "Select the generated artifact after a successful generation.")]
     public bool Open { get; set; }
 }

@@ -639,46 +639,90 @@ public static class MarkdownConverter
         return visitor.GetOutput().ToString();
     }
 
+    internal static string ToMarkdownStructuralText(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var output = new StringBuilder(value.Length);
+        AppendEscapedString(output, value);
+        return output.ToString();
+    }
+
+    internal static string ToMarkdownCodeSpan(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+
+        var longestBacktickRun = 0;
+        var currentBacktickRun = 0;
+        foreach (var character in value)
+        {
+            if (character == '`')
+            {
+                currentBacktickRun++;
+                longestBacktickRun = Math.Max(longestBacktickRun, currentBacktickRun);
+            }
+            else
+            {
+                currentBacktickRun = 0;
+            }
+        }
+
+        var fence = new string('`', longestBacktickRun + 1);
+        var needsPadding = value.Length > 0
+            && (value[0] == '`'
+                || value[^1] == '`'
+                || (value[0] == ' ' && value[^1] == ' ' && !value.AsSpan().Trim().IsEmpty));
+        return needsPadding
+            ? $"{fence} {value} {fence}"
+            : $"{fence}{value}{fence}";
+    }
+
     private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
         .Override<Href>(next => (node, c) =>
         {
             var sb = c.GetOutput();
-            sb.Append("[");
+            sb.Append('[');
             next(node, c);
-            var str = node.Url.ToString();
-            sb.Append($"]({str})");
+            sb.Append("](<");
+            sb.Append(node.Url.AbsoluteUri);
+            sb.Append(">)");
         })
         .Override<StyledText>(next => (node, c) =>
         {
             var sb = c.GetOutput();
-
-            void InsertChars(bool reverse)
+            var hasCode = node.Style.HasFlag(StyleFlags.Code);
+            foreach (var style in new (StyleFlags Flag, string Marker)[]
+                     {
+                         (StyleFlags.Bold, "**"),
+                         (StyleFlags.Italic, "*"),
+                     })
             {
-                var chars = new (StyleFlags Flag, string Label)[]
+                if (node.Style.HasFlag(style.Flag))
                 {
-                    (StyleFlags.Bold, "**"),
-                    // Might fail, consider verb||
-                    (StyleFlags.Italic, "*"),
-                    (StyleFlags.Code, "`"),
-                };
-                if (reverse)
-                {
-                    Array.Reverse(chars);
-                }
-                foreach (var x in chars)
-                {
-                    if (node.Style.HasFlag(x.Flag))
-                    {
-                        sb.Append(x.Label);
-                    }
+                    sb.Append(style.Marker);
                 }
             }
 
-            InsertChars(reverse: false);
-            // TODO: escape
-            AppendEscapedString(sb, node.Text);
+            if (hasCode)
+            {
+                sb.Append(ToMarkdownCodeSpan(node.Text));
+            }
+            else
+            {
+                AppendEscapedString(sb, node.Text);
+            }
             next(node, c);
-            InsertChars(reverse: true);
+
+            foreach (var style in new (StyleFlags Flag, string Marker)[]
+                     {
+                         (StyleFlags.Italic, "*"),
+                         (StyleFlags.Bold, "**"),
+                     })
+            {
+                if (node.Style.HasFlag(style.Flag))
+                {
+                    sb.Append(style.Marker);
+                }
+            }
         })
         .Override<PlainText>(next => (node, c) =>
         {
@@ -689,18 +733,15 @@ public static class MarkdownConverter
         .Default<RichText>()
         .Build();
 
-    private static readonly SearchValues<char> _escapedChars = SearchValues.Create(@"\`*_{}[]()#+-.!|>");
+    private static readonly SearchValues<char> EscapedChars =
+        SearchValues.Create(@"\`*_{}[]()<>#+-.!|");
+
     private static void AppendEscapedString(StringBuilder sb, ReadOnlySpan<char> str)
     {
         var current = str;
         while (true)
         {
-            // if (current.Length == 0)
-            // {
-            //     break;
-            // }
-
-            var until = current.IndexOfAny(_escapedChars);
+            var until = current.IndexOfAny(EscapedChars);
             if (until == -1)
             {
                 sb.Append(current);

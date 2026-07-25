@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using FindJobHelper.CVGeneration;
 using MainCli;
 
@@ -50,7 +49,7 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     [Fact]
-    public async Task Generate_PublishesOnlyTheRenamedPdf()
+    public async Task Generate_DebugPublishesOnlyAnnotatedMarkdown()
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-e2e-{Guid.NewGuid():N}");
         try
@@ -71,19 +70,24 @@ public sealed class CvGenerationCliEndToEndTests
                 .Where(static file => file is not null)
                 .Select(static file => file!)
                 .ToArray();
-            var pdf = Assert.Single(files);
-            Assert.Equal("CurmanchiiAnton.pdf", pdf);
+            var markdownFile = Assert.Single(files);
+            Assert.Equal("CurmanchiiAnton-debug.md", markdownFile);
             Assert.DoesNotContain(files, file => file is "main.tex" or "log-stdout.txt" or "log-stderr.txt");
 
-            var pdfPath = Path.Combine(outputDirectory, pdf);
-            var pdfInfo = new FileInfo(pdfPath);
-            Assert.True(pdfInfo.Length > 4);
-
-            await using var stream = File.OpenRead(pdfPath);
-            var header = new byte[5];
-            var bytesRead = await stream.ReadAsync(header);
-            Assert.Equal(5, bytesRead);
-            Assert.Equal("%PDF-", Encoding.ASCII.GetString(header));
+            var markdownPath = Path.Combine(outputDirectory, markdownFile);
+            var markdownBytes = await File.ReadAllBytesAsync(markdownPath);
+            Assert.False(markdownBytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }));
+            var markdown = await File.ReadAllTextAsync(markdownPath);
+            Assert.StartsWith("# Anton Curmanschii\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
+            Assert.Contains("**Technologies:** E2E JSON Configuration", markdown, StringComparison.Ordinal);
+            Assert.Contains("## Experience", markdown, StringComparison.Ordinal);
+            Assert.Contains("`score:", markdown, StringComparison.Ordinal);
+            Assert.Contains("- `score:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain(@"\begin{document}", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain(@"\cvevent", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("202-555-0100", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain('\r', markdown);
         }
         finally
         {
@@ -149,7 +153,7 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     [Fact]
-    public async Task Generate_UnattainableExactCountFailsWithoutPublishingPdf()
+    public async Task Generate_DebugUnattainableExactCountFailsWithoutPublishingMarkdown()
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-unattainable-e2e-{Guid.NewGuid():N}");
         try
@@ -158,11 +162,12 @@ public sealed class CvGenerationCliEndToEndTests
                 "--config",
                 UnattainableFixturePath,
                 "--output-directory",
-                outputDirectory);
+                outputDirectory,
+                "--debug");
 
             Assert.NotEqual(0, result.ExitCode);
             Assert.Contains("Configured pageCount 2", result.StandardError, StringComparison.Ordinal);
-            Assert.False(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
+            Assert.False(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton-debug.md")));
         }
         finally
         {
