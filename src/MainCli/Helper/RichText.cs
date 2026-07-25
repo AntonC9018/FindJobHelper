@@ -630,8 +630,9 @@ public static class RichTextVisitorDefaults
 public static class MarkdownConverter
 {
     public static string ToMarkdownString(
-        this RichText richText)
+        this IRichTextNode richText)
     {
+        ArgumentNullException.ThrowIfNull(richText);
         var visitor = VisitationMap.CreateVisitor();
         visitor.AddOutput();
         visitor.Visit(richText);

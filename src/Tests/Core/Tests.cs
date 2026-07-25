@@ -40,7 +40,9 @@ public sealed class SomeTests
         var actual = new StreamReader(memStream).ReadToEnd();
 #pragma warning restore CA2000
 
-        Assert.Equal(expected, actual);
+        Assert.Equal(
+            expected.ReplaceLineEndings("\n"),
+            actual.ReplaceLineEndings("\n"));
     }
 
     [Fact]
@@ -150,7 +152,7 @@ public sealed class SomeTests
                 },
                 new PlainText
                 {
-                    Text = " world,\r\n",
+                    Text = " world,\n",
                 },
                 new Href
                 {
@@ -163,7 +165,7 @@ public sealed class SomeTests
                 },
                 new PlainText
                 {
-                    Text = "\r\nRegular text",
+                    Text = "\nRegular text",
                 },
             ],
         };
@@ -174,7 +176,7 @@ public sealed class SomeTests
     [Fact]
     public Task ToLatex()
     {
-        return Verify(text.ToLatexString().ToString());
+        return Verify(text.ToLatexString());
     }
 
     [Fact]

@@ -30,7 +30,7 @@ public sealed class ExperienceListSorterTests
 
         var texts = Assert.Single(new[] { list }.AllEvents())
             .SubItems
-            .Select(x => x.String.ToString())
+            .Select(x => x.Text.ToString()!)
             .ToArray();
 
         Assert.Equal(new[] { "predecessor", "ordered" }, texts);
@@ -45,7 +45,7 @@ public sealed class ExperienceListSorterTests
 
         var texts = Assert.Single(new[] { list }.AllEvents())
             .SubItems
-            .Select(x => x.String.ToString())
+            .Select(x => x.Text.ToString()!)
             .ToArray();
 
         Assert.Equal(new[] { "front", "ordinary" }, texts);
@@ -71,7 +71,7 @@ public sealed class ExperienceListSorterTests
 
         var texts = Assert.Single(new[] { list }.AllEvents())
             .SubItems
-            .Select(x => x.String.ToString())
+            .Select(x => x.Text.ToString()!)
             .ToArray();
 
         Assert.Equal(
@@ -328,7 +328,7 @@ public sealed class ExperienceListSorterTests
 
         return Assert.Single(events)
             .SubItems
-            .Select(x => x.String.ToString())
+            .Select(x => x.Text.ToString()!)
             .ToArray();
     }
 

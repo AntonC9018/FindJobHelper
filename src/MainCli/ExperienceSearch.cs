@@ -1097,7 +1097,7 @@ internal static class ExperienceSelectionEngine
                 {
                     throw new RequiredExperienceItemLayoutException(
                         candidate.List.Title.Value,
-                        candidate.Item.Text.ToString(),
+                        candidate.Item.Text.ToString() ?? string.Empty,
                         decision.Rejection!.Reason);
                 }
 
@@ -1302,10 +1302,9 @@ internal static class ExperienceSelectionEngine
             var hasItems = items.Count > 0;
             foreach (var x in items)
             {
-                var latexStr = x.Item.Text.ToLatexString();
                 subBuilder.Add(new(
                     x.DebugScore,
-                    latexStr,
+                    x.Item.Text,
                     ToDebugTagScores(x.Matches, x.DebugScore)));
             }
 
@@ -1314,7 +1313,7 @@ internal static class ExperienceSelectionEngine
                 DateRange = t.List.DateRange,
                 Place = t.List.Place,
                 Title = t.List.Title,
-                Text = hasItems ? t.List.Description : NullableLatexString.Null,
+                Text = hasItems ? t.List.Description : null,
                 DebugScore = t.TotalScore,
                 DebugTagScores = ToDebugTagScores(items.Select(x => (x.Matches, x.DebugScore))),
                 SubItems = subBuilder.ToImmutable(),

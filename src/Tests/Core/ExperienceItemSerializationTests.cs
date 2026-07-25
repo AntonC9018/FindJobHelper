@@ -64,6 +64,56 @@ public sealed class ExperienceItemSerializationTests
         Assert.Contains("After", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Serialization_PreservesFormatAgnosticRootNodes()
+    {
+        var itemText = new StyledText
+        {
+            Text = "styled",
+            Style = StyleFlags.Bold,
+        };
+        var description = new Href
+        {
+            Url = new Uri("https://example.test/description"),
+            Text = new PlainText { Text = "link" },
+        };
+        var database = new ExperienceDatabase
+        {
+            AllPlaces = [],
+            Experiences =
+            [
+                new ExperienceList
+                {
+                    Title = "test",
+                    Place = new("test"),
+                    DateRange = DateRange.Completed(new(2024), new(2025)),
+                    Type = ExperienceType.Job,
+                    Description = description,
+                    Items =
+                    [
+                        new ExperienceListItem
+                        {
+                            Text = itemText,
+                            DependsOn = [],
+                            Required = ItemRequirement.None,
+                            Order = new(),
+                        },
+                    ],
+                },
+            ],
+        };
+
+        var json = await Serialize(database);
+        await using var input = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var roundTripped = await ExperienceDatabaseSerializer.Deserialize(
+            input,
+            CancellationToken.None);
+        var list = Assert.Single(roundTripped.Experiences);
+
+        Assert.IsType<Href>(list.Description);
+        Assert.IsType<StyledText>(Assert.Single(list.Items).Text);
+    }
+
     private static async Task<string> Serialize(ExperienceDatabase database)
     {
         using var output = new MemoryStream();

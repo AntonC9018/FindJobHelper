@@ -474,16 +474,17 @@ public sealed class ExperienceSearchTests
                 opts.ScoreLowerBound = 0;
             });
 
+        var sourceItem = Item(
+            "work-a",
+            (tagA, 8),
+            (tagB, 3),
+            (unmatched, 10));
         var result = builder.Build().Run([
             Experience(
                 "work",
                 ExperienceType.Job,
                 2025,
-                Item(
-                    "work-a",
-                    (tagA, 8),
-                    (tagB, 3),
-                    (unmatched, 10))),
+                sourceItem),
         ]);
 
         var @event = Assert.Single(result.Get(WorkKey));
@@ -497,6 +498,7 @@ public sealed class ExperienceSearchTests
 
         Assert.Equal(10f, @event.DebugScore);
         Assert.Equal(10f, subItem.DebugScore);
+        Assert.Same(sourceItem.Text, subItem.Text);
         Assert.Equal(
             new[] { (Tag: "b", Score: 6f), (Tag: "a", Score: 4f) },
             eventDebugTags);
@@ -862,10 +864,10 @@ public sealed class ExperienceSearchTests
             new[] { "newest unmatched job", "older matched job" },
             work.Select(static item => item.Title.Value));
         Assert.Empty(work[0].SubItems);
-        Assert.True(work[0].Text.IsNull);
+        Assert.Null(work[0].Text);
         Assert.Empty(work[0].Urls);
         Assert.Equal(new[] { "matched" }, Texts([work[1]]));
-        Assert.False(work[1].Text.IsNull);
+        Assert.NotNull(work[1].Text);
         Assert.Equal(
             new[] { "https://example.test/experience" },
             work[1].Urls.Select(static url => url.Value));
@@ -1266,7 +1268,7 @@ public sealed class ExperienceSearchTests
         Assert.Contains("second conditional", texts);
 
         var reasons = result.Diagnostics.Items.ToDictionary(
-            trace => trace.Item.Text.ToString(),
+            trace => trace.Item.Text.ToString()!,
             trace => trace.Reason);
         Assert.Equal(SelectionItemReason.Direct, reasons["selected"]);
         Assert.Equal(SelectionItemReason.Dependency, reasons["shared dependency"]);
@@ -1686,7 +1688,7 @@ public sealed class ExperienceSearchTests
     {
         return events
             .SelectMany(e => e.SubItems)
-            .Select(x => x.String.ToString())
+            .Select(x => x.Text.ToString()!)
             .ToArray();
     }
 
@@ -1730,7 +1732,7 @@ public sealed class ExperienceSearchTests
             Title = title,
             Place = new("test"),
             DateRange = DateRange.Completed(new(Year: year), new(Year: year + 1)),
-            Description = new("description"),
+            Description = new PlainText { Text = "description" },
             Items = items.ToImmutableArray(),
             Type = type,
             Urls = ["https://example.test/experience"],

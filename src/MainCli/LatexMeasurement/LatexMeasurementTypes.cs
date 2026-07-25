@@ -207,7 +207,7 @@ internal static class RichTextCanonicalHasher
         })
         .Build();
 
-    public static string ComputeHash(RichText richText)
+    public static string ComputeHash(IRichTextNode richText)
     {
         ArgumentNullException.ThrowIfNull(richText);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);

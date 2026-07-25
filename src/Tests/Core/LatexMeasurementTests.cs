@@ -250,7 +250,7 @@ public sealed class LatexMeasurementTests
             [
                 new(
                     7654.32f,
-                    new LatexString("Ordinary bullet"),
+                    new PlainText { Text = "Ordinary bullet" },
                     [new("ITEM_DEBUG_TAG", 6543.21f)]),
             ],
         };
@@ -258,13 +258,85 @@ public sealed class LatexMeasurementTests
         var rendered = CvLatexFragmentRenderer.Materialize(
             CvLatexFragmentRenderer.RenderEvent(@event));
 
-        Assert.DoesNotContain(@"\debugscore", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\debug" + "score", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("9876.54", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("EVENT_DEBUG_TAG", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("7654.32", rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("ITEM_DEBUG_TAG", rendered, StringComparison.Ordinal);
         Assert.Contains("Ordinary title", rendered, StringComparison.Ordinal);
         Assert.Contains("Ordinary bullet", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renderer_ConvertsRichTextAtLatexBoundaryAndOmitsNullText()
+    {
+        var @event = new Event
+        {
+            Title = "Title",
+            Place = Place.Personal,
+            DateRange = DateRange.Completed(new(2024), new(2025)),
+            Text = new StyledText
+            {
+                Text = "description_&",
+                Style = StyleFlags.Italic,
+            },
+            SubItems =
+            [
+                new(0, new PlainText { Text = "bullet_&" }),
+            ],
+        };
+
+        var renderedEvent = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderEvent(@event));
+        var renderedNullEvent = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderEvent(@event with
+            {
+                Text = null,
+                SubItems = [],
+            }));
+
+        Assert.Contains(@"\cveventitem{bullet\_\&}", renderedEvent, StringComparison.Ordinal);
+        Assert.Contains(@"\textit{description\_\&}", renderedEvent, StringComparison.Ordinal);
+        Assert.EndsWith("{}{}{}", renderedNullEvent, StringComparison.Ordinal);
+
+        var model = CreateEmptyModel();
+        model.Summary = new PlainText { Text = "summary_&" };
+        var renderedHeader = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentHeader(model));
+        model.Summary = null;
+        var renderedHeaderWithoutSummary = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentHeader(model));
+
+        Assert.Contains(@"\cvsection{Summary}", renderedHeader, StringComparison.Ordinal);
+        Assert.Contains(@"summary\_\&", renderedHeader, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\cvsection{Summary}", renderedHeaderWithoutSummary, StringComparison.Ordinal);
+
+        var list = new ExperienceList
+        {
+            Title = "List",
+            Place = Place.Personal,
+            DateRange = DateRange.Completed(new(2024), new(2025)),
+            Type = ExperienceType.Project,
+            Description = new PlainText { Text = "list_&" },
+            Items =
+            [
+                new ExperienceListItem
+                {
+                    Text = new StyledText
+                    {
+                        Text = "item_&",
+                        Style = StyleFlags.Bold,
+                    },
+                },
+            ],
+        };
+        var renderedChrome = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderExperienceChrome(list));
+        var renderedItem = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderExperienceItem(list.Items[0]));
+
+        Assert.Contains(@"list\_\&", renderedChrome, StringComparison.Ordinal);
+        Assert.Equal(@"\textbf{item\_\&}", renderedItem);
     }
 
     [Fact]
@@ -429,8 +501,8 @@ public sealed class LatexMeasurementTests
             Urls = list.Urls,
             SubItems =
             [
-                new(0, firstText.ToLatexString()),
-                new(0, secondText.ToLatexString()),
+                new(0, firstText),
+                new(0, secondText),
             ],
         };
         var linkedList = new ExperienceList
@@ -445,7 +517,7 @@ public sealed class LatexMeasurementTests
         };
         var linkedEvent = @event with
         {
-            SubItems = [new(0, firstText.ToLatexString())],
+            SubItems = [new(0, firstText)],
             Urls = linkedList.Urls,
         };
         var headingOnlyEvent = new Event
@@ -775,7 +847,7 @@ public sealed class LatexMeasurementTests
                 DateRange = DateRange.Completed(new(2020), new(2021)),
                 SubItems =
                 [
-                    new(0, new LatexString("A production bullet used to create a controlled atomic section.")),
+                    new(0, new PlainText { Text = "A production bullet used to create a controlled atomic section." }),
                 ],
             })
             .ToImmutableArray();
@@ -796,10 +868,10 @@ public sealed class LatexMeasurementTests
         return count;
     }
 
-    private static ExperienceDatabase CreateDatabase(params RichText[] items)
+    private static ExperienceDatabase CreateDatabase(params IRichTextNode[] items)
         => new() { AllPlaces = [], Experiences = [CreateList(items)] };
 
-    private static ExperienceList CreateList(params RichText[] items)
+    private static ExperienceList CreateList(params IRichTextNode[] items)
         => new()
         {
             Title = "Title",

@@ -7,11 +7,6 @@ using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core;
 
-// Assumes these types already exist:
-// - RegularString, LatexString, NullableLatexString
-// - Place, DateRange, OptionalDateParts
-
-
 // Tag reference with score for a specific experience item
 public readonly record struct TagReference(Tag Tag, int Score);
 
@@ -46,7 +41,13 @@ public readonly record struct ItemOrder
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class ExperienceListItem
 {
-    public required RichText Text { get; init; }
+    private IRichTextNode _text = null!;
+
+    public required IRichTextNode Text
+    {
+        get => _text;
+        init => _text = value ?? throw new ArgumentNullException(nameof(Text));
+    }
     public ImmutableArray<TagReference> Tags { get; init; } = ImmutableArray<TagReference>.Empty;
     public ImmutableArray<RegularString> Urls { get; init; } = ImmutableArray<RegularString>.Empty;
     [JsonRequired]
@@ -303,8 +304,7 @@ public static class ExperienceListSorter
         {
             foreach (var x in t.Items)
             {
-                var latexStr = x.Item.Text.ToLatexString();
-                subBuilder.Add(new(x.Score, latexStr));
+                subBuilder.Add(new(x.Score, x.Item.Text));
             }
 
             builder.Add(new()
@@ -347,7 +347,7 @@ public sealed class ExperienceList
     public required Place Place { get; init; }
     public required DateRange DateRange { get; init; }
     public required ExperienceType Type { get; init; }
-    public NullableLatexString Description { get; init; } = NullableLatexString.Null;
+    public IRichTextNode? Description { get; init; }
     public required ImmutableArray<ExperienceListItem> Items { get; init; }
     public ImmutableArray<RegularString> Urls { get; init; } = ImmutableArray<RegularString>.Empty;
 }
@@ -378,7 +378,7 @@ public readonly record struct IdentifiedExperienceItem(
 // Builder for individual experience item
 public sealed class ExperienceItemBuilder
 {
-    private RichText? _text;
+    private IRichTextNode? _text;
     private readonly ImmutableArray<TagReference>.Builder _tags = ImmutableArray.CreateBuilder<TagReference>();
     private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
     private readonly List<ExperienceItemBuilder> _dependsOn = new();
@@ -392,9 +392,15 @@ public sealed class ExperienceItemBuilder
 
     public ExperienceItemOrderBuilder Order { get; }
 
+    public void Text(IRichTextNode text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        _text = text;
+    }
+
     public void Text(RichTextInterpolatedStringHandler h)
     {
-        _text = h.Build();
+        Text(h.Build());
     }
 
     public void Tag(Tag tag, int score)
@@ -559,7 +565,7 @@ public sealed class ExperienceListBuilder
     private ExperienceType _type;
     private readonly List<ExperienceItemBuilder> _itemBuilders = new();
     private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
-    private NullableLatexString _description = NullableLatexString.Null;
+    private IRichTextNode? _description;
 
     internal ExperienceListBuilder(ExperienceType type)
     {
@@ -583,7 +589,19 @@ public sealed class ExperienceListBuilder
 
     public void Description(string description)
     {
-        _description = new NullableLatexString(description);
+        ArgumentNullException.ThrowIfNull(description);
+        Description(new PlainText { Text = description });
+    }
+
+    public void Description(IRichTextNode description)
+    {
+        ArgumentNullException.ThrowIfNull(description);
+        _description = description;
+    }
+
+    public void Description(RichTextInterpolatedStringHandler description)
+    {
+        Description(description.Build());
     }
 
     public ExperienceItemBuilder Item(Action<ExperienceItemBuilder> configure)

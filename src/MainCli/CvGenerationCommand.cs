@@ -124,7 +124,7 @@ public sealed class CvGenerationCommand
                     ]),
             ],
             Location = location,
-            Summary = NullableLatexString.Null,
+            Summary = null,
             SectionOrder = searchConfiguration.SectionOrder,
         };
 

@@ -360,7 +360,7 @@ public sealed class CvDataModel
     public NullableLocation Location = NullableLocation.Null;
     public required ImmutableArray<CategorizedInfoList> CategorizedInfoLists;
     public required ImmutableArray<CategorizedInfo> CategorizedInfos;
-    public NullableLatexString Summary = NullableLatexString.Null;
+    public IRichTextNode? Summary;
     public ImmutableArray<LanguageProficiencyInfo> Languages = ImmutableArray<LanguageProficiencyInfo>.Empty;
     public ImmutableArray<Event> WorkExperiences = ImmutableArray<Event>.Empty;
     public ImmutableArray<Event> PersonalProjects = ImmutableArray<Event>.Empty;
@@ -390,7 +390,7 @@ public record struct Event()
     public required DateRange DateRange;
     public float DebugScore;
     public ImmutableArray<DebugTagScore> DebugTagScores = [];
-    public NullableLatexString Text = NullableLatexString.Null;
+    public IRichTextNode? Text;
     public ImmutableArray<SubEvent> SubItems = [];
     public ImmutableArray<RegularString> Urls = [];
 }
@@ -401,49 +401,27 @@ public readonly record struct SubEvent
 {
     public SubEvent(
         float debugScore,
-        LatexString @string) : this(debugScore, @string, [])
+        IRichTextNode text) : this(debugScore, text, [])
     {
     }
 
     public SubEvent(
         float debugScore,
-        LatexString @string,
+        IRichTextNode text,
         ImmutableArray<DebugTagScore> debugTagScores)
     {
+        ArgumentNullException.ThrowIfNull(text);
         DebugScore = debugScore;
-        String = @string;
+        Text = text;
         DebugTagScores = debugTagScores.IsDefault
             ? []
             : debugTagScores;
     }
 
     public float DebugScore { get; }
-    public LatexString String { get; }
+    public IRichTextNode Text { get; }
     public ImmutableArray<DebugTagScore> DebugTagScores { get; }
 }
-
-// public record struct EducationItem()
-// {
-//     public required EducationQualification Qualification;
-//     public required Place Place;
-//     public required DateRange DateRange;
-//     public NullableLatexString Introduction = NullableLatexString.Null;
-//     public required ImmutableArray<EducationDescriptionItem> Stuff;
-// }
-//
-// public readonly record struct EducationQualification(string Name);
-// public readonly record struct EducationDescriptionItem(LatexString Text);
-//
-// public record struct WorkExperienceItem()
-// {
-//     public required JobPosition Position;
-//     public required Place Place;
-//     public required DateRange DateRange;
-//     public required NullableLatexString Introduction = NullableLatexString.Null;
-//     public required ImmutableArray<JobResponsibility> Responsibilities;
-// }
-//
-// public readonly record struct JobResponsibility(LatexString Text);
 public readonly record struct Place(RegularString Name)
 {
     public static Place Personal => new("Personal");
@@ -757,68 +735,6 @@ public readonly record struct LatexEscapedString(string Value) : ISpanFormattabl
     }
 }
 
-public readonly record struct LatexString(string Value) : ISpanFormattable
-{
-    public override string ToString() => $"{this}";
-
-    public string ToString(string? format, IFormatProvider? formatProvider)
-    {
-        _ = format;
-        _ = formatProvider;
-        return ToString();
-    }
-
-    public bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format,
-        IFormatProvider? provider)
-    {
-        charsWritten = 0;
-        var helper = new WriteHelper(destination, ref charsWritten);
-        if (!helper.Append(Value))
-        {
-            return false;
-        }
-        return true;
-    }
-}
-
-public readonly record struct NullableLatexString(string? Value) : ISpanFormattable
-{
-    public static NullableLatexString Null => default;
-    public bool IsNull => Value is null;
-
-    public override string ToString() => $"{Value}";
-
-    public string ToString(string? format, IFormatProvider? formatProvider)
-    {
-        _ = format;
-        _ = formatProvider;
-        return ToString();
-    }
-
-    public bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format,
-        IFormatProvider? provider)
-    {
-        charsWritten = 0;
-        if (Value is null)
-        {
-            return true;
-        }
-
-        var latexString = new LatexString(Value);
-        if (latexString.TryFormat(destination, out charsWritten, format, provider))
-        {
-            return true;
-        }
-        return false;
-    }
-}
-
 public readonly record struct RegularString(string Value) : ISpanFormattable
 {
     public string ToString(
@@ -970,13 +886,14 @@ public readonly record struct NullableLocation(
 
 public static class LatexConverter
 {
-    public static LatexString ToLatexString(
-        this RichText richText)
+    public static string ToLatexString(
+        this IRichTextNode richText)
     {
+        ArgumentNullException.ThrowIfNull(richText);
         var visitor = VisitationMap.CreateVisitor();
         visitor.AddOutput();
         visitor.Visit(richText);
-        return new(visitor.GetOutput().ToString());
+        return visitor.GetOutput().ToString();
     }
 
     private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()

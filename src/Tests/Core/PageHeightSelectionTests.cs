@@ -659,6 +659,6 @@ public sealed class PageHeightSelectionTests
 
     private static string[] Texts(ImmutableArray<Event> events)
         => events.SelectMany(static item => item.SubItems)
-            .Select(static item => item.String.ToString())
+            .Select(static item => item.Text.ToString()!)
             .ToArray();
 }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using FindJobHelper.Core;
+using FindJobHelper.Core.Helper;
 
 namespace FindJobHelper.CVGeneration;
 
@@ -109,7 +110,7 @@ internal static class CvLatexFragmentRenderer
         var itemFragments = new List<FormattableString>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
         foreach (var item in @event.SubItems)
         {
-            itemFragments.Add(RenderEventItem($"{item.String}"));
+            itemFragments.Add(RenderEventItem(RenderRichText(item.Text)));
         }
 
         if (!@event.Urls.IsEmpty)
@@ -124,7 +125,7 @@ internal static class CvLatexFragmentRenderer
             $"{@event.Title}",
             place,
             $"{Join(itemFragments, Environment.NewLine)}",
-            $"{@event.Text}");
+            RenderRichText(@event.Text));
     }
 
     public static FormattableString RenderExperienceChrome(ExperienceList list)
@@ -142,7 +143,7 @@ internal static class CvLatexFragmentRenderer
             $"{list.Title}",
             place,
             permanentItems,
-            $"{list.Description}");
+            RenderRichText(list.Description));
     }
 
     public static FormattableString RenderExperienceHeading(ExperienceList list)
@@ -157,7 +158,7 @@ internal static class CvLatexFragmentRenderer
     }
 
     public static FormattableString RenderExperienceItem(ExperienceListItem item)
-        => $"{item.Text.ToLatexString()}";
+        => RenderRichText(item.Text);
 
     public static FormattableString RenderSectionChrome(Section section)
         => $@"\cvsection{{{new LatexEscapedString(GetSectionTitle(section))}}}";
@@ -165,12 +166,12 @@ internal static class CvLatexFragmentRenderer
     public static FormattableString RenderDocumentHeader(CvDataModel model)
     {
         FormattableString summary = Empty;
-        if (!model.Summary.IsNull)
+        if (model.Summary is not null)
         {
             summary = $$"""
                 \vspace{-6pt}
                 \cvsection{Summary}
-                {{model.Summary}}\\
+                {{RenderRichText(model.Summary)}}\\
                 """;
         }
 
@@ -195,6 +196,9 @@ internal static class CvLatexFragmentRenderer
 
     private static FormattableString RenderEventItem(FormattableString content)
         => $@"\cveventitem{{{content}}}";
+
+    private static FormattableString RenderRichText(IRichTextNode? text)
+        => text is null ? Empty : $"{text.ToLatexString()}";
 
     private static string GetSectionTitle(Section section) => section switch
     {
