@@ -112,7 +112,7 @@ internal static class CvMarkdownRenderer
         var place = @event.Place.IsPersonal
             ? string.Empty
             : $" · {Text(@event.Place.Name)}";
-        blocks.Add($"*{Text(@event.DateRange.ToString())}{place}*");
+        blocks.Add($"*{Text(@event.DateRange)}{place}*");
 
         if (@event.Text is not null)
         {
@@ -203,6 +203,10 @@ internal static class CvMarkdownRenderer
     }
 
     private static string Text(RegularString value) => Text(value.Value);
+
+    private static string Text<T>(T value)
+        where T : ISpanFormattable =>
+        Text($"{value}");
 
     private static string Text(string value) =>
         MarkdownConverter.ToMarkdownStructuralText(value);
