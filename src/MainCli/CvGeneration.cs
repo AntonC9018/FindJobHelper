@@ -265,7 +265,7 @@ internal static class CvDataModelExtensions
         return section switch
         {
             Section.Languages => "Languages",
-            Section.WorkExperience => "Experience",
+            Section.WorkExperience => "Work Experience",
             Section.Education => "Education",
             Section.PersonalProjects => "Personal Projects",
             _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
