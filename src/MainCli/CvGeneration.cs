@@ -90,8 +90,8 @@ public static class CvTemplate
 
         var sections = p.Model.SectionOrder.Select(section => p.Model.DispatchSection(
             section,
-            Languages,
-            events => Events(section, events)));
+            renderLanguages: Languages,
+            renderEvents: events => Events(section, events)));
 
         writer.Write($$$$"""
         \input{{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}}

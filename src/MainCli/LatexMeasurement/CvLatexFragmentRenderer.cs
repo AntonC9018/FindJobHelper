@@ -21,16 +21,16 @@ internal static class CvLatexFragmentRenderer
     {
         return model.DispatchSection(
             section,
-            RenderLanguagesSectionInner,
-            events => RenderEventsSectionInner(events, section.ToDisplayString()));
+            renderLanguages: RenderLanguagesSectionInner,
+            renderEvents: events => RenderEventsSectionInner(events, section.ToDisplayString()));
     }
 
     public static bool IsSectionEmpty(Section section, CvDataModel model)
     {
         return model.DispatchSection(
             section,
-            static languages => languages.IsEmpty,
-            static events => events.IsEmpty);
+            renderLanguages: static languages => languages.IsEmpty,
+            renderEvents: static events => events.IsEmpty);
     }
 
     public static FormattableString RenderProductionSection(

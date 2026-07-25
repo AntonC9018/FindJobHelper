@@ -73,8 +73,8 @@ internal static class CvMarkdownRenderer
     {
         var contents = model.DispatchSection(
             section,
-            RenderLanguages,
-            RenderEvents);
+            renderLanguages: RenderLanguages,
+            renderEvents: RenderEvents);
         return $$"""
             ## {{section.ToDisplayString()}}
 
