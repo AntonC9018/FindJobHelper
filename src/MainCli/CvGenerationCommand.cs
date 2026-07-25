@@ -154,7 +154,6 @@ public sealed class CvGenerationCommand
         {
             var artifacts = await CvTemplate.Generate(new()
             {
-                IsDebug = isDebug,
                 Model = currentModel,
                 CancellationToken = cancellationToken,
                 ConfigFilePath = templatePath,
@@ -212,7 +211,7 @@ public sealed class CvGenerationArguments : IArgumentModel
     [Option("output-directory", Description = "Directory where CurmanchiiAnton.pdf will be published.")]
     public string OutputDirectory { get; set; } = null!;
 
-    [Option("debug", Description = "Include selection-score annotations in the generated CV.")]
+    [Option("debug", Description = "Generate the CV with sensitive information blurred.")]
     public bool Debug { get; set; }
 
     [Option("open", Description = "Open the published PDF after a successful generation.")]

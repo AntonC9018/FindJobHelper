@@ -17,7 +17,6 @@ public record struct GenerateParams()
     public required string OutputDirectory;
     public required CvDataModel Model;
     public required CancellationToken CancellationToken;
-    public bool IsDebug = false;
     public CvPageCount PageCount;
 }
 
@@ -97,7 +96,6 @@ public static class CvTemplate
             string sectionName)
         {
             return Events(
-                isDebug: p.IsDebug,
                 section: section,
                 sectionName: sectionName,
                 events: e);
@@ -300,52 +298,14 @@ public static class CvTemplate
     }
 
     private static FormattableString Events(
-        bool isDebug,
         Section section,
         ImmutableArray<Event> events,
         string sectionName)
     {
-        var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(events, sectionName, isDebug);
+        var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(events, sectionName);
         var wrapped = CvLatexFragmentRenderer.RenderProductionSection(section, inner);
         return $"{wrapped}";
     }
-
-    private static string FormatDebugScore(
-        float score,
-        ImmutableArray<DebugTagScore> tagScores)
-    {
-        var ret = new StringBuilder();
-        ret.Append(FormatFloat(score));
-
-        if (!tagScores.IsDefaultOrEmpty)
-        {
-            ret.Append(" (");
-            for (var i = 0; i < tagScores.Length; i++)
-            {
-                if (i > 0)
-                {
-                    ret.Append(", ");
-                }
-
-                var tagScore = tagScores[i];
-                ret.Append(tagScore.Tag.Value);
-                ret.Append(':');
-                ret.Append(FormatFloat(tagScore.Score));
-            }
-
-            ret.Append(')');
-        }
-
-        return ret.ToString();
-    }
-
-    private static string FormatFloat(float value)
-    {
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{value:0.##}");
-    }
-
 
     private static FormattableString Footer(CvDataModel model)
     {

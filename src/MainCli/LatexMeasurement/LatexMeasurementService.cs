@@ -171,8 +171,7 @@ public sealed class LatexMeasurementService
             var complete = CvLatexFragmentRenderer.Materialize(
                 CvLatexFragmentRenderer.RenderSectionInner(
                     section,
-                    currentModel,
-                    isDebug: false));
+                    currentModel));
             var kind = section == Section.Languages
                 ? LatexMeasurementKind.StaticSection
                 : LatexMeasurementKind.CompleteSection;

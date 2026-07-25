@@ -237,6 +237,37 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public void EventRendering_IgnoresDebugScoresAndTags()
+    {
+        var @event = new Event
+        {
+            Title = "Ordinary title",
+            Place = Place.Personal,
+            DateRange = DateRange.Completed(new(2024), new(2025)),
+            DebugScore = 9876.54f,
+            DebugTagScores = [new("EVENT_DEBUG_TAG", 8765.43f)],
+            SubItems =
+            [
+                new(
+                    7654.32f,
+                    new LatexString("Ordinary bullet"),
+                    [new("ITEM_DEBUG_TAG", 6543.21f)]),
+            ],
+        };
+
+        var rendered = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderEvent(@event));
+
+        Assert.DoesNotContain(@"\debugscore", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("9876.54", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("EVENT_DEBUG_TAG", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("7654.32", rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain("ITEM_DEBUG_TAG", rendered, StringComparison.Ordinal);
+        Assert.Contains("Ordinary title", rendered, StringComparison.Ordinal);
+        Assert.Contains("Ordinary bullet", rendered, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Service_DeduplicatesDuplicateItemsAndWarmCacheSkipsRunner()
     {
         using var fixture = new CacheFixture();
@@ -428,35 +459,33 @@ public sealed class LatexMeasurementTests
         documentModel.SectionOrder = [Section.WorkExperience];
         var completeWorkSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
             documentModel.WorkExperiences,
-            "Experience",
-            false);
+            "Experience");
         FormattableString completeDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(Section.WorkExperience, completeWorkSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var completeProjectSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
             [@event],
-            "Personal Projects",
-            false);
+            "Personal Projects");
         FormattableString twoSectionDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(Section.WorkExperience, completeWorkSection)}{CvLatexFragmentRenderer.RenderProductionSection(Section.PersonalProjects, completeProjectSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var requests = new[]
         {
             Request(1, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(list), LatexMeasurementMode.ExperienceChromeWithoutPermanentItems),
             Request(2, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(list.Items[0]), LatexMeasurementMode.ExperienceItemMarginal),
             Request(3, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(list.Items[1]), LatexMeasurementMode.ExperienceItemMarginal),
-            Request(4, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(@event, false), LatexMeasurementMode.Box),
+            Request(4, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(@event), LatexMeasurementMode.Box),
             Request(5, LatexMeasurementKind.SectionChrome, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.SectionChrome),
-            Request(6, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience", false), LatexMeasurementMode.FlowBlock),
+            Request(6, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience"), LatexMeasurementMode.FlowBlock),
             Request(7, LatexMeasurementKind.UsablePageHeight, @"\rule{0pt}{\textheight}", LatexMeasurementMode.Box),
-            Request(8, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event, @event], "Experience", false), LatexMeasurementMode.FlowBlock),
+            Request(8, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event, @event], "Experience"), LatexMeasurementMode.FlowBlock),
             Request(9, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(linkedList), LatexMeasurementMode.Box),
             Request(10, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(linkedList.Items[0]), LatexMeasurementMode.ExperienceItemMarginal),
-            Request(11, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(linkedEvent, false), LatexMeasurementMode.Box),
+            Request(11, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(linkedEvent), LatexMeasurementMode.Box),
             Request(12, LatexMeasurementKind.DocumentHeader, CvLatexFragmentRenderer.RenderDocumentHeader(documentModel), LatexMeasurementMode.DocumentHeader),
             Request(14, LatexMeasurementKind.CompleteSection, completeDocument, LatexMeasurementMode.PageStart),
             Request(15, LatexMeasurementKind.CompleteSection, completeProjectSection, LatexMeasurementMode.FlowBlock),
             Request(16, LatexMeasurementKind.CompleteSection, twoSectionDocument, LatexMeasurementMode.PageStart),
             Request(17, LatexMeasurementKind.ExperienceHeading, CvLatexFragmentRenderer.RenderExperienceHeading(list), LatexMeasurementMode.Box),
-            Request(18, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(headingOnlyEvent, false), LatexMeasurementMode.Box),
+            Request(18, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(headingOnlyEvent), LatexMeasurementMode.Box),
             Request(19, LatexMeasurementKind.FreshPageSectionChrome, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.FreshPageSectionChrome),
-            Request(20, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience", false), LatexMeasurementMode.FreshPageFlowBlock),
+            Request(20, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience"), LatexMeasurementMode.FreshPageFlowBlock),
         };
         var runner = new XeLatexMeasurementRunner();
 

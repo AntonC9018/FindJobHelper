@@ -16,24 +16,20 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderSectionInner(
         Section section,
-        CvDataModel model,
-        bool isDebug = false)
+        CvDataModel model)
     {
         return section switch
         {
             Section.Languages => RenderLanguagesSectionInner(model.Languages),
             Section.WorkExperience => RenderEventsSectionInner(
                 model.WorkExperiences,
-                "Experience",
-                isDebug),
+                "Experience"),
             Section.Education => RenderEventsSectionInner(
                 model.Educations,
-                "Education",
-                isDebug),
+                "Education"),
             Section.PersonalProjects => RenderEventsSectionInner(
                 model.PersonalProjects,
-                "Personal Projects",
-                isDebug),
+                "Personal Projects"),
             _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
         };
     }
@@ -93,15 +89,14 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderEventsSectionInner(
         ImmutableArray<Event> events,
-        string sectionName,
-        bool isDebug)
+        string sectionName)
     {
         if (events.IsEmpty)
         {
             return Empty;
         }
 
-        var renderedEvents = events.Select(@event => RenderEvent(@event, isDebug));
+        var renderedEvents = events.Select(RenderEvent);
         return $$"""
             \cvsection{ {{new LatexEscapedString(sectionName)}} }
 
@@ -109,13 +104,12 @@ internal static class CvLatexFragmentRenderer
             """;
     }
 
-    public static FormattableString RenderEvent(Event @event, bool isDebug)
+    public static FormattableString RenderEvent(Event @event)
     {
         var itemFragments = new List<FormattableString>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
         foreach (var item in @event.SubItems)
         {
-            itemFragments.Add(RenderEventItem(
-                $"{RenderDebugScore(item.DebugScore, item.DebugTagScores, isDebug)}{item.String}"));
+            itemFragments.Add(RenderEventItem($"{item.String}"));
         }
 
         if (!@event.Urls.IsEmpty)
@@ -125,10 +119,9 @@ internal static class CvLatexFragmentRenderer
         }
 
         FormattableString place = @event.Place.IsPersonal ? Empty : $"{@event.Place.Name}";
-        FormattableString title = $"{RenderDebugScore(@event.DebugScore, @event.DebugTagScores, isDebug)}{@event.Title}";
         return RenderEventCore(
             $"{@event.DateRange}",
-            title,
+            $"{@event.Title}",
             place,
             $"{Join(itemFragments, Environment.NewLine)}",
             $"{@event.Text}");
@@ -202,37 +195,6 @@ internal static class CvLatexFragmentRenderer
 
     private static FormattableString RenderEventItem(FormattableString content)
         => $@"\cveventitem{{{content}}}";
-
-    private static FormattableString RenderDebugScore(
-        float score,
-        ImmutableArray<DebugTagScore> tagScores,
-        bool isDebug)
-    {
-        if (!isDebug)
-        {
-            return Empty;
-        }
-
-        var text = new StringBuilder();
-        text.Append(score.ToString("0.##", CultureInfo.InvariantCulture));
-        if (!tagScores.IsDefaultOrEmpty)
-        {
-            text.Append(" (");
-            for (var i = 0; i < tagScores.Length; i++)
-            {
-                if (i > 0)
-                {
-                    text.Append(", ");
-                }
-                text.Append(tagScores[i].Tag.Value)
-                    .Append(':')
-                    .Append(tagScores[i].Score.ToString("0.##", CultureInfo.InvariantCulture));
-            }
-            text.Append(')');
-        }
-
-        return $@"\debugscore{{{new LatexEscapedString(text.ToString())}}}";
-    }
 
     private static string GetSectionTitle(Section section) => section switch
     {

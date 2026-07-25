@@ -139,5 +139,5 @@ candidate has a positive MMR score, unless a section minimum still needs to be f
 - Weakly related bullets appear: raise `scoreLowerBound`. Tune this carefully because
   it is a hard pre-MMR filter.
 
-Change one dimension at a time and use `--debug` to inspect the resulting selection
-scores.
+Change one dimension at a time. The `--debug` option currently generates the same CV
+with sensitive information blurred.
