@@ -647,34 +647,44 @@ public static class MarkdownConverter
         return output.ToString();
     }
 
-    internal static string ToMarkdownCodeSpan(string value)
+    internal static void AppendMarkdownCodeSpan(StringBuilder output, string value)
     {
+        ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(value);
 
-        var longestBacktickRun = 0;
-        var currentBacktickRun = 0;
+        var fence = new Repeat("`", GetLongestBacktickRun(value) + 1);
+        var needsPadding = NeedsCodeSpanPadding(value);
+
+        output.Append($"{fence}");
+        if (needsPadding)
+        {
+            output.Append(' ');
+        }
+        output.Append(value);
+        if (needsPadding)
+        {
+            output.Append(' ');
+        }
+        output.Append($"{fence}");
+    }
+
+    private static int GetLongestBacktickRun(string value)
+    {
+        var longestRun = 0;
+        var currentRun = 0;
         foreach (var character in value)
         {
-            if (character == '`')
-            {
-                currentBacktickRun++;
-                longestBacktickRun = Math.Max(longestBacktickRun, currentBacktickRun);
-            }
-            else
-            {
-                currentBacktickRun = 0;
-            }
+            currentRun = character == '`' ? currentRun + 1 : 0;
+            longestRun = Math.Max(longestRun, currentRun);
         }
-
-        var fence = new string('`', longestBacktickRun + 1);
-        var needsPadding = value.Length > 0
-            && (value[0] == '`'
-                || value[^1] == '`'
-                || (value[0] == ' ' && value[^1] == ' ' && !value.AsSpan().Trim().IsEmpty));
-        return needsPadding
-            ? $"{fence} {value} {fence}"
-            : $"{fence}{value}{fence}";
+        return longestRun;
     }
+
+    private static bool NeedsCodeSpanPadding(string value) =>
+        value.Length > 0
+        && (value[0] == '`'
+            || value[^1] == '`'
+            || (value[0] == ' ' && value[^1] == ' ' && !value.AsSpan().Trim().IsEmpty));
 
     private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
         .Override<Href>(next => (node, c) =>
@@ -704,7 +714,7 @@ public static class MarkdownConverter
 
             if (hasCode)
             {
-                sb.Append(ToMarkdownCodeSpan(node.Text));
+                AppendMarkdownCodeSpan(sb, node.Text);
             }
             else
             {
@@ -733,7 +743,7 @@ public static class MarkdownConverter
         .Default<RichText>()
         .Build();
 
-    private static readonly SearchValues<char> EscapedChars =
+    private static readonly SearchValues<char> _escapedChars =
         SearchValues.Create(@"\`*_{}[]()<>#+-.!|");
 
     private static void AppendEscapedString(StringBuilder sb, ReadOnlySpan<char> str)
@@ -741,7 +751,7 @@ public static class MarkdownConverter
         var current = str;
         while (true)
         {
-            var until = current.IndexOfAny(EscapedChars);
+            var until = current.IndexOfAny(_escapedChars);
             if (until == -1)
             {
                 sb.Append(current);

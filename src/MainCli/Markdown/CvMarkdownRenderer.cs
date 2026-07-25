@@ -1,153 +1,150 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using System.Text;
+using CodegenCS;
 using FindJobHelper.Core.Helper;
 
 namespace FindJobHelper.CVGeneration;
 
 internal static class CvMarkdownRenderer
 {
-    internal static void Render(CvDataModel model, StreamWriter writer)
+    internal static void Render(CvDataModel model, ICodegenTextWriter writer)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(writer);
 
-        WriteLine(writer, $"# {Text(model.Name.First)} {Text(model.Name.Last)}");
-        WriteLine(writer);
-        WriteLine(writer, Text(model.Profession.Value));
-        WriteLine(writer);
-        RenderMetadata(model, writer);
+        var blocks = new List<FormattableString>
+        {
+            $$"""
+            # {{Text(model.Name.First)}} {{Text(model.Name.Last)}}
 
+            {{Text(model.Profession.Value)}}
+            """,
+        };
+
+        if (!model.CategorizedInfos.IsEmpty || !model.CategorizedInfoLists.IsEmpty)
+        {
+            blocks.Add(RenderMetadata(model));
+        }
         if (model.Summary is not null)
         {
-            WriteLine(writer);
-            WriteLine(writer, "## Summary");
-            WriteLine(writer);
-            WriteMarkdown(writer, model.Summary.ToMarkdownString());
+            blocks.Add($$"""
+                ## Summary
+
+                {{model.Summary.ToMarkdownString()}}
+                """);
         }
 
-        foreach (var section in model.SectionOrder)
+        blocks.AddRange(model.SectionOrder
+            .Where(section => !CvLatexFragmentRenderer.IsSectionEmpty(section, model))
+            .Select(section => RenderSection(section, model)));
+
+        var footer = RenderFooter(model);
+        if (footer is not null)
         {
-            if (CvLatexFragmentRenderer.IsSectionEmpty(section, model))
-            {
-                continue;
-            }
-
-            WriteLine(writer);
-            WriteLine(writer, $"## {SectionTitle(section)}");
-            WriteLine(writer);
-            switch (section)
-            {
-                case Section.Languages:
-                    RenderLanguages(model.Languages, writer);
-                    break;
-                case Section.WorkExperience:
-                    RenderEvents(model.WorkExperiences, writer);
-                    break;
-                case Section.Education:
-                    RenderEvents(model.Educations, writer);
-                    break;
-                case Section.PersonalProjects:
-                    RenderEvents(model.PersonalProjects, writer);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(section), section, null);
-            }
+            blocks.Add(footer);
         }
 
-        RenderFooter(model, writer);
+        FormattableString document =
+            $"{blocks.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
+        writer.WriteLine(document);
     }
 
-    private static void RenderMetadata(CvDataModel model, StreamWriter writer)
+    private static FormattableString RenderMetadata(CvDataModel model)
     {
-        var count = Math.Max(model.CategorizedInfos.Length, model.CategorizedInfoLists.Length);
-        for (var index = 0; index < count; index++)
-        {
-            if (index < model.CategorizedInfos.Length)
-            {
-                var info = model.CategorizedInfos[index];
-                WriteLine(
-                    writer,
-                    $"**{Text(info.Category.DisplayName)}:** {CategoryValue(info.Category, info.Value)}");
-            }
-
-            if (index < model.CategorizedInfoLists.Length)
-            {
-                var list = model.CategorizedInfoLists[index];
-                var values = string.Join(
-                    ", ",
-                    list.Values.Select(value => CategoryValue(list.Category, value)));
-                WriteLine(writer, $"**{Text(list.Category.DisplayName)}:** {values}");
-            }
-        }
+        var items = model.CategorizedInfos
+            .Select(RenderMetadataItem)
+            .Concat(model.CategorizedInfoLists.Select(RenderMetadataList));
+        return $"{items.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)}";
     }
 
-    private static void RenderLanguages(
-        ImmutableArray<LanguageProficiencyInfo> languages,
-        StreamWriter writer)
+    private static FormattableString RenderMetadataItem(CategorizedInfo info) =>
+        $"**{Text(info.Category.DisplayName)}:** {CategoryValue(info.Category, info.Value)}";
+
+    private static FormattableString RenderMetadataList(CategorizedInfoList list)
     {
-        foreach (var language in languages)
+        var values = string.Join(
+            ", ",
+            list.Values.Select(value => CategoryValue(list.Category, value)));
+        return $"**{Text(list.Category.DisplayName)}:** {values}";
+    }
+
+    private static FormattableString RenderSection(Section section, CvDataModel model)
+    {
+        var contents = section.Dispatch(
+            model,
+            RenderLanguages,
+            RenderEvents);
+        return $$"""
+            ## {{section.ToDisplayString()}}
+
+            {{contents}}
+            """;
+    }
+
+    private static FormattableString RenderLanguages(
+        ImmutableArray<LanguageProficiencyInfo> languages)
+    {
+        var items = languages.Select(static language =>
         {
             var skills = language.Skills.IsEmpty
                 ? string.Empty
                 : $" · {string.Join(", ", language.Skills.Select(static skill => Text(skill.Text)))}";
-            WriteLine(
-                writer,
-                $"- **{Text(language.Language.Name)}:** {Text(language.GeneralProficiencyLevel.Value)}{skills}");
-        }
+            return (FormattableString)
+                $"- **{Text(language.Language.Name)}:** {Text(language.GeneralProficiencyLevel.Value)}{skills}";
+        });
+        return $"{items.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)}";
     }
 
-    private static void RenderEvents(ImmutableArray<Event> events, StreamWriter writer)
+    private static FormattableString RenderEvents(ImmutableArray<Event> events)
     {
-        for (var index = 0; index < events.Length; index++)
+        var items = events.Select(RenderEvent);
+        return $"{items.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
+    }
+
+    private static FormattableString RenderEvent(Event @event)
+    {
+        var blocks = new List<FormattableString>
         {
-            if (index > 0)
-            {
-                WriteLine(writer);
-            }
-
-            RenderEvent(events[index], writer);
-        }
-    }
-
-    private static void RenderEvent(Event @event, StreamWriter writer)
-    {
-        WriteLine(
-            writer,
-            $"### {ScoreAnnotation(@event.DebugScore, @event.DebugTagScores)} {Text(@event.Title)}");
-        WriteLine(writer);
+            $"### {ScoreAnnotation(@event.DebugScore, @event.DebugTagScores)} {Text(@event.Title)}",
+        };
 
         var place = @event.Place.IsPersonal
             ? string.Empty
             : $" · {Text(@event.Place.Name)}";
-        WriteLine(writer, $"*{Text(@event.DateRange.ToString())}{place}*");
+        blocks.Add($"*{Text(@event.DateRange.ToString())}{place}*");
 
         if (@event.Text is not null)
         {
-            WriteLine(writer);
-            WriteMarkdown(writer, @event.Text.ToMarkdownString());
+            blocks.Add($"{@event.Text.ToMarkdownString()}");
         }
 
-        if (!@event.SubItems.IsEmpty || !@event.Urls.IsEmpty)
-        {
-            WriteLine(writer);
-        }
-
-        foreach (var item in @event.SubItems)
-        {
-            WriteBullet(
-                writer,
-                $"{ScoreAnnotation(item.DebugScore, item.DebugTagScores)} {item.Text.ToMarkdownString()}");
-        }
-
+        var bullets = @event.SubItems
+            .Select(RenderSubItem)
+            .ToList();
         if (!@event.Urls.IsEmpty)
         {
-            WriteBullet(
-                writer,
-                $"**Links:** {string.Join(" | ", @event.Urls.Select(static url => Autolink(url.Value)))}");
+            var links = string.Join(
+                " | ",
+                @event.Urls.Select(static url => Autolink(url.Value)));
+            bullets.Add($"- **Links:** {links}");
         }
+        if (bullets.Count > 0)
+        {
+            blocks.Add($"{bullets.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)}");
+        }
+
+        return $"{blocks.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
     }
 
-    private static void RenderFooter(CvDataModel model, StreamWriter writer)
+    private static FormattableString RenderSubItem(SubEvent item)
+    {
+        var content =
+            $"{ScoreAnnotation(item.DebugScore, item.DebugTagScores)} {item.Text.ToMarkdownString()}";
+        return $"- {content}";
+    }
+
+    private static FormattableString? RenderFooter(CvDataModel model)
     {
         var links = new List<string>(2);
         if (!model.Website.IsNull)
@@ -158,24 +155,36 @@ internal static class CvMarkdownRenderer
         {
             links.Add(Autolink(model.GitHub.Value!));
         }
-        if (links.Count == 0)
-        {
-            return;
-        }
-
-        WriteLine(writer);
-        WriteLine(writer, string.Join(" · ", links));
+        return links.Count == 0
+            ? null
+            : (FormattableString) $"{string.Join(" · ", links)}";
     }
 
     private static string ScoreAnnotation(float score, ImmutableArray<DebugTagScore> tagScores)
     {
-        var value = $"score: {FormatScore(score)}";
+        var value = new StringBuilder()
+            .Append("score: ")
+            .Append(FormatScore(score));
         if (!tagScores.IsEmpty)
         {
-            value += $" ({string.Join(", ", tagScores.Select(static tagScore =>
-                $"{tagScore.Tag.Value}:{FormatScore(tagScore.Score)}"))})";
+            value.Append(" (");
+            for (var index = 0; index < tagScores.Length; index++)
+            {
+                if (index > 0)
+                {
+                    value.Append(", ");
+                }
+                var tagScore = tagScores[index];
+                value.Append(tagScore.Tag.Value)
+                    .Append(':')
+                    .Append(FormatScore(tagScore.Score));
+            }
+            value.Append(')');
         }
-        return MarkdownConverter.ToMarkdownCodeSpan(value);
+
+        var output = new StringBuilder(value.Length + 2);
+        MarkdownConverter.AppendMarkdownCodeSpan(output, value.ToString());
+        return output.ToString();
     }
 
     private static string FormatScore(float value) =>
@@ -197,38 +206,4 @@ internal static class CvMarkdownRenderer
 
     private static string Text(string value) =>
         MarkdownConverter.ToMarkdownStructuralText(value);
-
-    private static string SectionTitle(Section section) => section switch
-    {
-        Section.Languages => "Languages",
-        Section.WorkExperience => "Experience",
-        Section.Education => "Education",
-        Section.PersonalProjects => "Personal Projects",
-        _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
-    };
-
-    private static void WriteBullet(StreamWriter writer, string markdown)
-    {
-        var lines = NormalizeLineEndings(markdown).Split('\n');
-        WriteLine(writer, $"- {lines[0]}");
-        for (var index = 1; index < lines.Length; index++)
-        {
-            WriteLine(writer, $"  {lines[index]}");
-        }
-    }
-
-    private static void WriteMarkdown(StreamWriter writer, string markdown)
-    {
-        foreach (var line in NormalizeLineEndings(markdown).Split('\n'))
-        {
-            WriteLine(writer, line);
-        }
-    }
-
-    private static string NormalizeLineEndings(string value) =>
-        value.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
-
-    private static void WriteLine(StreamWriter writer, string value = "") =>
-        writer.WriteLine(value);
 }

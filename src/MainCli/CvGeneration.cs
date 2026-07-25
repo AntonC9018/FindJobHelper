@@ -88,36 +88,10 @@ public static class CvTemplate
         writer.CurlyBracesStyle = CodegenTextWriter.CurlyBracesStyleType.C;
         writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
-        var languages = Languages(p.Model.Languages);
-
-        FormattableString Events1(
-            ImmutableArray<Event> e,
-            Section section,
-            string sectionName)
-        {
-            return Events(
-                section: section,
-                sectionName: sectionName,
-                events: e);
-        }
-        var experience = Events1(p.Model.WorkExperiences, Section.WorkExperience, "Experience");
-        var education = Events1(p.Model.Educations, Section.Education, "Education");
-        var personalProjects = Events1(
-            p.Model.PersonalProjects,
-            Section.PersonalProjects,
-            "Personal Projects");
-        var sections = new List<FormattableString>();
-        foreach (var section in p.Model.SectionOrder)
-        {
-            sections.Add(section switch
-            {
-                Section.Education => education,
-                Section.Languages => languages,
-                Section.PersonalProjects => personalProjects,
-                Section.WorkExperience => experience,
-                _ => throw null!,
-            });
-        }
+        var sections = p.Model.SectionOrder.Select(section => section.Dispatch(
+            p.Model,
+            Languages,
+            events => Events(section, events)));
 
         writer.Write($$$$"""
         \input{{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}}
@@ -227,10 +201,11 @@ public static class CvTemplate
 
     private static FormattableString Events(
         Section section,
-        ImmutableArray<Event> events,
-        string sectionName)
+        ImmutableArray<Event> events)
     {
-        var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(events, sectionName);
+        var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(
+            events,
+            section.ToDisplayString());
         var wrapped = CvLatexFragmentRenderer.RenderProductionSection(section, inner);
         return $"{wrapped}";
     }
@@ -265,6 +240,37 @@ public enum Section
     WorkExperience,
     Education,
     PersonalProjects,
+}
+
+internal static class SectionExtensions
+{
+    internal static TResult Dispatch<TResult>(
+        this Section section,
+        CvDataModel model,
+        Func<ImmutableArray<LanguageProficiencyInfo>, TResult> renderLanguages,
+        Func<ImmutableArray<Event>, TResult> renderEvents)
+    {
+        return section switch
+        {
+            Section.Languages => renderLanguages(model.Languages),
+            Section.WorkExperience => renderEvents(model.WorkExperiences),
+            Section.Education => renderEvents(model.Educations),
+            Section.PersonalProjects => renderEvents(model.PersonalProjects),
+            _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
+        };
+    }
+
+    internal static string ToDisplayString(this Section section)
+    {
+        return section switch
+        {
+            Section.Languages => "Languages",
+            Section.WorkExperience => "Experience",
+            Section.Education => "Education",
+            Section.PersonalProjects => "Personal Projects",
+            _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
+        };
+    }
 }
 
 public record struct Event()

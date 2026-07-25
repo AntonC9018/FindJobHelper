@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text;
+using CodegenCS;
 using CommandDotNet;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
@@ -161,15 +162,18 @@ public sealed class CvGenerationCommand
             {
                 finalArtifactFileName = FinalDebugMarkdownFileName;
                 stagedArtifactPath = Path.Combine(stagingDirectory, finalArtifactFileName);
-                await using var writer = new StreamWriter(
-                    stagedArtifactPath,
-                    append: false,
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
+                using var writer = new CodegenTextWriter
                 {
                     NewLine = "\n",
+                    PreserveNonWhitespaceIndentBehavior =
+                        CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
                 };
                 CvMarkdownRenderer.Render(currentModel, writer);
-                await writer.FlushAsync(cancellationToken);
+                await File.WriteAllTextAsync(
+                    stagedArtifactPath,
+                    writer.ToString(),
+                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                    cancellationToken);
             }
             else
             {

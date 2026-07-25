@@ -1,5 +1,5 @@
 using System.Collections.Immutable;
-using System.Text;
+using CodegenCS;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 
@@ -8,7 +8,7 @@ namespace FindJobHelper.Core.Tests;
 public sealed class CvMarkdownRendererTests
 {
     [Fact]
-    public async Task Render_WritesAnnotatedCvSnapshotWithLfAndFinalNewline()
+    public void Render_WritesAnnotatedCvSnapshotWithLfAndFinalNewline()
     {
         var model = new CvDataModel
         {
@@ -102,20 +102,14 @@ public sealed class CvMarkdownRendererTests
             ],
         };
 
-        await using var memory = new MemoryStream();
-        await using (var writer = new StreamWriter(
-                         memory,
-                         new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                         leaveOpen: true)
-                     {
-                         NewLine = "\n",
-                     })
+        using var writer = new CodegenTextWriter
         {
-            CvMarkdownRenderer.Render(model, writer);
-            await writer.FlushAsync();
-        }
-
-        var markdown = Encoding.UTF8.GetString(memory.ToArray());
+            NewLine = "\n",
+            PreserveNonWhitespaceIndentBehavior =
+                CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
+        };
+        CvMarkdownRenderer.Render(model, writer);
+        var markdown = writer.ToString();
 
         Assert.Equal(
             """
@@ -124,8 +118,8 @@ public sealed class CvMarkdownRendererTests
             Software Developer
 
             **Location:** Example City, Example Country
-            **Skills:** \.NET, SQL
             **Website:** <https://profile.test/about_(me)?view=full>
+            **Skills:** \.NET, SQL
             **GitHub:** <https://github.test/Anton?tab=repositories>
 
             ## Summary

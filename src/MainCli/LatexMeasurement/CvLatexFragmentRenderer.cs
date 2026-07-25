@@ -19,32 +19,18 @@ internal static class CvLatexFragmentRenderer
         Section section,
         CvDataModel model)
     {
-        return section switch
-        {
-            Section.Languages => RenderLanguagesSectionInner(model.Languages),
-            Section.WorkExperience => RenderEventsSectionInner(
-                model.WorkExperiences,
-                "Experience"),
-            Section.Education => RenderEventsSectionInner(
-                model.Educations,
-                "Education"),
-            Section.PersonalProjects => RenderEventsSectionInner(
-                model.PersonalProjects,
-                "Personal Projects"),
-            _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
-        };
+        return section.Dispatch(
+            model,
+            RenderLanguagesSectionInner,
+            events => RenderEventsSectionInner(events, section.ToDisplayString()));
     }
 
     public static bool IsSectionEmpty(Section section, CvDataModel model)
     {
-        return section switch
-        {
-            Section.Languages => model.Languages.IsEmpty,
-            Section.WorkExperience => model.WorkExperiences.IsEmpty,
-            Section.Education => model.Educations.IsEmpty,
-            Section.PersonalProjects => model.PersonalProjects.IsEmpty,
-            _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
-        };
+        return section.Dispatch(
+            model,
+            static languages => languages.IsEmpty,
+            static events => events.IsEmpty);
     }
 
     public static FormattableString RenderProductionSection(
@@ -161,7 +147,7 @@ internal static class CvLatexFragmentRenderer
         => RenderRichText(item.Text);
 
     public static FormattableString RenderSectionChrome(Section section)
-        => $@"\cvsection{{{LatexConverter.ToLatexString(GetSectionTitle(section))}}}";
+        => $@"\cvsection{{{LatexConverter.ToLatexString(section.ToDisplayString())}}}";
 
     public static FormattableString RenderDocumentHeader(CvDataModel model)
     {
@@ -199,15 +185,6 @@ internal static class CvLatexFragmentRenderer
 
     private static FormattableString RenderRichText(IRichTextNode? text)
         => text is null ? Empty : $"{LatexConverter.ToLatexString(text)}";
-
-    private static string GetSectionTitle(Section section) => section switch
-    {
-        Section.Languages => "Languages",
-        Section.WorkExperience => "Experience",
-        Section.Education => "Education",
-        Section.PersonalProjects => "Personal Projects",
-        _ => throw new ArgumentOutOfRangeException(nameof(section), section, null),
-    };
 
     private static FormattableString RenderMetadata(CvDataModel model)
     {

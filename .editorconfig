@@ -67,6 +67,15 @@ csharp_style_expression_bodied_properties = true:none
 csharp_style_expression_bodied_indexers = true:none
 csharp_style_expression_bodied_accessors = true:none
 
+# Prefix private fields with an underscore
+dotnet_naming_rule.private_fields_use_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_use_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_use_underscore.style = underscore_prefix
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_prefix.required_prefix = _
+dotnet_naming_style.underscore_prefix.capitalization = camel_case
+
 # Suggest more modern language features when available
 csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
 csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
