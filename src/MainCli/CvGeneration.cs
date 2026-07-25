@@ -211,78 +211,6 @@ public static class CvTemplate
         return $"{wrapped}";
     }
 
-    private static readonly RenderEnumerableOptions ListItemSeparator =
-        RenderEnumerableOptions.CreateWithCustomSeparator(", ", enforceLineBreakAfterLastItem: false);
-
-    private static readonly RenderEnumerableOptions BarSeparator =
-        RenderEnumerableOptions.CreateWithCustomSeparator(" | ", enforceLineBreakAfterLastItem: false);
-
-    private static FormattableString MetaLists(CvDataModel p)
-    {
-        int count = Math.Max(p.CategorizedInfos.Length, p.CategorizedInfoLists.Length);
-        var counter = Enumerable.Range(0, count);
-        var strings = counter.Select(i =>
-        {
-            T? Item<T>(ImmutableArray<T> items)
-            {
-                if (items.Length > i)
-                {
-                    return items[i];
-                }
-                return default;
-            }
-
-            static FormattableString Wrap(Category cat, RegularString str)
-            {
-                if (str == default)
-                {
-                    return $"";
-                }
-                if (cat.IsUrl)
-                {
-                    return $$"""\url{{{ str.Value }}}""";
-                }
-                return $"{new LatexEscapedString(str.Value)}";
-            }
-
-            var list = Item(p.CategorizedInfoLists);
-            var infoItem = Item(p.CategorizedInfos);
-
-            var infoString = Wrap(infoItem.Category, infoItem.Value);
-
-            var listValues = list.Values;
-            if (listValues == default)
-            {
-                listValues = [];
-            }
-            var formattedList = listValues
-                .Select(x => Wrap(list.Category, x))
-                .Render(ListItemSeparator);
-
-            var ret = (FormattableString) $$"""\metasection{{{ infoString }}}{{{
-                Symbols.IF(list != default)
-            }}\textbf{{{ new LatexEscapedString(list.Category.DisplayName) }}:} {{ formattedList }}{{
-                Symbols.ENDIF
-            }}}""";
-
-            return ret;
-        });
-
-        var allMeta = strings.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer);
-        return $$"""
-            %---------------------------------------------------------------------------------------
-            %	META SECTION
-            %----------------------------------------------------------------------------------------
-            {{ allMeta }}
-
-            \vspace{-2pt}
-            \textcolor{softcol}{\hrule}
-            \vspace{6pt}
-
-            \normalsize
-        """;
-    }
-
     private static string ReplaceExtension(
         string filePath,
         string newExtension)
@@ -307,50 +235,6 @@ public static class CvTemplate
         return $"{wrapped}";
     }
 
-    private static FormattableString Footer(CvDataModel model)
-    {
-        var website = model.Website;
-        var github = model.GitHub;
-
-        int itemCount = 0;
-        if (!website.IsNull)
-        {
-            itemCount += 1;
-        }
-        if (!github.IsNull)
-        {
-            itemCount += 1;
-        }
-
-        if (itemCount == 0)
-        {
-            return $"";
-        }
-
-        var arr = new FormattableString[itemCount];
-        int i = 0;
-        {
-            if (!website.IsNull)
-            {
-                arr[i] = $$"""\textnormal{\textcolor{sectcol}{ \url{{{ website }}} }""";
-                i++;
-            }
-            if (!github.IsNull)
-            {
-                arr[i] = $$"""\textcolor{sectcol}{ \url{{{ github }}} }""";
-                i++;
-            }
-            _ = i;
-            Debug.Assert(i == arr.Length);
-        }
-        var list = arr.Render(RenderEnumerableOptions.CreateWithCustomSeparator(@" $\cdot$ "));
-        return $$"""
-            % Footer
-            \null
-            \vspace*{\fill}
-            \hspace{-0.25\linewidth}\colorbox{white}{\makebox[1.5\linewidth][c]{\mystrut  {{ list }}}
-        """;
-    }
 }
 
 public sealed class CvDataModel
@@ -665,101 +549,9 @@ public readonly record struct LanguageSkill(RegularString Text)
 {
 }
 
-// NOTE: Cannot make the parameter ReadOnlySpan<char>,
-// for some reason ref struct is not supported in interpolation?
-public readonly record struct LatexEscapedString(string Value) : ISpanFormattable
+public readonly record struct RegularString(string Value)
 {
-    public override string ToString()
-    {
-        return $"{this}";
-    }
-
-    public string ToString(string? format, IFormatProvider? formatProvider)
-    {
-        _ = format;
-        _ = formatProvider;
-        return $"{this}";
-    }
-
-    public bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format,
-        IFormatProvider? provider)
-    {
-        _ = format;
-        _ = provider;
-        var position = 0;
-        foreach (var ch in Value)
-        {
-            var escaped = ch switch
-            {
-                '\\' => @"\textbackslash{}",
-                '{' => @"\{",
-                '}' => @"\}",
-                '#' => @"\#",
-                '$' => @"\$",
-                '%' => @"\%",
-                '&' => @"\&",
-                '_' => @"\_",
-                '^' => @"\^{}",
-                '~' => @"\~{}",
-                _ => null,
-            };
-
-            if (escaped is null)
-            {
-                if (position == destination.Length)
-                {
-                    charsWritten = 0;
-                    return false;
-                }
-
-                destination[position] = ch;
-                position++;
-            }
-            else
-            {
-                if (!escaped.AsSpan().TryCopyTo(destination[position..]))
-                {
-                    charsWritten = 0;
-                    return false;
-                }
-
-                position += escaped.Length;
-            }
-        }
-
-        charsWritten = position;
-        return true;
-    }
-}
-
-public readonly record struct RegularString(string Value) : ISpanFormattable
-{
-    public string ToString(
-        string? format,
-        IFormatProvider? formatProvider)
-    {
-        _ = format;
-        _ = formatProvider;
-        return ToString();
-    }
-
-    public bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format,
-        IFormatProvider? provider)
-    {
-        return new LatexEscapedString(Value).TryFormat(
-            destination,
-            out charsWritten,
-            format,
-            provider);
-    }
-
-    public override string ToString() => new LatexEscapedString(Value).ToString();
+    public override string ToString() => Value;
 
     public static implicit operator RegularString(string s)
     {
@@ -767,7 +559,7 @@ public readonly record struct RegularString(string Value) : ISpanFormattable
     }
 }
 
-public readonly record struct NullableRegularString : ISpanFormattable
+public readonly record struct NullableRegularString
 {
     public readonly string? Value;
 
@@ -793,31 +585,7 @@ public readonly record struct NullableRegularString : ISpanFormattable
         return new NullableRegularString(s);
     }
 
-    public override string ToString() => $"{Value}";
-    public string ToString(string? format, IFormatProvider? formatProvider)
-    {
-        _ = format;
-        _ = formatProvider;
-        return ToString();
-    }
-    public bool TryFormat(
-        Span<char> destination,
-        out int charsWritten,
-        ReadOnlySpan<char> format,
-        IFormatProvider? provider)
-    {
-        if (Value is null)
-        {
-            charsWritten = 0;
-            return true;
-        }
-
-        return new RegularString(Value).TryFormat(
-            destination,
-            out charsWritten,
-            format,
-            provider);
-    }
+    public override string ToString() => Value ?? string.Empty;
 
     public static implicit operator NullableRegularString(string? s)
     {
@@ -882,69 +650,4 @@ public readonly record struct NullableLocation(
             return Country.IsNull;
         }
     }
-}
-
-public static class LatexConverter
-{
-    public static string ToLatexString(
-        this IRichTextNode richText)
-    {
-        ArgumentNullException.ThrowIfNull(richText);
-        var visitor = VisitationMap.CreateVisitor();
-        visitor.AddOutput();
-        visitor.Visit(richText);
-        return visitor.GetOutput().ToString();
-    }
-
-    private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
-        .Override<Href>(next => (node, c) =>
-        {
-            var sb = c.GetOutput();
-            var str = new LatexEscapedString(node.Url.ToString());
-            sb.Append($@"\href{{{str}}}{{");
-            next(node, c);
-            sb.Append("}");
-        })
-        .Override<StyledText>(next => (node, c) =>
-        {
-            var sb = c.GetOutput();
-            var str = new LatexEscapedString(node.Text);
-
-            int indent = 0;
-            foreach (var x in new (StyleFlags Flag, string Label)[]
-                {
-                    (StyleFlags.Bold, "textbf"),
-                    // Might fail, consider verb||
-                    (StyleFlags.Code, "texttt"),
-                    (StyleFlags.Italic, "textit"),
-                })
-            {
-                if (node.Style.HasFlag(x.Flag))
-                {
-                    sb.Append($@"\{x.Label}{{");
-                    indent++;
-                }
-            }
-
-            sb.Append($"{str}");
-
-            next(node, c);
-
-            sb.Append($"{new Repeat("}", indent)}");
-        })
-        .Override<PlainText>(next => (node, c) =>
-        {
-            var sb = c.GetOutput();
-            AppendEscapedString(sb, node.Text);
-            next(node, c);
-        })
-        .Default<RichText>()
-        .Build();
-
-    private static void AppendEscapedString(StringBuilder sb, string str)
-    {
-        var latexStr = new LatexEscapedString(str);
-        sb.Append($"{latexStr}");
-    }
-
 }

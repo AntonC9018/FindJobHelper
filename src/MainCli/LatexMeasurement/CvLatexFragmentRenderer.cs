@@ -62,7 +62,7 @@ internal static class CvLatexFragmentRenderer
         }
 
         return $$"""
-            \begin{flowblock}{ {{new LatexEscapedString(sectionLabel)}} }
+            \begin{flowblock}{ {{LatexConverter.ToLatexString(sectionLabel)}} }
             {{innerLatex}}
             \end{flowblock}
             """;
@@ -77,7 +77,7 @@ internal static class CvLatexFragmentRenderer
         }
 
         var rows = languages.Select(static language => (FormattableString)
-            $"{language.Language.Name} & {language.GeneralProficiencyLevel.Value} & {Join(language.Skills.Select(static skill => (FormattableString) $"{skill.Text}"), ", ")} \\\\");
+            $"{LatexConverter.ToLatexString(language.Language.Name)} & {LatexConverter.ToLatexString(language.GeneralProficiencyLevel.Value)} & {Join(language.Skills.Select(static skill => (FormattableString) $"{LatexConverter.ToLatexString(skill.Text)}"), ", ")} \\\\");
 
         return $$"""
             \cvsection{Languages}
@@ -99,7 +99,7 @@ internal static class CvLatexFragmentRenderer
 
         var renderedEvents = events.Select(RenderEvent);
         return $$"""
-            \cvsection{ {{new LatexEscapedString(sectionName)}} }
+            \cvsection{ {{LatexConverter.ToLatexString(sectionName)}} }
 
             {{Join(renderedEvents, Environment.NewLine + Environment.NewLine)}}
             """;
@@ -115,14 +115,14 @@ internal static class CvLatexFragmentRenderer
 
         if (!@event.Urls.IsEmpty)
         {
-            var urls = Join(@event.Urls.Select(static url => (FormattableString) $@"\url{{{url}}}"), " | ");
+            var urls = Join(@event.Urls.Select(static url => (FormattableString) $@"\url{{{LatexConverter.ToLatexString(url)}}}"), " | ");
             itemFragments.Add(RenderEventItem($@"\textbf{{Links:}} {urls}"));
         }
 
-        FormattableString place = @event.Place.IsPersonal ? Empty : $"{@event.Place.Name}";
+        FormattableString place = @event.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
         return RenderEventCore(
             $"{@event.DateRange}",
-            $"{@event.Title}",
+            $"{LatexConverter.ToLatexString(@event.Title)}",
             place,
             $"{Join(itemFragments, Environment.NewLine)}",
             RenderRichText(@event.Text));
@@ -130,17 +130,17 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderExperienceChrome(ExperienceList list)
     {
-        FormattableString place = list.Place.IsPersonal ? Empty : $"{list.Place.Name}";
+        FormattableString place = list.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(list.Place.Name)}";
         FormattableString permanentItems = Empty;
         if (!list.Urls.IsEmpty)
         {
-            var urls = Join(list.Urls.Select(static url => (FormattableString) $@"\url{{{url}}}"), " | ");
+            var urls = Join(list.Urls.Select(static url => (FormattableString) $@"\url{{{LatexConverter.ToLatexString(url)}}}"), " | ");
             permanentItems = RenderEventItem($@"\textbf{{Links:}} {urls}");
         }
 
         return RenderEventCore(
             $"{list.DateRange}",
-            $"{list.Title}",
+            $"{LatexConverter.ToLatexString(list.Title)}",
             place,
             permanentItems,
             RenderRichText(list.Description));
@@ -148,10 +148,10 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderExperienceHeading(ExperienceList list)
     {
-        FormattableString place = list.Place.IsPersonal ? Empty : $"{list.Place.Name}";
+        FormattableString place = list.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(list.Place.Name)}";
         return RenderEventCore(
             $"{list.DateRange}",
-            $"{list.Title}",
+            $"{LatexConverter.ToLatexString(list.Title)}",
             place,
             Empty,
             Empty);
@@ -161,7 +161,7 @@ internal static class CvLatexFragmentRenderer
         => RenderRichText(item.Text);
 
     public static FormattableString RenderSectionChrome(Section section)
-        => $@"\cvsection{{{new LatexEscapedString(GetSectionTitle(section))}}}";
+        => $@"\cvsection{{{LatexConverter.ToLatexString(GetSectionTitle(section))}}}";
 
     public static FormattableString RenderDocumentHeader(CvDataModel model)
     {
@@ -178,8 +178,8 @@ internal static class CvLatexFragmentRenderer
         return $$$"""
             \vspace{-8pt}
             \begin{center}
-            \HUGE \textsc{ {{{model.Name.Last}}} {{{model.Name.First}}} } \textsc{Resume}\\[2pt]
-            \small {{{model.Profession.Value}}}
+            \HUGE \textsc{ {{{LatexConverter.ToLatexString(model.Name.Last)}}} {{{LatexConverter.ToLatexString(model.Name.First)}}} } \textsc{Resume}\\[2pt]
+            \small {{{LatexConverter.ToLatexString(model.Profession.Value)}}}
             \end{center}
             \vspace{6pt}
             {{{RenderMetadata(model)}}}{{{summary}}}
@@ -198,7 +198,7 @@ internal static class CvLatexFragmentRenderer
         => $@"\cveventitem{{{content}}}";
 
     private static FormattableString RenderRichText(IRichTextNode? text)
-        => text is null ? Empty : $"{text.ToLatexString()}";
+        => text is null ? Empty : $"{LatexConverter.ToLatexString(text)}";
 
     private static string GetSectionTitle(Section section) => section switch
     {
@@ -219,10 +219,10 @@ internal static class CvLatexFragmentRenderer
             var list = i < model.CategorizedInfoLists.Length ? model.CategorizedInfoLists[i] : default;
             FormattableString infoText = info == default
                 ? Empty
-                : $@"\textbf{{{new LatexEscapedString(info.Category.DisplayName)}:}} {FormatCategoryValue(info.Category, info.Value)}";
+                : $@"\textbf{{{LatexConverter.ToLatexString(info.Category.DisplayName)}:}} {FormatCategoryValue(info.Category, info.Value)}";
             FormattableString listText = list == default
                 ? Empty
-                : $@"\textbf{{{new LatexEscapedString(list.Category.DisplayName)}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
+                : $@"\textbf{{{LatexConverter.ToLatexString(list.Category.DisplayName)}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
             rows.Add($@"\metasection{{{infoText}}}{{{listText}}}");
         }
 
@@ -248,18 +248,20 @@ internal static class CvLatexFragmentRenderer
     }
 
     private static FormattableString FormatCategoryValue(Category category, RegularString value)
-        => category.IsUrl ? (FormattableString) $@"\url{{{value}}}" : $"{value}";
+        => category.IsUrl
+            ? (FormattableString) $@"\url{{{LatexConverter.ToLatexString(value)}}}"
+            : $"{LatexConverter.ToLatexString(value)}";
 
     public static FormattableString RenderDocumentFooter(CvDataModel model)
     {
         var items = new List<FormattableString>(2);
         if (!model.Website.IsNull)
         {
-            items.Add($$$"""\textnormal{\textcolor{sectcol}{ \url{ {{{model.Website}}} } }}""");
+            items.Add($$$"""\textnormal{\textcolor{sectcol}{ \url{ {{{LatexConverter.ToLatexString(model.Website)}}} } }}""");
         }
         if (!model.GitHub.IsNull)
         {
-            items.Add($$"""\textcolor{sectcol}{ \url{ {{model.GitHub}} } }""");
+            items.Add($$"""\textcolor{sectcol}{ \url{ {{LatexConverter.ToLatexString(model.GitHub)}} } }""");
         }
         if (items.Count == 0)
         {

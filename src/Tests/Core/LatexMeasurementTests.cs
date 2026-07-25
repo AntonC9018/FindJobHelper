@@ -278,6 +278,84 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public void Renderer_EscapesAllFormatNeutralStructuralData()
+    {
+        var model = CreateEmptyModel();
+        model.Name = new("First#", "Last%");
+        model.Profession = new("R&D_{Lead}");
+        model.CategorizedInfos =
+        [
+            new(new Category("Label#"), @"value\%"),
+            new(new Category("URL&", IsUrl: true), "https://example.test/a_b?x=1&y=2"),
+        ];
+        model.CategorizedInfoLists =
+        [
+            new(new Category("Skills_"), ["C#", "R&D"]),
+        ];
+        model.Website = "https://site.test/a_b";
+        model.GitHub = @"https://github.test/a\b";
+
+        var header = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentHeader(model));
+        var footer = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderDocumentFooter(model));
+
+        Assert.Contains(@"Last\% First\#", header, StringComparison.Ordinal);
+        Assert.Contains(@"R\&D\_\{Lead\}", header, StringComparison.Ordinal);
+        Assert.Contains(@"\textbf{Label\#:} value\textbackslash{}\%", header, StringComparison.Ordinal);
+        Assert.Contains(@"\textbf{URL\&:} \url{https://example.test/a\_b?x=1\&y=2}", header, StringComparison.Ordinal);
+        Assert.Contains(@"\textbf{Skills\_:} C\#, R\&D", header, StringComparison.Ordinal);
+        Assert.Contains(@"\url{ https://site.test/a\_b }", footer, StringComparison.Ordinal);
+        Assert.Contains(@"\url{ https://github.test/a\textbackslash{}b }", footer, StringComparison.Ordinal);
+
+        var languages = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderLanguagesSectionInner(
+            [
+                new(
+                    new("Lang#", "L%"),
+                    new("C&"),
+                    [new("read_write")]),
+            ]));
+        Assert.Contains(@"Lang\# & C\& & read\_write", languages, StringComparison.Ordinal);
+
+        var @event = new Event
+        {
+            Title = "Title#%&_{",
+            Place = new("Place\\{}"),
+            DateRange = DateRange.Completed(new(2024), new(2025)),
+            Text = new PlainText { Text = "summary#%&_\\" },
+            SubItems = [new(0, new PlainText { Text = "bullet#%&_\\" })],
+            Urls = ["https://event.test/a_b?x=1&y=2"],
+        };
+        var renderedEvent = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderEvent(@event));
+
+        Assert.Contains(@"Title\#\%\&\_\{", renderedEvent, StringComparison.Ordinal);
+        Assert.Contains(@"Place\textbackslash{}\{\}", renderedEvent, StringComparison.Ordinal);
+        Assert.Contains(@"\url{https://event.test/a\_b?x=1\&y=2}", renderedEvent, StringComparison.Ordinal);
+        Assert.Contains(@"summary\#\%\&\_\textbackslash{}", renderedEvent, StringComparison.Ordinal);
+        Assert.Contains(@"bullet\#\%\&\_\textbackslash{}", renderedEvent, StringComparison.Ordinal);
+
+        var experience = new ExperienceList
+        {
+            Title = "Experience&Title",
+            Place = new("Experience_Place"),
+            DateRange = DateRange.Completed(new(2024), new(2025)),
+            Type = ExperienceType.Project,
+            Description = new PlainText { Text = "description{rich}" },
+            Urls = ["https://experience.test/a#b"],
+            Items = [],
+        };
+        var renderedExperience = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderExperienceChrome(experience));
+
+        Assert.Contains(@"Experience\&Title", renderedExperience, StringComparison.Ordinal);
+        Assert.Contains(@"Experience\_Place", renderedExperience, StringComparison.Ordinal);
+        Assert.Contains(@"\url{https://experience.test/a\#b}", renderedExperience, StringComparison.Ordinal);
+        Assert.Contains(@"description\{rich\}", renderedExperience, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Service_DeduplicatesDuplicateItemsAndWarmCacheSkipsRunner()
     {
         using var fixture = new CacheFixture();
