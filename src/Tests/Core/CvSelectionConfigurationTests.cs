@@ -118,6 +118,32 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
+    public async Task BuildSearch_DoesNotForceAWorkExperienceItemPerHeading()
+    {
+        var json = (await ReadFixtureAsync())
+            .Replace(
+                "\"relevanceWeight\": 0.72",
+                "\"relevanceWeight\": 0",
+                StringComparison.Ordinal)
+            .Replace(
+                "\"saturationPenalty\": 0.18",
+                "\"saturationPenalty\": 0",
+                StringComparison.Ordinal);
+        var configuration = await LoadAsync(json);
+        var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
+        var database = ExperienceDatabaseFactory.Create(tags);
+        var configured = configuration.BuildSearch(tagsDatabase);
+
+        var result = configured.Search.Run(database.Experiences);
+
+        var work = result.Get(configured.Sections.WorkKey);
+        var expectedHeadingCount = database.Experiences.Count(
+            static experience => experience.Type == ExperienceType.Job);
+        Assert.Equal(expectedHeadingCount, work.Length);
+        Assert.All(work, static experience => Assert.Empty(experience.SubItems));
+    }
+
+    [Fact]
     public async Task LoadAsync_LegacyPageFlagDefaultsToOnePageAndMapsFalseToUnrestricted()
     {
         var json = await ReadFixtureAsync();

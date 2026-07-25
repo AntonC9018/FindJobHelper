@@ -361,7 +361,10 @@ public sealed class CvSelectionConfiguration
             options =>
             {
                 Selection.WorkExperience.Apply(options);
+                // Keep every job heading, but let its bullets compete globally.
+                // A job without a selected bullet is still rendered as an empty list.
                 options.IncludeEmptyLists = true;
+                options.PreserveOneItemPerList = false;
             });
         builder.Configure(
             personalProjectsKey,
@@ -369,8 +372,6 @@ public sealed class CvSelectionConfiguration
             options =>
             {
                 Selection.PersonalProjects.Apply(options);
-                // Projects compete globally: unlike jobs, a project does not need
-                // a representative bullet merely because it cleared the score floor.
                 options.PreserveOneItemPerList = false;
             });
 
