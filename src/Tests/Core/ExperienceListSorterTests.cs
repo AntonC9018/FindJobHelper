@@ -8,6 +8,91 @@ namespace FindJobHelper.Core.Tests;
 public sealed class ExperienceListSorterTests
 {
     [Fact]
+    public void OrderItems_InterleavedSelectedGroupsBecomeContiguousAtEarliestMember()
+    {
+        var a1 = Item(Text("a1"));
+        var b1 = Item(Text("b1"));
+        var a2 = Item(Text("a2"));
+        var ungrouped = Item(Text("ungrouped"));
+        var b2 = Item(Text("b2"));
+        var list = List(
+            [a1, b1, a2, ungrouped, b2],
+            new ExperienceItemGroup { Id = "a", Items = [a1, a2] },
+            new ExperienceItemGroup { Id = "b", Items = [b1, b2] });
+
+        var ordered = list.OrderItems([b1, a1, ungrouped, b2, a2]);
+
+        Assert.Equal(
+            ["b1", "b2", "a1", "a2", "ungrouped"],
+            ordered.Select(item => item.Text.ToString()));
+    }
+
+    [Fact]
+    public void OrderItems_PartialGroupSelectionDoesNotAddMembers()
+    {
+        var a1 = Item(Text("a1"));
+        var other = Item(Text("other"));
+        var a2 = Item(Text("a2"));
+        var list = List(
+            [a1, other, a2],
+            new ExperienceItemGroup { Id = "a", Items = [a1, a2] });
+
+        var ordered = list.OrderItems([other, a2]);
+
+        Assert.Equal(["other", "a2"], ordered.Select(item => item.Text.ToString()));
+    }
+
+    [Fact]
+    public void OrderItems_GroupInterleavingConstraintThrowsClearConflict()
+    {
+        var a1 = Item(Text("a1"));
+        var middle = new ExperienceListItem
+        {
+            Text = RichText.Create($"{Text("middle")}"),
+            Order = new() { After = [a1] },
+        };
+        var a2 = new ExperienceListItem
+        {
+            Text = RichText.Create($"{Text("a2")}"),
+            Order = new() { After = [middle] },
+        };
+        var list = List(
+            [a1, middle, a2],
+            new ExperienceItemGroup { Id = "a", Items = [a1, a2] });
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            list.OrderItems([a1, middle, a2]));
+
+        Assert.Contains("interleave", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("group", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OrderItems_RejectsForeignAndMultiplyGroupedItems()
+    {
+        var member = Item(Text("member"));
+        var foreign = Item(Text("foreign"));
+        var foreignList = List(
+            [member],
+            new ExperienceItemGroup { Id = "foreign", Items = [foreign] });
+        Assert.Contains(
+            "does not belong",
+            Assert.Throws<InvalidOperationException>(() =>
+                foreignList.OrderItems([member])).Message,
+            StringComparison.Ordinal);
+
+        var duplicateList = List(
+            [member],
+            new ExperienceItemGroup { Id = "one", Items = [member] },
+            new ExperienceItemGroup { Id = "two", Items = [member] });
+        Assert.Contains(
+            "more than one",
+            Assert.Throws<InvalidOperationException>(() =>
+                duplicateList.OrderItems([member])).Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AllEvents_OrderAfterOrdersItemsWithoutChangingSelection()
     {
         var predecessor = Item(Text("predecessor"));
@@ -394,6 +479,21 @@ public sealed class ExperienceListSorterTests
             Place = new("test"),
             DateRange = DateRange.Completed(new(Year: 2024), new(Year: 2025)),
             Items = items.ToImmutableArray(),
+            Type = ExperienceType.Job,
+        };
+    }
+
+    private static ExperienceList List(
+        ExperienceListItem[] items,
+        params ExperienceItemGroup[] groups)
+    {
+        return new()
+        {
+            Title = "test",
+            Place = new("test"),
+            DateRange = DateRange.Completed(new(Year: 2024), new(Year: 2025)),
+            Items = items.ToImmutableArray(),
+            ItemGroups = groups.ToImmutableArray(),
             Type = ExperienceType.Job,
         };
     }

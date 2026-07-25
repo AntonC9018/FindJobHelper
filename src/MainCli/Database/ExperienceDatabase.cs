@@ -58,6 +58,22 @@ public sealed class ExperienceListItem
     public ItemOrder Order { get; init; } = new();
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class ExperienceItemGroup
+{
+    private string _id = null!;
+
+    public required string Id
+    {
+        get => _id;
+        init => _id = string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("Experience item group ID cannot be null, empty, or whitespace.", nameof(value))
+            : value;
+    }
+
+    public required ImmutableArray<ExperienceListItem> Items { get; init; }
+}
+
 public sealed record class MmrOptions(
     float RelevanceWeight,
     int SaturationQuota,
@@ -253,33 +269,142 @@ public static class ExperienceListSorter
         this ExperienceList list,
         IEnumerable<ExperienceListItem> selectedItems)
     {
+        list.ValidateItemGroups();
         var selected = selectedItems.ToList();
-        var selectedSet = new HashSet<ExperienceListItem>(
-            selected,
-            ReferenceEqualityComparer<ExperienceListItem>.Instance);
-        var frontItems = list.Items
-            .Where(item =>
-                selectedSet.Contains(item) &&
-                item.Order.Move == ItemMove.ToFront)
-            .ToList();
-
-        // Selection order remains the stable order for ordinary items. Front
-        // siblings use declaration order as their stable prefix.
-        var nodes = frontItems
-            .Concat(selected.Where(item => item.Order.Move != ItemMove.ToFront))
-            .ToList();
-
-        return nodes.TopologicalSort(item =>
+        var comparer = System.Collections.Generic.ReferenceEqualityComparer.Instance;
+        var selectedSet = new HashSet<ExperienceListItem>(selected, comparer);
+        var itemToGroup = new Dictionary<ExperienceListItem, ExperienceItemGroup>(comparer);
+        foreach (var group in list.ItemGroups)
         {
-            var predecessors = OrderingPredecessors(item);
-            if (!selectedSet.Contains(item) ||
-                item.Order.Move == ItemMove.ToFront)
+            foreach (var item in group.Items)
             {
-                return predecessors;
+                itemToGroup[item] = group;
+            }
+        }
+
+        var blocks = new List<OrderingBlock>();
+        var groupBlocks = new Dictionary<ExperienceItemGroup, OrderingBlock>(
+            ReferenceEqualityComparer<ExperienceItemGroup>.Instance);
+        foreach (var item in selected)
+        {
+            if (itemToGroup.TryGetValue(item, out var group))
+            {
+                if (!groupBlocks.TryGetValue(group, out var block))
+                {
+                    block = new OrderingBlock(group.Id);
+                    groupBlocks.Add(group, block);
+                    blocks.Add(block);
+                }
+                block.Items.Add(item);
+            }
+            else
+            {
+                var block = new OrderingBlock(null);
+                block.Items.Add(item);
+                blocks.Add(block);
+            }
+        }
+
+        var itemToBlock = new Dictionary<ExperienceListItem, OrderingBlock>(comparer);
+        foreach (var block in blocks)
+        {
+            foreach (var item in block.Items)
+            {
+                itemToBlock[item] = block;
+            }
+        }
+
+        var frontBlocks = blocks
+            .Where(block => block.Items.Any(item => item.Order.Move == ItemMove.ToFront))
+            .OrderBy(block => block.Items.Min(item => list.Items.IndexOf(item)))
+            .ToList();
+
+        IEnumerable<OrderingBlock> BlockPredecessors(OrderingBlock block)
+        {
+            var predecessors = block.Items
+                .SelectMany(SelectedPredecessors)
+                .Select(item => itemToBlock[item])
+                .Where(predecessor => !ReferenceEquals(predecessor, block));
+
+            if (!frontBlocks.Contains(block))
+            {
+                predecessors = predecessors.Concat(frontBlocks);
             }
 
-            return predecessors.Concat(frontItems);
-        });
+            return predecessors;
+        }
+
+        List<OrderingBlock> orderedBlocks;
+        try
+        {
+            orderedBlocks = frontBlocks
+                .Concat(blocks.Where(block => !frontBlocks.Contains(block)))
+                .TopologicalSort(BlockPredecessors);
+        }
+        catch (InvalidOperationException exception)
+            when (list.ItemGroups.Length != 0 &&
+                  exception.Message.Contains("Cycle detected", StringComparison.Ordinal))
+        {
+            // A pre-existing item-level cycle is still reported with the
+            // established error. Only a cycle introduced by collapsing valid
+            // item ordering into blocks is a grouping/interleaving conflict.
+            var frontItems = list.Items
+                .Where(item =>
+                    selectedSet.Contains(item) &&
+                    item.Order.Move == ItemMove.ToFront)
+                .ToList();
+            frontItems
+                .Concat(selected.Where(item => item.Order.Move != ItemMove.ToFront))
+                .TopologicalSort(item =>
+                {
+                    var predecessors = SelectedPredecessors(item);
+                    return item.Order.Move == ItemMove.ToFront
+                        ? predecessors
+                        : predecessors.Concat(frontItems);
+                });
+
+            throw new InvalidOperationException(
+                "Named experience groups conflict with item ordering constraints; " +
+                "satisfying them would require group members to interleave.",
+                exception);
+        }
+
+        return orderedBlocks
+            .SelectMany(block => block.Items.TopologicalSort(item =>
+                SelectedPredecessors(item).Where(predecessor =>
+                    ReferenceEquals(itemToBlock[predecessor], block))))
+            .ToList();
+
+        IEnumerable<ExperienceListItem> SelectedPredecessors(ExperienceListItem item)
+        {
+            var visited = new HashSet<ExperienceListItem>(comparer);
+            var pending = new Stack<ExperienceListItem>(OrderingPredecessors(item));
+            while (pending.TryPop(out var predecessor))
+            {
+                if (predecessor is null || !visited.Add(predecessor))
+                {
+                    continue;
+                }
+
+                if (selectedSet.Contains(predecessor))
+                {
+                    yield return predecessor;
+                }
+                else
+                {
+                    foreach (var ancestor in OrderingPredecessors(predecessor))
+                    {
+                        pending.Push(ancestor);
+                    }
+                }
+            }
+        }
+    }
+
+    private sealed class OrderingBlock(string? groupId)
+    {
+        public string? GroupId { get; } = groupId;
+        public List<ExperienceListItem> Items { get; } = new();
     }
 
     internal static IEnumerable<ExperienceListItem> OrderingPredecessors(
@@ -349,7 +474,46 @@ public sealed class ExperienceList
     public required ExperienceType Type { get; init; }
     public IRichTextNode? Description { get; init; }
     public required ImmutableArray<ExperienceListItem> Items { get; init; }
+    public ImmutableArray<ExperienceItemGroup> ItemGroups { get; init; } =
+        ImmutableArray<ExperienceItemGroup>.Empty;
     public ImmutableArray<RegularString> Urls { get; init; } = ImmutableArray<RegularString>.Empty;
+
+    internal void ValidateItemGroups()
+    {
+        var comparer = System.Collections.Generic.ReferenceEqualityComparer.Instance;
+        var items = new HashSet<ExperienceListItem>(Items, comparer);
+        var grouped = new HashSet<ExperienceListItem>(comparer);
+        var groupIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in ItemGroups)
+        {
+            if (!groupIds.Add(group.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Named experience group ID '{group.Id}' is declared more than once in one experience list.");
+            }
+
+            if (group.Items.IsDefaultOrEmpty)
+            {
+                throw new InvalidOperationException(
+                    $"Named experience group '{group.Id}' must contain at least one item.");
+            }
+
+            foreach (var item in group.Items)
+            {
+                if (!items.Contains(item))
+                {
+                    throw new InvalidOperationException(
+                        $"Named experience group '{group.Id}' contains an item that does not belong to its experience list.");
+                }
+
+                if (!grouped.Add(item))
+                {
+                    throw new InvalidOperationException(
+                        "An experience item cannot belong to more than one named group.");
+                }
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -564,6 +728,8 @@ public sealed class ExperienceListBuilder
     private DateRange? _dateRange;
     private ExperienceType _type;
     private readonly List<ExperienceItemBuilder> _itemBuilders = new();
+    private readonly Dictionary<string, ExperienceItemGroupBuilder> _groups =
+        new(StringComparer.Ordinal);
     private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
     private IRichTextNode? _description;
 
@@ -606,10 +772,37 @@ public sealed class ExperienceListBuilder
 
     public ExperienceItemBuilder Item(Action<ExperienceItemBuilder> configure)
     {
+        return AddItem(configure, group: null);
+    }
+
+    internal ExperienceItemBuilder AddItem(
+        Action<ExperienceItemBuilder> configure,
+        ExperienceItemGroupBuilder? group)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
         var builder = new ExperienceItemBuilder();
         configure(builder);
         _itemBuilders.Add(builder);
+        group?.Add(builder);
         return builder;
+    }
+
+    public ExperienceItemGroupBuilder Group(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            throw new ArgumentException(
+                "Experience item group ID cannot be null, empty, or whitespace.",
+                nameof(id));
+        }
+
+        if (!_groups.TryGetValue(id, out var group))
+        {
+            group = new ExperienceItemGroupBuilder(this, id);
+            _groups.Add(id, group);
+        }
+
+        return group;
     }
 
     public void Url(string url)
@@ -644,7 +837,9 @@ public sealed class ExperienceListBuilder
             builtItems[builder] = item;
         }
 
-        return new ExperienceList
+        var itemGroups = _groups.Values.Select(group => group.Build(builtItems)).ToImmutableArray();
+
+        var result = new ExperienceList
         {
             Title = new RegularString(_title),
             Place = _place,
@@ -652,7 +847,45 @@ public sealed class ExperienceListBuilder
             Type = _type,
             Description = _description,
             Items = [.. builtItems.Values],
+            ItemGroups = itemGroups,
             Urls = _urls.DrainToImmutable(),
+        };
+        result.ValidateItemGroups();
+        return result;
+    }
+}
+
+public sealed class ExperienceItemGroupBuilder
+{
+    private readonly ExperienceListBuilder _owner;
+    private readonly List<ExperienceItemBuilder> _items = new();
+
+    internal ExperienceItemGroupBuilder(ExperienceListBuilder owner, string id)
+    {
+        _owner = owner;
+        Id = id;
+    }
+
+    public string Id { get; }
+
+    public ExperienceItemBuilder Item(Action<ExperienceItemBuilder> configure)
+        => _owner.AddItem(configure, this);
+
+    internal void Add(ExperienceItemBuilder item) => _items.Add(item);
+
+    internal ExperienceItemGroup Build(
+        IReadOnlyDictionary<ExperienceItemBuilder, ExperienceListItem> builtItems)
+    {
+        if (_items.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Named experience group '{Id}' must contain at least one item.");
+        }
+
+        return new ExperienceItemGroup
+        {
+            Id = Id,
+            Items = _items.Select(item => builtItems[item]).ToImmutableArray(),
         };
     }
 }
@@ -787,6 +1020,10 @@ public static class ExperienceDatabaseSerializer
     {
         public async Task Serialize(Stream output, CancellationToken cancellationToken)
         {
+            foreach (var experience in db.Experiences)
+            {
+                experience.ValidateItemGroups();
+            }
             await JsonSerializer.SerializeAsync(
                 options: Options,
                 value: db,
@@ -804,6 +1041,10 @@ public static class ExperienceDatabaseSerializer
         if (ret == null)
         {
             throw new InvalidOperationException("File did not contain a db object.");
+        }
+        foreach (var experience in ret.Experiences)
+        {
+            experience.ValidateItemGroups();
         }
         return ret;
     }
