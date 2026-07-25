@@ -84,6 +84,18 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Fact]
+    public async Task LoadAsync_AllowsCommentsAndTrailingCommas()
+    {
+        var json = await ReadFixtureAsync();
+        json = json.Insert(json.IndexOf('{') + 1, "\n  // Job-specific CV settings");
+        json = json.Insert(json.LastIndexOf('}'), ",");
+
+        var configuration = await LoadAsync(json);
+
+        Assert.Equal(CvPageCount.OnePage, configuration.PageCount);
+    }
+
+    [Fact]
     public async Task BuildSearch_AlwaysIncludesEveryWorkExperienceHeading()
     {
         var configuration = await CvSelectionConfigurationLoader.LoadAsync(

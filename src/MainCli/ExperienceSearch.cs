@@ -18,6 +18,7 @@ public sealed class SearchPredicateOptions
     public float ScoreLowerBound { get; set; }
     public float RecencyBoost { get; set; }
     public bool IncludeEmptyLists { get; set; }
+    public bool PreserveOneItemPerList { get; set; } = true;
 
     internal SearchPredicateOptions Copy()
     {
@@ -28,6 +29,7 @@ public sealed class SearchPredicateOptions
             ScoreLowerBound = ScoreLowerBound,
             RecencyBoost = RecencyBoost,
             IncludeEmptyLists = IncludeEmptyLists,
+            PreserveOneItemPerList = PreserveOneItemPerList,
         };
     }
 }
@@ -209,7 +211,8 @@ public sealed class SearchBuilder
                     predicate.Options.TotalItemBudget,
                     predicate.Options.ScoreLowerBound,
                     predicate.Options.RecencyBoost,
-                    predicate.Options.IncludeEmptyLists),
+                    predicate.Options.IncludeEmptyLists,
+                    predicate.Options.PreserveOneItemPerList),
                 i));
         }
 
@@ -355,7 +358,8 @@ internal readonly record struct ExperienceSelectionOptions(
     int TotalItemBudget,
     float ScoreLowerBound,
     float RecencyBoost,
-    bool IncludeEmptyLists);
+    bool IncludeEmptyLists,
+    bool PreserveOneItemPerList);
 
 internal sealed record ExperienceSelectionGroup(
     ExperienceKey Key,
@@ -564,7 +568,8 @@ internal static class ExperienceSelectionEngine
             FillMinimums();
         }
 
-        foreach (var scoredList in scoredLists)
+        foreach (var scoredList in scoredLists.Where(
+                     static x => x.Group.Options.PreserveOneItemPerList))
         {
             var best = ranker.BestCandidate(
                 scoredList.ScoredItems.Select((i, itemIndex) => new MmrCandidate(

@@ -249,6 +249,8 @@ public static class CvSelectionConfigurationLoader
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
@@ -364,7 +366,13 @@ public sealed class CvSelectionConfiguration
         builder.Configure(
             personalProjectsKey,
             predicate: static experience => experience.Type == ExperienceType.Project,
-            Selection.PersonalProjects.Apply);
+            options =>
+            {
+                Selection.PersonalProjects.Apply(options);
+                // Projects compete globally: unlike jobs, a project does not need
+                // a representative bullet merely because it cleared the score floor.
+                options.PreserveOneItemPerList = false;
+            });
 
         try
         {

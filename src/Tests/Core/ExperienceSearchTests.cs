@@ -192,6 +192,46 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_CanRankItemsGloballyWithoutPreservingEveryList()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 1,
+            SaturationPenalty: 0));
+        builder.Configure(
+            ProjectKey,
+            e => e.Type == ExperienceType.Project,
+            opts =>
+            {
+                opts.TotalItemBudget = 2;
+                opts.PreserveOneItemPerList = false;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "strong",
+                ExperienceType.Project,
+                2025,
+                Item("strongest", (tag, 10)),
+                Item("second strongest", (tag, 9))),
+            Experience(
+                "weak",
+                ExperienceType.Project,
+                2024,
+                Item("weak", (tag, 1))),
+        ]);
+
+        Assert.Equal(
+            new[] { "strongest", "second strongest" },
+            Texts(result.Get(ProjectKey)));
+    }
+
+    [Fact]
     public void Search_SkipsNonSeedZeroScoreCandidatesAfterMinimumIsMet()
     {
         var tag = new Tag("a");
