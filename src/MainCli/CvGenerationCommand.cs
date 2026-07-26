@@ -143,9 +143,17 @@ public sealed class CvGenerationCommand
             measurementSnapshot,
             searchConfiguration.Sections,
             searchConfiguration.SectionOrder,
-            searchConfiguration.PageCount);
+            searchConfiguration.PageCount,
+            searchConfiguration.PageLayout);
         var searchResult = searchConfiguration.Search.Run(experienceDatabase, admissionPolicy);
-        admissionPolicy.RequireExactPageCount();
+        if (searchConfiguration.PageLayout is null)
+        {
+            admissionPolicy.RequireExactPageCount();
+        }
+        else
+        {
+            admissionPolicy.RequireCompletePageLayout();
+        }
 
         searchConfiguration.Sections.Apply(searchResult, currentModel);
 
@@ -185,6 +193,7 @@ public sealed class CvGenerationCommand
                     ConfigFilePath = templatePath,
                     OutputDirectory = stagingDirectory,
                     PageCount = searchConfiguration.PageCount,
+                    PageLayout = searchConfiguration.PageLayout,
                 });
                 stagedArtifactPath = artifacts.PdfPath;
             }

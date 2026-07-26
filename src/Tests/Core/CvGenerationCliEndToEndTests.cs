@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json.Nodes;
 using FindJobHelper.CVGeneration;
 using MainCli;
 
@@ -81,7 +82,7 @@ public sealed class CvGenerationCliEndToEndTests
             Assert.StartsWith("# Anton Curmanschii\n", markdown, StringComparison.Ordinal);
             Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
             Assert.Contains("**Technologies:** E2E JSON Configuration", markdown, StringComparison.Ordinal);
-            Assert.Contains("## Experience", markdown, StringComparison.Ordinal);
+            Assert.Contains("## Work Experience", markdown, StringComparison.Ordinal);
             Assert.Contains("`score:", markdown, StringComparison.Ordinal);
             Assert.Contains("- `score:", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain(@"\begin{document}", markdown, StringComparison.Ordinal);
@@ -107,6 +108,35 @@ public sealed class CvGenerationCliEndToEndTests
             var result = await RunCliAsync(
                 "--config",
                 MultiPageFixturePath,
+                "--output-directory",
+                outputDirectory);
+
+            Assert.True(
+                result.ExitCode == 0,
+                $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton.pdf")));
+            Assert.Single(Directory.GetFiles(outputDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_ExplicitFourPageFixturePublishesPdf()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-explicit-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                ExplicitFixturePath,
                 "--output-directory",
                 outputDirectory);
 
@@ -178,6 +208,68 @@ public sealed class CvGenerationCliEndToEndTests
         }
     }
 
+    [Theory]
+    [InlineData(false, "CurmanchiiAnton.pdf")]
+    [InlineData(true, "CurmanchiiAnton-debug.md")]
+    public async Task Generate_UnderfilledExplicitLayoutFailsWithoutPublishingArtifacts(
+        bool debug,
+        string artifactFileName)
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-explicit-underfill-{Guid.NewGuid():N}");
+        var configPath = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-explicit-underfill-{Guid.NewGuid():N}.json");
+        try
+        {
+            var configuration = JsonNode.Parse(await File.ReadAllTextAsync(FixturePath))!
+                .AsObject();
+            configuration.Remove("limitToOnePage");
+            configuration.Remove("pageCount");
+            configuration["sectionOrder"] = JsonNode.Parse(
+                """[{ "pages": "1-10", "sections": ["WorkExperience"] }]""");
+            await File.WriteAllTextAsync(configPath, configuration.ToJsonString());
+
+            var arguments = new List<string>
+            {
+                "--config",
+                configPath,
+                "--output-directory",
+                outputDirectory,
+            };
+            if (debug)
+            {
+                arguments.Add("--debug");
+            }
+
+            var result = await RunCliAsync([.. arguments]);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(
+                "Explicit layout block 1-10",
+                result.StandardError,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "naturally occupies",
+                result.StandardError,
+                StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(outputDirectory, artifactFileName)));
+            if (Directory.Exists(outputDirectory))
+            {
+                Assert.Empty(Directory.GetFiles(outputDirectory));
+            }
+        }
+        finally
+        {
+            File.Delete(configPath);
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
     private static async Task<ProcessResult> RunCliAsync(params string[] arguments)
     {
         var startInfo = new ProcessStartInfo("dotnet")
@@ -221,6 +313,11 @@ public sealed class CvGenerationCliEndToEndTests
         AppContext.BaseDirectory,
         "data",
         "cli-e2e-entry-19-config.json");
+
+    private static string ExplicitFixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-explicit-config.json");
 
     private static string UnattainableFixturePath => Path.Combine(
         AppContext.BaseDirectory,

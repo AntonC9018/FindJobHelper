@@ -139,7 +139,7 @@ public sealed class CvMarkdownRendererTests
             - **English:** C2 · Technical Writing
             - **Russian:** Native
 
-            ## Experience
+            ## Work Experience
 
             ### `score: 18.4 (.NET:12, SQL:6.4)` Backend Developer
 

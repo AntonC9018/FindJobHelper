@@ -101,6 +101,12 @@ public sealed class LatexMeasurementService
             graph.CurrentPageCompleteSections,
             graph.CurrentPageSectionChrome,
             graph.FreshPageSectionChrome,
+            graph.CurrentPageSplitSectionStart,
+            graph.FreshPageSplitSectionStart,
+            graph.SplitSectionEnd!.Value,
+            graph.FreshPageContinuation!.Value,
+            graph.CurrentPageExplicitStaticSections,
+            graph.FreshPageExplicitStaticSections,
             graph.DocumentHeader!.Value,
             graph.DocumentFooter!.Value,
             graph.UsablePageHeight!.Value);
@@ -161,10 +167,25 @@ public sealed class LatexMeasurementService
                 chrome,
                 LatexMeasurementMode.FreshPageSectionChrome,
                 MeasurementDestination.ForFreshPageSectionChrome(section));
+            graph.Add(
+                CreateFragmentKey(LatexMeasurementKind.SplitSectionStart, chrome, section),
+                chrome,
+                LatexMeasurementMode.SplitSectionStart,
+                MeasurementDestination.ForCurrentPageSplitSectionStart(section));
+            graph.Add(
+                CreateFragmentKey(
+                    LatexMeasurementKind.FreshPageSplitSectionStart,
+                    chrome,
+                    section),
+                chrome,
+                LatexMeasurementMode.FreshPageSplitSectionStart,
+                MeasurementDestination.ForFreshPageSplitSectionStart(section));
 
             if (CvLatexFragmentRenderer.IsSectionEmpty(section, currentModel))
             {
                 graph.CurrentPageCompleteSections.Add(section, LatexHeight.Zero);
+                graph.CurrentPageExplicitStaticSections.Add(section, LatexHeight.Zero);
+                graph.FreshPageExplicitStaticSections.Add(section, LatexHeight.Zero);
                 continue;
             }
 
@@ -180,7 +201,45 @@ public sealed class LatexMeasurementService
                 complete,
                 LatexMeasurementMode.FlowBlock,
                 MeasurementDestination.ForCompleteSection(section));
+            if (section == Section.Languages)
+            {
+                var explicitCurrent = $@"\cvflowblockfitskip{complete}\cvexplicitsectionend";
+                var explicitFresh =
+                    $@"\cvflowblocknewpageskip\cvflowblockfitskip{complete}\cvexplicitsectionend";
+                graph.Add(
+                    CreateFragmentKey(
+                        LatexMeasurementKind.ExplicitStaticSection,
+                        explicitCurrent,
+                        section),
+                    explicitCurrent,
+                    LatexMeasurementMode.Box,
+                    MeasurementDestination.ForCurrentPageExplicitStaticSection(section));
+                graph.Add(
+                    CreateFragmentKey(
+                        LatexMeasurementKind.FreshPageExplicitStaticSection,
+                        explicitFresh,
+                        section),
+                    explicitFresh,
+                    LatexMeasurementMode.Box,
+                    MeasurementDestination.ForFreshPageExplicitStaticSection(section));
+            }
+            else
+            {
+                graph.CurrentPageExplicitStaticSections.Add(section, LatexHeight.Zero);
+                graph.FreshPageExplicitStaticSections.Add(section, LatexHeight.Zero);
+            }
         }
+
+        graph.Add(
+            CreateFragmentKey(LatexMeasurementKind.SplitSectionEnd, string.Empty),
+            string.Empty,
+            LatexMeasurementMode.SplitSectionEnd,
+            MeasurementDestination.ForSplitSectionEnd());
+        graph.Add(
+            CreateFragmentKey(LatexMeasurementKind.FreshPageContinuation, string.Empty),
+            string.Empty,
+            LatexMeasurementMode.FreshPageContinuation,
+            MeasurementDestination.ForFreshPageContinuation());
 
         var documentHeader = CvLatexFragmentRenderer.Materialize(
             CvLatexFragmentRenderer.RenderDocumentHeader(currentModel));
@@ -256,6 +315,12 @@ public sealed class LatexMeasurementService
         public Dictionary<Section, LatexHeight> CurrentPageCompleteSections { get; } = new();
         public Dictionary<Section, LatexHeight> CurrentPageSectionChrome { get; } = new();
         public Dictionary<Section, LatexHeight> FreshPageSectionChrome { get; } = new();
+        public Dictionary<Section, LatexHeight> CurrentPageSplitSectionStart { get; } = new();
+        public Dictionary<Section, LatexHeight> FreshPageSplitSectionStart { get; } = new();
+        public Dictionary<Section, LatexHeight> CurrentPageExplicitStaticSections { get; } = new();
+        public Dictionary<Section, LatexHeight> FreshPageExplicitStaticSections { get; } = new();
+        public LatexHeight? SplitSectionEnd { get; private set; }
+        public LatexHeight? FreshPageContinuation { get; private set; }
         public LatexHeight? DocumentHeader { get; private set; }
         public LatexHeight? DocumentFooter { get; private set; }
         public LatexHeight? UsablePageHeight { get; private set; }
@@ -313,6 +378,24 @@ public sealed class LatexMeasurementService
                     case MeasurementDestinationKind.FreshPageSectionChrome:
                         FreshPageSectionChrome[destination.Section] = height;
                         break;
+                    case MeasurementDestinationKind.CurrentPageSplitSectionStart:
+                        CurrentPageSplitSectionStart[destination.Section] = height;
+                        break;
+                    case MeasurementDestinationKind.FreshPageSplitSectionStart:
+                        FreshPageSplitSectionStart[destination.Section] = height;
+                        break;
+                    case MeasurementDestinationKind.SplitSectionEnd:
+                        SplitSectionEnd = height;
+                        break;
+                    case MeasurementDestinationKind.FreshPageContinuation:
+                        FreshPageContinuation = height;
+                        break;
+                    case MeasurementDestinationKind.CurrentPageExplicitStaticSection:
+                        CurrentPageExplicitStaticSections[destination.Section] = height;
+                        break;
+                    case MeasurementDestinationKind.FreshPageExplicitStaticSection:
+                        FreshPageExplicitStaticSections[destination.Section] = height;
+                        break;
                     case MeasurementDestinationKind.DocumentHeader:
                         DocumentHeader = height;
                         break;
@@ -357,6 +440,20 @@ public sealed class LatexMeasurementService
                 throw new CvMeasurementInvariantException(
                     "Incomplete measurement snapshot: section chrome is missing.");
             }
+            if (CurrentPageSplitSectionStart.Count != Enum.GetValues<Section>().Length
+                || FreshPageSplitSectionStart.Count != Enum.GetValues<Section>().Length
+                || SplitSectionEnd is null
+                || FreshPageContinuation is null)
+            {
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: split-section measurements are missing.");
+            }
+            if (CurrentPageExplicitStaticSections.Count != Enum.GetValues<Section>().Length
+                || FreshPageExplicitStaticSections.Count != Enum.GetValues<Section>().Length)
+            {
+                throw new CvMeasurementInvariantException(
+                    "Incomplete measurement snapshot: explicit static-section measurements are missing.");
+            }
             if (DocumentHeader is null || DocumentFooter is null)
             {
                 throw new CvMeasurementInvariantException(
@@ -382,8 +479,20 @@ public sealed class LatexMeasurementService
             {
                 var currentChrome = CurrentPageSectionChrome[section].ScaledPoints;
                 var freshChrome = FreshPageSectionChrome[section].ScaledPoints;
+                var currentStart = CurrentPageSplitSectionStart[section].ScaledPoints;
+                var freshStart = FreshPageSplitSectionStart[section].ScaledPoints;
+                var currentExplicitStatic =
+                    CurrentPageExplicitStaticSections[section].ScaledPoints;
+                var freshExplicitStatic =
+                    FreshPageExplicitStaticSections[section].ScaledPoints;
                 var complete = CurrentPageCompleteSections[section].ScaledPoints;
-                if (currentChrome < 0 || freshChrome < 0 || complete < 0)
+                if (currentChrome < 0
+                    || freshChrome < 0
+                    || currentStart < 0
+                    || freshStart < 0
+                    || currentExplicitStatic < 0
+                    || freshExplicitStatic < 0
+                    || complete < 0)
                 {
                     throw new CvMeasurementInvariantException(
                         $"Measured heights for section '{section}' cannot be negative.");
@@ -399,6 +508,23 @@ public sealed class LatexMeasurementService
                     throw new CvMeasurementInvariantException(
                         $"Derived fresh-page height for section '{section}' cannot be negative.");
                 }
+                if (freshStart < currentStart)
+                {
+                    throw new CvMeasurementInvariantException(
+                        $"Fresh-page split-section start for '{section}' is shorter than its current-page form.");
+                }
+                if (freshExplicitStatic < currentExplicitStatic)
+                {
+                    throw new CvMeasurementInvariantException(
+                        $"Fresh-page explicit static section '{section}' is shorter than its current-page form.");
+                }
+            }
+
+            if (SplitSectionEnd.Value.ScaledPoints < 0
+                || FreshPageContinuation.Value.ScaledPoints < 0)
+            {
+                throw new CvMeasurementInvariantException(
+                    "Split-section ending and fresh-page continuation heights cannot be negative.");
             }
         }
     }
@@ -422,6 +548,12 @@ public sealed class LatexMeasurementService
         CompleteSection,
         CurrentPageSectionChrome,
         FreshPageSectionChrome,
+        CurrentPageSplitSectionStart,
+        FreshPageSplitSectionStart,
+        SplitSectionEnd,
+        FreshPageContinuation,
+        CurrentPageExplicitStaticSection,
+        FreshPageExplicitStaticSection,
         DocumentHeader,
         DocumentFooter,
         UsablePageHeight,
@@ -450,6 +582,24 @@ public sealed class LatexMeasurementService
 
         public static MeasurementDestination ForFreshPageSectionChrome(Section section)
             => new(MeasurementDestinationKind.FreshPageSectionChrome, default, default, section);
+
+        public static MeasurementDestination ForCurrentPageSplitSectionStart(Section section)
+            => new(MeasurementDestinationKind.CurrentPageSplitSectionStart, default, default, section);
+
+        public static MeasurementDestination ForFreshPageSplitSectionStart(Section section)
+            => new(MeasurementDestinationKind.FreshPageSplitSectionStart, default, default, section);
+
+        public static MeasurementDestination ForSplitSectionEnd()
+            => new(MeasurementDestinationKind.SplitSectionEnd, default, default, default);
+
+        public static MeasurementDestination ForFreshPageContinuation()
+            => new(MeasurementDestinationKind.FreshPageContinuation, default, default, default);
+
+        public static MeasurementDestination ForCurrentPageExplicitStaticSection(Section section)
+            => new(MeasurementDestinationKind.CurrentPageExplicitStaticSection, default, default, section);
+
+        public static MeasurementDestination ForFreshPageExplicitStaticSection(Section section)
+            => new(MeasurementDestinationKind.FreshPageExplicitStaticSection, default, default, section);
 
         public static MeasurementDestination ForDocumentHeader()
             => new(MeasurementDestinationKind.DocumentHeader, default, default, default);

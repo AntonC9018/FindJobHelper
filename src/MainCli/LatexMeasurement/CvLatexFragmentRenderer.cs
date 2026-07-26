@@ -38,6 +38,28 @@ internal static class CvLatexFragmentRenderer
         FormattableString innerLatex)
         => RenderProductionSection(section.ToString(), innerLatex);
 
+    public static FormattableString RenderExplicitSection(
+        Section section,
+        CvDataModel model)
+    {
+        return model.DispatchSection(
+            section,
+            renderLanguages: languages =>
+            {
+                var inner = RenderLanguagesSectionInner(languages);
+                return inner.Format.Length == 0
+                    ? Empty
+                    : RenderExplicitUnit(
+                        section,
+                        eventDiagnostic: null,
+                        currentPrefix: Literal(@"\cvflowblockfitskip"),
+                        freshPrefix: Literal(@"\cvflowblocknewpageskip\cvflowblockfitskip"),
+                        body: inner,
+                        suffix: Literal(@"\cvexplicitsectionend"));
+            },
+            renderEvents: events => RenderExplicitEventsSection(section, events));
+    }
+
     private static FormattableString RenderProductionSection(
         string sectionLabel,
         FormattableString innerLatex)
@@ -90,6 +112,59 @@ internal static class CvLatexFragmentRenderer
             {{Join(renderedEvents, Environment.NewLine + Environment.NewLine)}}
             """;
     }
+
+    private static FormattableString RenderExplicitEventsSection(
+        Section section,
+        ImmutableArray<Event> events)
+    {
+        if (events.IsEmpty)
+        {
+            return Empty;
+        }
+
+        var units = new List<FormattableString>(events.Length);
+        for (var index = 0; index < events.Length; index++)
+        {
+            var isFirst = index == 0;
+            var isLast = index == events.Length - 1;
+            FormattableString currentPrefix = isFirst
+                ? $@"\cvflowblockfitskip{RenderSectionChrome(section)}"
+                : Empty;
+            FormattableString freshPrefix = isFirst
+                ? $@"\cvflowblocknewpageskip\cvflowblockfitskip{RenderSectionChrome(section)}"
+                : Literal(@"\cvflowblocknewpageskip");
+            FormattableString suffix = isLast
+                ? Literal(@"\cvexplicitsectionend")
+                : Empty;
+            units.Add(RenderExplicitUnit(
+                section,
+                (index + 1).ToString(CultureInfo.InvariantCulture),
+                currentPrefix,
+                freshPrefix,
+                RenderEvent(events[index]),
+                suffix));
+        }
+
+        return $"{Join(units, Environment.NewLine + Environment.NewLine)}";
+    }
+
+    private static FormattableString RenderExplicitUnit(
+        Section section,
+        string? eventDiagnostic,
+        FormattableString currentPrefix,
+        FormattableString freshPrefix,
+        FormattableString body,
+        FormattableString suffix)
+        => $$"""
+            \begin{cvexplicitunit}
+            { {{LatexConverter.ToLatexString(section.ToString())}} }
+            { {{LatexConverter.ToLatexString(eventDiagnostic ?? string.Empty)}} }
+            { {{currentPrefix}} }
+            { {{freshPrefix}} }
+            { {{suffix}} }
+            {{body}}
+            \end{cvexplicitunit}
+            """;
 
     public static FormattableString RenderEvent(Event @event)
     {
@@ -254,6 +329,9 @@ internal static class CvLatexFragmentRenderer
 
     public static string Materialize(FormattableString fragment)
         => fragment.ToString(CultureInfo.InvariantCulture);
+
+    private static FormattableString Literal(string value)
+        => FormattableStringFactory.Create(value);
 
     private static JoinedFormattableStrings Join(
         IEnumerable<FormattableString> fragments,

@@ -1,5 +1,4 @@
 {
-  "pageCount": 2,
   "requiredTags": [
     { "name": ".NET", "weight": 1.0 },
     { "name": "Thesis", "weight": 0.01 },
@@ -52,8 +51,8 @@
     }
   },
   "sectionOrder": [
-    "WorkExperience",
-    "PersonalProjects",
-    "Education"
+    { "page": 1, "sections": ["Languages", "Education"] },
+    { "pages": "2-3", "sections": ["WorkExperience"] },
+    { "page": 4, "sections": ["PersonalProjects"] }
   ]
 }

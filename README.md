@@ -77,6 +77,58 @@ Comments and trailing commas are allowed, but unknown properties are rejected.
 }
 ```
 
+### Section order and page layouts
+
+`sectionOrder` supports two additive forms. The legacy string form keeps its existing
+behavior:
+
+```jsonc
+{
+  "pageCount": 2,
+  "sectionOrder": [
+    "WorkExperience",
+    "PersonalProjects",
+    "Education"
+  ]
+}
+```
+
+`pageCount` requires the selected CV to use exactly that many pages.
+`limitToOnePage` is the older boolean control: it defaults to `true`, while `false`
+allows an unrestricted number of pages. Do not supply both properties.
+
+The object form assigns sections to exact pages or inclusive page ranges:
+
+```jsonc
+{
+  "sectionOrder": [
+    { "page": 1, "sections": ["Languages", "Education"] },
+    { "pages": "2-3", "sections": ["WorkExperience"] },
+    { "page": 4, "sections": ["PersonalProjects"] }
+  ]
+}
+```
+
+Explicit blocks must already be ordered, start at page 1, and cover every page
+contiguously without gaps or overlaps. A section can occur only once across the full
+layout. `page` is a positive integer; `pages` is a strict inclusive `start-end` range
+whose start is less than its end. Empty section lists, unknown properties or section
+names, malformed ranges, and mixtures of strings and objects are configuration errors.
+
+The final page or range derives the exact page count, so `pageCount` and
+`limitToOnePage` are redundant and rejected in this form. A controlled page break is
+inserted between blocks. Within an event-based section, the heading stays with its first
+visible event and is printed only once; later jobs, projects, or degrees may move to a
+new page, but every complete event—including its description, links, and selected
+bullets—remains atomic. `Languages` remains an atomic section.
+
+Every block must naturally use its complete declared span. For example, a `pages:
+"2-3"` block must contain enough selected content to occupy two pages without counting
+the forced break, document header, or document footer. Underfilled blocks fail before
+either a PDF or debug Markdown artifact is published. Selection is never padded and
+does not bypass MMR, score thresholds, section budgets, or required-item rules merely
+to fill a range.
+
 ## Search parameters
 
 | Parameter | Default | Effect |

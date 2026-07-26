@@ -81,12 +81,26 @@ internal sealed class JsonCvSelectionConfiguration
     public required List<string> Technologies { get; init; }
     public required MmrConfiguration Mmr { get; init; }
     public required SelectionConfiguration Selection { get; init; }
-    public required List<Section> SectionOrder { get; init; }
+    public required JsonElement SectionOrder { get; init; }
 
     public CvSelectionConfiguration ToDomain()
     {
         var errors = new List<string>();
-        if (IsLimitToOnePageSpecified && IsPageCountSpecified)
+        var parsedSectionOrder = ParseSectionOrder(errors);
+        if (parsedSectionOrder.IsExplicit)
+        {
+            if (IsPageCountSpecified)
+            {
+                errors.Add(
+                    "'pageCount' cannot be supplied with object-form 'sectionOrder' because the page count is derived from the layout.");
+            }
+            if (IsLimitToOnePageSpecified)
+            {
+                errors.Add(
+                    "'limitToOnePage' cannot be supplied with object-form 'sectionOrder' because the page count is derived from the layout.");
+            }
+        }
+        else if (IsLimitToOnePageSpecified && IsPageCountSpecified)
         {
             errors.Add("'limitToOnePage' and 'pageCount' cannot both be supplied.");
         }
@@ -164,39 +178,23 @@ internal sealed class JsonCvSelectionConfiguration
             Selection.CollectValidationErrors(errors);
         }
 
-        if (SectionOrder is null || SectionOrder.Count == 0)
-        {
-            errors.Add("'sectionOrder' must contain at least one section.");
-        }
-        else
-        {
-            var sections = new HashSet<Section>();
-            foreach (var section in SectionOrder)
-            {
-                if (!Enum.IsDefined(section))
-                {
-                    errors.Add($"Section '{section}' is not valid.");
-                }
-                else if (!sections.Add(section))
-                {
-                    errors.Add($"Section '{section}' occurs more than once in 'sectionOrder'.");
-                }
-            }
-        }
-
         if (errors.Count > 0)
         {
             throw new CvConfigurationException(errors);
         }
 
+        var pageLayout = parsedSectionOrder.PageLayout;
         return new(
-            ResolvePageCount(),
+            pageLayout is null
+                ? ResolvePageCount()
+                : CvPageCount.Exact(pageLayout.PageCount),
             [.. RequiredTags!],
             [.. Skills!],
             [.. Technologies!],
             Mmr!,
             Selection!,
-            [.. SectionOrder!]);
+            parsedSectionOrder.SectionOrder,
+            pageLayout);
     }
 
     private CvPageCount ResolvePageCount()
@@ -210,6 +208,299 @@ internal sealed class JsonCvSelectionConfiguration
             ? CvPageCount.Unrestricted
             : CvPageCount.OnePage;
     }
+
+    private ParsedSectionOrder ParseSectionOrder(List<string> errors)
+    {
+        if (SectionOrder.ValueKind != JsonValueKind.Array)
+        {
+            errors.Add(
+                "'sectionOrder' must be an array containing either section-name strings or page-layout objects.");
+            return new([], PageLayout: null, IsExplicit: false);
+        }
+
+        var entries = SectionOrder.EnumerateArray().ToArray();
+        if (entries.Length == 0)
+        {
+            errors.Add("'sectionOrder' must contain at least one section or layout block.");
+            return new([], PageLayout: null, IsExplicit: false);
+        }
+
+        var containsStrings = entries.Any(static entry => entry.ValueKind == JsonValueKind.String);
+        var containsObjects = entries.Any(static entry => entry.ValueKind == JsonValueKind.Object);
+        if (containsStrings && containsObjects)
+        {
+            errors.Add(
+                "'sectionOrder' must be entirely strings or entirely layout objects; mixed forms are not allowed.");
+            return new([], PageLayout: null, IsExplicit: true);
+        }
+
+        if (containsStrings)
+        {
+            return ParseLegacySectionOrder(entries, errors);
+        }
+
+        if (containsObjects)
+        {
+            return ParseExplicitSectionOrder(entries, errors);
+        }
+
+        errors.Add(
+            "'sectionOrder' must contain either section-name strings or page-layout objects.");
+        return new([], PageLayout: null, IsExplicit: false);
+    }
+
+    private static ParsedSectionOrder ParseLegacySectionOrder(
+        IReadOnlyList<JsonElement> entries,
+        List<string> errors)
+    {
+        var sections = ImmutableArray.CreateBuilder<Section>(entries.Count);
+        var seenSections = new HashSet<Section>();
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            if (entry.ValueKind != JsonValueKind.String
+                || !TryParseSection(entry.GetString(), out var section))
+            {
+                errors.Add(
+                    $"'sectionOrder[{index}]' must be a valid section-name string.");
+                continue;
+            }
+
+            if (!seenSections.Add(section))
+            {
+                errors.Add($"Section '{section}' occurs more than once in 'sectionOrder'.");
+                continue;
+            }
+            sections.Add(section);
+        }
+
+        return new(sections.DrainToImmutable(), PageLayout: null, IsExplicit: false);
+    }
+
+    private static ParsedSectionOrder ParseExplicitSectionOrder(
+        IReadOnlyList<JsonElement> entries,
+        List<string> errors)
+    {
+        var blocks = ImmutableArray.CreateBuilder<CvPageLayoutBlock>(entries.Count);
+        var flattenedSections = ImmutableArray.CreateBuilder<Section>();
+        var seenSections = new HashSet<Section>();
+        var expectedFirstPage = 1;
+        var hasLayoutErrors = false;
+
+        for (var index = 0; index < entries.Count; index++)
+        {
+            var entry = entries[index];
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                errors.Add(
+                    $"'sectionOrder[{index}]' must be a page-layout object; mixed or invalid entry forms are not allowed.");
+                hasLayoutErrors = true;
+                continue;
+            }
+
+            var properties = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var property in entry.EnumerateObject())
+            {
+                if (property.Name is not ("page" or "pages" or "sections"))
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}]' contains unknown property '{property.Name}'.");
+                    hasLayoutErrors = true;
+                    continue;
+                }
+                if (!properties.TryAdd(property.Name, property.Value))
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}]' contains duplicate property '{property.Name}'.");
+                    hasLayoutErrors = true;
+                }
+            }
+
+            var hasPage = properties.TryGetValue("page", out var pageElement);
+            var hasPages = properties.TryGetValue("pages", out var pagesElement);
+            if (hasPage == hasPages)
+            {
+                errors.Add(
+                    $"'sectionOrder[{index}]' must contain exactly one of 'page' or 'pages'.");
+                hasLayoutErrors = true;
+            }
+
+            var firstPage = 0;
+            var lastPage = 0;
+            var validPages = false;
+            if (hasPage && !hasPages)
+            {
+                if (pageElement.ValueKind != JsonValueKind.Number
+                    || !pageElement.TryGetInt32(out firstPage)
+                    || firstPage <= 0)
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}].page' must be a positive 32-bit integer.");
+                    hasLayoutErrors = true;
+                }
+                else
+                {
+                    lastPage = firstPage;
+                    validPages = true;
+                }
+            }
+            else if (hasPages && !hasPage)
+            {
+                if (!TryParsePageRange(pagesElement, out firstPage, out lastPage))
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}].pages' must be an inclusive 'start-end' range of positive 32-bit integers where start is less than end.");
+                    hasLayoutErrors = true;
+                }
+                else
+                {
+                    validPages = true;
+                }
+            }
+
+            var blockSections = ImmutableArray.CreateBuilder<Section>();
+            var validSections = true;
+            if (!properties.TryGetValue("sections", out var sectionsElement)
+                || sectionsElement.ValueKind != JsonValueKind.Array)
+            {
+                errors.Add(
+                    $"'sectionOrder[{index}].sections' must be a nonempty array of valid section names.");
+                hasLayoutErrors = true;
+                validSections = false;
+            }
+            else
+            {
+                var sectionEntries = sectionsElement.EnumerateArray().ToArray();
+                if (sectionEntries.Length == 0)
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}].sections' must contain at least one section.");
+                    hasLayoutErrors = true;
+                    validSections = false;
+                }
+
+                var blockSeenSections = new HashSet<Section>();
+                for (var sectionIndex = 0; sectionIndex < sectionEntries.Length; sectionIndex++)
+                {
+                    var sectionEntry = sectionEntries[sectionIndex];
+                    if (sectionEntry.ValueKind != JsonValueKind.String
+                        || !TryParseSection(sectionEntry.GetString(), out var section))
+                    {
+                        errors.Add(
+                            $"'sectionOrder[{index}].sections[{sectionIndex}]' must be a valid section name.");
+                        hasLayoutErrors = true;
+                        validSections = false;
+                        continue;
+                    }
+                    if (!blockSeenSections.Add(section))
+                    {
+                        errors.Add(
+                            $"Section '{section}' occurs more than once in 'sectionOrder[{index}].sections'.");
+                        hasLayoutErrors = true;
+                        validSections = false;
+                        continue;
+                    }
+                    if (!seenSections.Add(section))
+                    {
+                        errors.Add(
+                            $"Section '{section}' occurs more than once across the complete explicit 'sectionOrder' layout.");
+                        hasLayoutErrors = true;
+                        validSections = false;
+                        continue;
+                    }
+
+                    blockSections.Add(section);
+                    flattenedSections.Add(section);
+                }
+            }
+
+            if (validPages)
+            {
+                if (firstPage != expectedFirstPage)
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}]' starts at page {firstPage}, but ordered contiguous coverage requires page {expectedFirstPage}; gaps, overlaps, and unordered entries are not allowed.");
+                    hasLayoutErrors = true;
+                }
+
+                try
+                {
+                    if (index < entries.Count - 1)
+                    {
+                        expectedFirstPage = checked(lastPage + 1);
+                    }
+                }
+                catch (OverflowException)
+                {
+                    errors.Add(
+                        $"'sectionOrder[{index}]' cannot end at page {lastPage} because no following contiguous page can be represented.");
+                    hasLayoutErrors = true;
+                }
+            }
+
+            if (validPages && validSections && blockSections.Count > 0)
+            {
+                blocks.Add(new(firstPage, lastPage, blockSections.DrainToImmutable()));
+            }
+        }
+
+        CvPageLayout? pageLayout = null;
+        if (!hasLayoutErrors && blocks.Count == entries.Count)
+        {
+            pageLayout = new(blocks.DrainToImmutable());
+        }
+
+        return new(
+            flattenedSections.DrainToImmutable(),
+            pageLayout,
+            IsExplicit: true);
+    }
+
+    private static bool TryParsePageRange(
+        JsonElement element,
+        out int firstPage,
+        out int lastPage)
+    {
+        firstPage = 0;
+        lastPage = 0;
+        if (element.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var value = element.GetString();
+        if (value is null)
+        {
+            return false;
+        }
+
+        var separator = value.IndexOf('-');
+        return separator > 0
+            && separator == value.LastIndexOf('-')
+            && separator < value.Length - 1
+            && int.TryParse(
+                value.AsSpan(0, separator),
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out firstPage)
+            && int.TryParse(
+                value.AsSpan(separator + 1),
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out lastPage)
+            && firstPage > 0
+            && lastPage > 0
+            && firstPage < lastPage;
+    }
+
+    private static bool TryParseSection(string? value, out Section section)
+        => Enum.TryParse(value, ignoreCase: false, out section)
+           && Enum.IsDefined(section);
+
+    private readonly record struct ParsedSectionOrder(
+        ImmutableArray<Section> SectionOrder,
+        CvPageLayout? PageLayout,
+        bool IsExplicit);
 }
 
 public static class CvSelectionConfigurationLoader
@@ -270,7 +561,8 @@ public sealed class CvSelectionConfiguration
         ImmutableArray<string> technologies,
         MmrConfiguration mmr,
         SelectionConfiguration selection,
-        ImmutableArray<Section> sectionOrder)
+        ImmutableArray<Section> sectionOrder,
+        CvPageLayout? pageLayout = null)
     {
         PageCount = pageCount;
         RequiredTags = requiredTags;
@@ -279,6 +571,7 @@ public sealed class CvSelectionConfiguration
         Mmr = mmr;
         Selection = selection;
         SectionOrder = sectionOrder;
+        PageLayout = pageLayout;
     }
 
     public CvPageCount PageCount { get; }
@@ -294,6 +587,8 @@ public sealed class CvSelectionConfiguration
     public SelectionConfiguration Selection { get; }
 
     public ImmutableArray<Section> SectionOrder { get; }
+
+    public CvPageLayout? PageLayout { get; }
 
     public ConfiguredCvSearch BuildSearch(TagsDatabase tagsDatabase)
     {
@@ -383,7 +678,8 @@ public sealed class CvSelectionConfiguration
                 Skills.Select(static skill => new RegularString(skill)).ToImmutableArray(),
                 Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
                 SectionOrder,
-                PageCount);
+                PageCount,
+                PageLayout);
         }
         catch (ArgumentOutOfRangeException ex)
         {
@@ -519,4 +815,5 @@ public sealed record ConfiguredCvSearch(
     ImmutableArray<RegularString> Skills,
     ImmutableArray<RegularString> Technologies,
     ImmutableArray<Section> SectionOrder,
-    CvPageCount PageCount);
+    CvPageCount PageCount,
+    CvPageLayout? PageLayout);

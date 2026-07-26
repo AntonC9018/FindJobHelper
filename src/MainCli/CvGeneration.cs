@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -18,6 +19,7 @@ public record struct GenerateParams()
     public required CvDataModel Model;
     public required CancellationToken CancellationToken;
     public CvPageCount PageCount;
+    public CvPageLayout? PageLayout;
 }
 
 public sealed record GeneratedCvArtifacts(string PdfPath);
@@ -27,12 +29,16 @@ internal static class CvLatexErrors
     public const string MetadataLeftOverflowMarker = "FJH_METADATA_LEFT_OVERFLOW";
     public const string MetadataLeftOverflowMessage = CvMetadataOverflowException.ErrorMessage;
     public const string SectionPageOverflowMarker = "FJH_SECTION_PAGE_OVERFLOW";
+    public const string EventPageOverflowMarker = "FJH_EVENT_PAGE_OVERFLOW";
 
     public static bool ContainsMetadataLeftOverflowMarker(string output)
         => output.Contains(MetadataLeftOverflowMarker, StringComparison.Ordinal);
 
     public static bool ContainsSectionPageOverflowMarker(string output)
         => output.Contains(SectionPageOverflowMarker, StringComparison.Ordinal);
+
+    public static bool ContainsEventPageOverflowMarker(string output)
+        => output.Contains(EventPageOverflowMarker, StringComparison.Ordinal);
 
     public static CvSectionPageOverflowException CreateSectionPageOverflowException(string output)
     {
@@ -42,6 +48,43 @@ internal static class CvLatexErrors
             RegexOptions.CultureInvariant);
         var label = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
         return new(label.Length == 0 ? null : label);
+    }
+
+    public static CvEventPageOverflowException CreateEventPageOverflowException(
+        string output,
+        CvDataModel? model = null)
+    {
+        var match = Regex.Match(
+            output,
+            @"FJH_EVENT_PAGE_OVERFLOW:\s*([^/\r\n.]+)(?:\s*/\s*([^\r\n.]+))?",
+            RegexOptions.CultureInvariant);
+        var section = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+        var @event = match.Success ? match.Groups[2].Value.Trim() : string.Empty;
+        if (model is not null
+            && Enum.TryParse<Section>(section, ignoreCase: false, out var parsedSection)
+            && int.TryParse(
+                @event,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var eventNumber)
+            && eventNumber > 0)
+        {
+            var events = parsedSection switch
+            {
+                Section.WorkExperience => model.WorkExperiences,
+                Section.Education => model.Educations,
+                Section.PersonalProjects => model.PersonalProjects,
+                _ => [],
+            };
+            if (eventNumber <= events.Length)
+            {
+                @event = events[eventNumber - 1].Title.Value;
+            }
+        }
+
+        return new(
+            section.Length == 0 ? null : section,
+            @event.Length == 0 ? null : @event);
     }
 }
 
@@ -72,6 +115,67 @@ internal static partial class LatexLogPageCountParser
     }
 }
 
+internal sealed record LatexExplicitLayoutMarkers(
+    IReadOnlyDictionary<int, int> BlockStartPages,
+    IReadOnlyDictionary<int, int> BlockEndPages,
+    int? FooterPage);
+
+internal static partial class LatexExplicitLayoutMarkerParser
+{
+    [GeneratedRegex(
+        @"FJH_LAYOUT_BLOCK_(START|END):(\d+):(\d+)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex BlockMarkerRegex();
+
+    [GeneratedRegex(
+        @"FJH_LAYOUT_FOOTER:(\d+)",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex FooterMarkerRegex();
+
+    public static LatexExplicitLayoutMarkers Parse(string latexLog)
+    {
+        ArgumentNullException.ThrowIfNull(latexLog);
+        var starts = new Dictionary<int, int>();
+        var ends = new Dictionary<int, int>();
+        foreach (Match match in BlockMarkerRegex().Matches(latexLog))
+        {
+            if (!int.TryParse(
+                    match.Groups[2].Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var blockNumber)
+                || blockNumber <= 0
+                || !int.TryParse(
+                    match.Groups[3].Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var pageNumber)
+                || pageNumber <= 0)
+            {
+                continue;
+            }
+
+            var target = match.Groups[1].Value == "START" ? starts : ends;
+            target[blockNumber] = pageNumber;
+        }
+
+        int? footerPage = null;
+        var footerMatches = FooterMarkerRegex().Matches(latexLog);
+        if (footerMatches.Count > 0
+            && int.TryParse(
+                footerMatches[^1].Groups[1].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var parsedFooterPage)
+            && parsedFooterPage > 0)
+        {
+            footerPage = parsedFooterPage;
+        }
+
+        return new(starts, ends, footerPage);
+    }
+}
+
 public static class CvTemplate
 {
     public static async Task<GeneratedCvArtifacts> Generate(GenerateParams p)
@@ -88,10 +192,17 @@ public static class CvTemplate
         writer.CurlyBracesStyle = CodegenTextWriter.CurlyBracesStyleType.C;
         writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
-        var sections = p.Model.SectionOrder.Select(section => p.Model.DispatchSection(
-            section,
-            renderLanguages: Languages,
-            renderEvents: events => Events(section, events)));
+        var sections = p.PageLayout is null
+            ? RenderLegacySections(p.Model)
+            : RenderExplicitLayout(p.Model, p.PageLayout);
+        var documentFooter = CvLatexFragmentRenderer.RenderDocumentFooter(p.Model);
+        FormattableString footerMarker = p.PageLayout is null
+            ? FormattableStringFactory.Create(string.Empty)
+            : documentFooter.Format.Length == 0
+                ? FormattableStringFactory.Create(
+                    @"\typeout{{FJH_LAYOUT_FOOTER:\number\cvexplicitlastunitpage}}")
+                : FormattableStringFactory.Create(
+                    @"\typeout{{FJH_LAYOUT_FOOTER:\number\value{{page}}}}");
 
         writer.Write($$$$"""
         \input{{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}}
@@ -106,7 +217,8 @@ public static class CvTemplate
 
         {{{{ sections.Render() }}}}
 
-        {{{{ CvLatexFragmentRenderer.RenderDocumentFooter(p.Model) }}}}
+        {{{{ documentFooter }}}}
+        {{{{ footerMarker }}}}
 
         \end{document}
         """);
@@ -145,16 +257,33 @@ public static class CvTemplate
             {
                 throw CvLatexErrors.CreateSectionPageOverflowException(latexLog);
             }
+            if (CvLatexErrors.ContainsEventPageOverflowMarker(latexLog))
+            {
+                throw CvLatexErrors.CreateEventPageOverflowException(latexLog, p.Model);
+            }
 
-            throw new CvLatexCompilationException("LaTeX execution failed.");
+            var diagnostic = latexLog
+                .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault(static line => line.StartsWith('!'));
+            throw new CvLatexCompilationException(
+                diagnostic is null
+                    ? "LaTeX execution failed."
+                    : $"LaTeX execution failed: {diagnostic}");
         }
 
-        if (p.PageCount.ExactCount is { } requiredPageCount)
+        var finalLatexLogPath = Path.Join(outputDirectory.FullName, "main.log");
+        var finalLatexLog = File.Exists(finalLatexLogPath)
+            ? await File.ReadAllTextAsync(finalLatexLogPath, p.CancellationToken)
+            : null;
+        if (p.PageLayout is { } explicitLayout)
         {
-            var latexLogPath = Path.Join(outputDirectory.FullName, "main.log");
-            if (!File.Exists(latexLogPath)
+            VerifyExplicitRenderedLayout(explicitLayout, finalLatexLog);
+        }
+        else if (p.PageCount.ExactCount is { } requiredPageCount)
+        {
+            if (finalLatexLog is null
                 || !LatexLogPageCountParser.TryParse(
-                    await File.ReadAllTextAsync(latexLogPath, p.CancellationToken),
+                    finalLatexLog,
                     out var renderedPageCount))
             {
                 throw new RenderedPageCountUnavailableException(requiredPageCount);
@@ -175,6 +304,94 @@ public static class CvTemplate
         }
 
         return new(pdfOutputPath);
+    }
+
+    private static IEnumerable<FormattableString> RenderLegacySections(
+        CvDataModel model)
+        => model.SectionOrder.Select(section => model.DispatchSection(
+            section,
+            renderLanguages: Languages,
+            renderEvents: events => Events(section, events)));
+
+    private static IEnumerable<FormattableString> RenderExplicitLayout(
+        CvDataModel model,
+        CvPageLayout layout)
+    {
+        for (var blockIndex = 0; blockIndex < layout.Blocks.Length; blockIndex++)
+        {
+            if (blockIndex > 0)
+            {
+                yield return FormattableStringFactory.Create(
+                    "\\newpage\n\\cvexplicitnextunitfresh");
+            }
+
+            var blockNumber = blockIndex + 1;
+            yield return $@"\typeout{{FJH_LAYOUT_BLOCK_START:{blockNumber}:\number\value{{page}}}}";
+            foreach (var section in layout.Blocks[blockIndex].Sections)
+            {
+                yield return CvLatexFragmentRenderer.RenderExplicitSection(section, model);
+            }
+            yield return $@"\typeout{{FJH_LAYOUT_BLOCK_END:{blockNumber}:\number\cvexplicitlastunitpage}}";
+        }
+    }
+
+    internal static void VerifyExplicitRenderedLayout(
+        CvPageLayout layout,
+        string? latexLog)
+    {
+        if (latexLog is null)
+        {
+            throw new RenderedPageLayoutMismatchException(
+                "the final LaTeX log is missing.");
+        }
+        if (!LatexLogPageCountParser.TryParse(latexLog, out var renderedPageCount))
+        {
+            throw new RenderedPageLayoutMismatchException(
+                "the final LaTeX log does not contain a rendered page count.");
+        }
+        if (renderedPageCount != layout.PageCount)
+        {
+            throw new RenderedPageLayoutMismatchException(
+                $"the layout declares {layout.PageCount} page(s), but the PDF contains {renderedPageCount} page(s).");
+        }
+
+        var markers = LatexExplicitLayoutMarkerParser.Parse(latexLog);
+        for (var blockIndex = 0; blockIndex < layout.Blocks.Length; blockIndex++)
+        {
+            var blockNumber = blockIndex + 1;
+            var block = layout.Blocks[blockIndex];
+            if (!markers.BlockStartPages.TryGetValue(blockNumber, out var startPage))
+            {
+                throw new RenderedPageLayoutMismatchException(
+                    $"the start marker for block {blockNumber} ({block.ConfiguredPages}) is missing.");
+            }
+            if (startPage != block.FirstPage)
+            {
+                throw new RenderedPageLayoutMismatchException(
+                    $"block {blockNumber} starts on physical page {startPage}, not declared page {block.FirstPage}.");
+            }
+            if (!markers.BlockEndPages.TryGetValue(blockNumber, out var endPage))
+            {
+                throw new RenderedPageLayoutMismatchException(
+                    $"the end marker for block {blockNumber} ({block.ConfiguredPages}) is missing.");
+            }
+            if (endPage != block.LastPage)
+            {
+                throw new RenderedPageLayoutMismatchException(
+                    $"block {blockNumber} ends on physical page {endPage}, not declared page {block.LastPage}.");
+            }
+        }
+
+        if (markers.FooterPage is not { } footerPage)
+        {
+            throw new RenderedPageLayoutMismatchException(
+                "the final footer-page marker is missing.");
+        }
+        if (footerPage != layout.PageCount)
+        {
+            throw new RenderedPageLayoutMismatchException(
+                $"the footer is on physical page {footerPage}, not final declared page {layout.PageCount}.");
+        }
     }
 
     private static FormattableString Languages(

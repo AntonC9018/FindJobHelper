@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
+using CliWrap;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 
@@ -547,12 +549,24 @@ public sealed class LatexMeasurementTests
         documentModel.SectionOrder = [Section.WorkExperience];
         var completeWorkSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
             documentModel.WorkExperiences,
-            "Experience");
+            "Work Experience");
         FormattableString completeDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(Section.WorkExperience, completeWorkSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
         var completeProjectSection = CvLatexFragmentRenderer.RenderEventsSectionInner(
             [@event],
             "Personal Projects");
         FormattableString twoSectionDocument = $"{CvLatexFragmentRenderer.RenderDocumentHeader(documentModel)}{CvLatexFragmentRenderer.RenderProductionSection(Section.WorkExperience, completeWorkSection)}{CvLatexFragmentRenderer.RenderProductionSection(Section.PersonalProjects, completeProjectSection)}{CvLatexFragmentRenderer.RenderDocumentFooter(documentModel)}";
+        FormattableString explicitCurrentUnit =
+            $"{FormattableStringFactory.Create(@"\cvflowblockfitskip")}{CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience)}{CvLatexFragmentRenderer.RenderEvent(@event)}{FormattableStringFactory.Create(@"\cvexplicitsectionend")}";
+        FormattableString explicitFreshUnit =
+            $"{FormattableStringFactory.Create(@"\cvflowblocknewpageskip\cvflowblockfitskip")}{CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience)}{CvLatexFragmentRenderer.RenderEvent(@event)}{FormattableStringFactory.Create(@"\cvexplicitsectionend")}";
+        FormattableString explicitFreshContinuationUnit =
+            $"{FormattableStringFactory.Create(@"\cvflowblocknewpageskip")}{CvLatexFragmentRenderer.RenderEvent(@event)}{FormattableStringFactory.Create(@"\cvexplicitsectionend")}";
+        var languagesInner = CvLatexFragmentRenderer.RenderLanguagesSectionInner(
+            [new(Language.English, LanguageProficiencyLevel.C2)]);
+        FormattableString explicitCurrentStaticUnit =
+            $"{FormattableStringFactory.Create(@"\cvflowblockfitskip")}{languagesInner}{FormattableStringFactory.Create(@"\cvexplicitsectionend")}";
+        FormattableString explicitFreshStaticUnit =
+            $"{FormattableStringFactory.Create(@"\cvflowblocknewpageskip\cvflowblockfitskip")}{languagesInner}{FormattableStringFactory.Create(@"\cvexplicitsectionend")}";
         var requests = new[]
         {
             Request(1, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(list), LatexMeasurementMode.ExperienceChromeWithoutPermanentItems),
@@ -560,9 +574,9 @@ public sealed class LatexMeasurementTests
             Request(3, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(list.Items[1]), LatexMeasurementMode.ExperienceItemMarginal),
             Request(4, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(@event), LatexMeasurementMode.Box),
             Request(5, LatexMeasurementKind.SectionChrome, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.SectionChrome),
-            Request(6, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience"), LatexMeasurementMode.FlowBlock),
+            Request(6, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Work Experience"), LatexMeasurementMode.FlowBlock),
             Request(7, LatexMeasurementKind.UsablePageHeight, @"\rule{0pt}{\textheight}", LatexMeasurementMode.Box),
-            Request(8, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event, @event], "Experience"), LatexMeasurementMode.FlowBlock),
+            Request(8, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event, @event], "Work Experience"), LatexMeasurementMode.FlowBlock),
             Request(9, LatexMeasurementKind.ExperienceChrome, CvLatexFragmentRenderer.RenderExperienceChrome(linkedList), LatexMeasurementMode.Box),
             Request(10, LatexMeasurementKind.ExperienceItem, CvLatexFragmentRenderer.RenderExperienceItem(linkedList.Items[0]), LatexMeasurementMode.ExperienceItemMarginal),
             Request(11, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(linkedEvent), LatexMeasurementMode.Box),
@@ -573,7 +587,18 @@ public sealed class LatexMeasurementTests
             Request(17, LatexMeasurementKind.ExperienceHeading, CvLatexFragmentRenderer.RenderExperienceHeading(list), LatexMeasurementMode.Box),
             Request(18, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEvent(headingOnlyEvent), LatexMeasurementMode.Box),
             Request(19, LatexMeasurementKind.FreshPageSectionChrome, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.FreshPageSectionChrome),
-            Request(20, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Experience"), LatexMeasurementMode.FreshPageFlowBlock),
+            Request(20, LatexMeasurementKind.CompleteSection, CvLatexFragmentRenderer.RenderEventsSectionInner([@event], "Work Experience"), LatexMeasurementMode.FreshPageFlowBlock),
+            Request(21, LatexMeasurementKind.SplitSectionStart, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.SplitSectionStart),
+            Request(22, LatexMeasurementKind.FreshPageSplitSectionStart, CvLatexFragmentRenderer.RenderSectionChrome(Section.WorkExperience), LatexMeasurementMode.FreshPageSplitSectionStart),
+            Request(23, LatexMeasurementKind.SplitSectionEnd, FormattableStringFactory.Create(string.Empty), LatexMeasurementMode.SplitSectionEnd),
+            Request(24, LatexMeasurementKind.FreshPageContinuation, FormattableStringFactory.Create(string.Empty), LatexMeasurementMode.FreshPageContinuation),
+            Request(25, LatexMeasurementKind.CompleteSection, explicitCurrentUnit, LatexMeasurementMode.Box),
+            Request(26, LatexMeasurementKind.CompleteSection, explicitFreshUnit, LatexMeasurementMode.Box),
+            Request(27, LatexMeasurementKind.CompleteSection, explicitFreshContinuationUnit, LatexMeasurementMode.Box),
+            Request(28, LatexMeasurementKind.ExplicitStaticSection, explicitCurrentStaticUnit, LatexMeasurementMode.Box),
+            Request(29, LatexMeasurementKind.FreshPageExplicitStaticSection, explicitFreshStaticUnit, LatexMeasurementMode.Box),
+            Request(30, LatexMeasurementKind.CompleteSection, explicitCurrentStaticUnit, LatexMeasurementMode.Box),
+            Request(31, LatexMeasurementKind.CompleteSection, explicitFreshStaticUnit, LatexMeasurementMode.Box),
         };
         var runner = new XeLatexMeasurementRunner();
 
@@ -605,6 +630,24 @@ public sealed class LatexMeasurementTests
             - measured[new(5)].ScaledPoints
             + measured[new(19)].ScaledPoints);
         Assert.True(measured[new(19)].ScaledPoints >= measured[new(5)].ScaledPoints);
+        Assert.Equal(
+            measured[new(25)].ScaledPoints,
+            measured[new(21)].ScaledPoints
+            + measured[new(4)].ScaledPoints
+            + measured[new(23)].ScaledPoints);
+        Assert.Equal(
+            measured[new(26)].ScaledPoints,
+            measured[new(22)].ScaledPoints
+            + measured[new(4)].ScaledPoints
+            + measured[new(23)].ScaledPoints);
+        Assert.True(measured[new(24)].ScaledPoints > 0);
+        Assert.Equal(
+            measured[new(27)].ScaledPoints,
+            measured[new(24)].ScaledPoints
+            + measured[new(4)].ScaledPoints
+            + measured[new(23)].ScaledPoints);
+        Assert.Equal(measured[new(30)], measured[new(28)]);
+        Assert.Equal(measured[new(31)], measured[new(29)]);
         Assert.Equal(
             measured[new(14)].ScaledPoints,
             measured[new(12)].ScaledPoints
@@ -669,6 +712,70 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public async Task ExplicitProductionLayoutRendersControlledFourPagePdfWithMarkers()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"fjh-explicit-four-pages-{Guid.NewGuid():N}");
+        try
+        {
+            var model = CreateEmptyModel();
+            model.Languages =
+            [
+                new(Language.English, LanguageProficiencyLevel.C2),
+            ];
+            model.Educations = CreateRenderedEvents("Education", 1);
+            model.WorkExperiences = CreateRenderedEvents("Work", 20);
+            model.PersonalProjects = CreateRenderedEvents("Project", 2);
+            model.GitHub = "https://github.test/example";
+            var layout = new CvPageLayout([
+                new(1, 1, [Section.Languages, Section.Education]),
+                new(2, 3, [Section.WorkExperience]),
+                new(4, 4, [Section.PersonalProjects]),
+            ]);
+            model.SectionOrder = layout.SectionOrder;
+
+            await CvTemplate.Generate(new()
+            {
+                ConfigFilePath = ProductionTemplatePath,
+                OutputDirectory = outputDirectory,
+                Model = model,
+                CancellationToken = CancellationToken.None,
+                PageCount = CvPageCount.Exact(layout.PageCount),
+                PageLayout = layout,
+            });
+
+            Assert.Equal(4, ReadPageCount(outputDirectory));
+            var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
+            var markers = LatexExplicitLayoutMarkerParser.Parse(log);
+            Assert.Equal(
+                new Dictionary<int, int> { [1] = 1, [2] = 2, [3] = 4 },
+                markers.BlockStartPages);
+            Assert.Equal(
+                new Dictionary<int, int> { [1] = 1, [2] = 3, [3] = 4 },
+                markers.BlockEndPages);
+            Assert.Equal(4, markers.FooterPage);
+
+            var extractedTextPath = Path.Combine(outputDirectory, "main.txt");
+            await Cli.Wrap("pdftotext")
+                .WithArguments([
+                    Path.Combine(outputDirectory, "main.pdf"),
+                    extractedTextPath,
+                ])
+                .ExecuteAsync();
+            var extractedText = File.ReadAllText(extractedTextPath);
+            Assert.Equal(1, CountOccurrences(extractedText, "Work Experience"));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task OversizedSingleSectionRaisesNamedOverflowInsteadOfSplitting()
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"fjh-section-overflow-{Guid.NewGuid():N}");
@@ -691,6 +798,69 @@ public sealed class LatexMeasurementTests
             Assert.Contains("single page", exception.Message, StringComparison.Ordinal);
             var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
             Assert.Contains(CvLatexErrors.SectionPageOverflowMarker, log, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ExplicitOversizedEventReportsItsSectionAndTitle()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"fjh-event-overflow-{Guid.NewGuid():N}");
+        try
+        {
+            var model = CreateEmptyModel();
+            model.SectionOrder = [Section.WorkExperience];
+            model.WorkExperiences =
+            [
+                new Event
+                {
+                    Title = "Indivisible oversized job",
+                    Place = Place.Personal,
+                    DateRange = DateRange.Completed(new(2020), new(2021)),
+                    SubItems = Enumerable.Range(1, 100)
+                        .Select(position => new SubEvent(
+                            0,
+                            new PlainText
+                            {
+                                Text = $"A complete bullet {position} that belongs to the same atomic event.",
+                            }))
+                        .ToImmutableArray(),
+                },
+            ];
+            var layout = new CvPageLayout([
+                new(1, 1, [Section.WorkExperience]),
+            ]);
+
+            var exception = await Assert.ThrowsAsync<CvEventPageOverflowException>(() =>
+                CvTemplate.Generate(new()
+                {
+                    ConfigFilePath = ProductionTemplatePath,
+                    OutputDirectory = outputDirectory,
+                    Model = model,
+                    CancellationToken = CancellationToken.None,
+                    PageCount = CvPageCount.OnePage,
+                    PageLayout = layout,
+                }));
+
+            Assert.Equal("WorkExperience", exception.SectionLabel);
+            Assert.Equal("Indivisible oversized job", exception.EventLabel);
+            Assert.Contains(
+                "Indivisible oversized job",
+                exception.Message,
+                StringComparison.Ordinal);
+            var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
+            Assert.Contains(
+                CvLatexErrors.EventPageOverflowMarker,
+                log,
+                StringComparison.Ordinal);
         }
         finally
         {
@@ -765,6 +935,61 @@ public sealed class LatexMeasurementTests
         Assert.True(LatexLogPageCountParser.TryParse(log, out var actual));
         Assert.Equal(expected, actual);
         Assert.False(LatexLogPageCountParser.TryParse("No pages of output.", out _));
+    }
+
+    [Theory]
+    [InlineData(
+        """
+        FJH_LAYOUT_BLOCK_START:1:1
+        FJH_LAYOUT_BLOCK_END:1:1
+        FJH_LAYOUT_BLOCK_START:2:2
+        FJH_LAYOUT_FOOTER:2
+        Output written on main.pdf (2 pages, 123 bytes).
+        """,
+        "end marker for block 2")]
+    [InlineData(
+        """
+        FJH_LAYOUT_BLOCK_START:1:1
+        FJH_LAYOUT_BLOCK_END:1:2
+        FJH_LAYOUT_BLOCK_START:2:2
+        FJH_LAYOUT_BLOCK_END:2:2
+        FJH_LAYOUT_FOOTER:2
+        Output written on main.pdf (2 pages, 123 bytes).
+        """,
+        "block 1 ends on physical page 2")]
+    [InlineData(
+        """
+        FJH_LAYOUT_BLOCK_START:1:1
+        FJH_LAYOUT_BLOCK_END:1:1
+        FJH_LAYOUT_BLOCK_START:2:2
+        FJH_LAYOUT_BLOCK_END:2:2
+        FJH_LAYOUT_FOOTER:1
+        Output written on main.pdf (2 pages, 123 bytes).
+        """,
+        "footer is on physical page 1")]
+    [InlineData(
+        """
+        FJH_LAYOUT_BLOCK_START:1:1
+        FJH_LAYOUT_BLOCK_END:1:1
+        FJH_LAYOUT_BLOCK_START:2:2
+        FJH_LAYOUT_BLOCK_END:2:2
+        FJH_LAYOUT_FOOTER:2
+        Output written on main.pdf (3 pages, 123 bytes).
+        """,
+        "PDF contains 3")]
+    public void ExplicitRenderedLayoutRejectsMissingOrMismatchedMarkers(
+        string log,
+        string expectedMessage)
+    {
+        var layout = new CvPageLayout([
+            new(1, 1, [Section.WorkExperience]),
+            new(2, 2, [Section.Education]),
+        ]);
+
+        var exception = Assert.Throws<RenderedPageLayoutMismatchException>(() =>
+            CvTemplate.VerifyExplicitRenderedLayout(layout, log));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

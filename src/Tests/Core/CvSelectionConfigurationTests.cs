@@ -66,6 +66,133 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
         Assert.Equal(CvPageCount.OnePage, configuration.PageCount);
         Assert.Equal(CvPageCount.OnePage, search.PageCount);
+        Assert.Null(configuration.PageLayout);
+        Assert.Null(search.PageLayout);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MapsFourPageExplicitLayoutAndDerivesFlattenedOrder()
+    {
+        var json = await WithSectionOrderAsync(
+            """
+            [
+              { "page": 1, "sections": ["Languages", "Education"] },
+              { "pages": "2-3", "sections": ["WorkExperience"] },
+              { "page": 4, "sections": ["PersonalProjects"] }
+            ]
+            """);
+
+        var configuration = await LoadAsync(json);
+        var search = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
+
+        var layout = Assert.IsType<CvPageLayout>(configuration.PageLayout);
+        Assert.Same(layout, search.PageLayout);
+        Assert.Equal(CvPageCount.Exact(4), configuration.PageCount);
+        Assert.Equal(CvPageCount.Exact(4), search.PageCount);
+        Assert.Equal(4, layout.PageCount);
+        Assert.Equal(
+            new[]
+            {
+                Section.Languages,
+                Section.Education,
+                Section.WorkExperience,
+                Section.PersonalProjects,
+            },
+            layout.SectionOrder);
+        Assert.True(layout.SectionOrder.SequenceEqual(configuration.SectionOrder));
+        Assert.Collection(
+            layout.Blocks,
+            block =>
+            {
+                Assert.Equal(1, block.FirstPage);
+                Assert.Equal(1, block.LastPage);
+                Assert.Equal(1, block.AllocatedPageCount);
+                Assert.Equal(
+                    new[] { Section.Languages, Section.Education },
+                    block.Sections);
+            },
+            block =>
+            {
+                Assert.Equal(2, block.FirstPage);
+                Assert.Equal(3, block.LastPage);
+                Assert.Equal(2, block.AllocatedPageCount);
+                Assert.Equal(new[] { Section.WorkExperience }, block.Sections);
+            },
+            block =>
+            {
+                Assert.Equal(4, block.FirstPage);
+                Assert.Equal(4, block.LastPage);
+                Assert.Equal(new[] { Section.PersonalProjects }, block.Sections);
+            });
+    }
+
+    [Theory]
+    [InlineData("pageCount", "2")]
+    [InlineData("limitToOnePage", "false")]
+    public async Task LoadAsync_RejectsRedundantPageControlsWithExplicitLayout(
+        string propertyName,
+        string propertyValue)
+    {
+        var json = await WithSectionOrderAsync(
+            """[{ "page": 1, "sections": ["WorkExperience"] }]""");
+        var document = JsonNode.Parse(json)!.AsObject();
+        document[propertyName] = JsonNode.Parse(propertyValue);
+
+        var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
+
+        Assert.Contains(propertyName, exception.Message, StringComparison.Ordinal);
+        Assert.Contains("derived", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(
+        """["Languages", { "page": 1, "sections": ["WorkExperience"] }]""",
+        "mixed")]
+    [InlineData(
+        """[{ "pages": "1-1", "sections": ["WorkExperience"] }]""",
+        "start is less than end")]
+    [InlineData(
+        """[{ "pages": "1 - 2", "sections": ["WorkExperience"] }]""",
+        "start-end")]
+    [InlineData(
+        """[{ "page": 1, "pages": "1-2", "sections": ["WorkExperience"] }]""",
+        "exactly one")]
+    [InlineData(
+        """[{ "page": 1, "sections": [] }]""",
+        "at least one")]
+    [InlineData(
+        """[{ "page": 1, "sections": ["NotASection"] }]""",
+        "valid section")]
+    [InlineData(
+        """[{ "page": 1, "sections": ["Languages"] }, { "page": 3, "sections": ["WorkExperience"] }]""",
+        "requires page 2")]
+    [InlineData(
+        """[{ "page": 1, "sections": ["Languages"] }, { "page": 1, "sections": ["WorkExperience"] }]""",
+        "overlaps")]
+    [InlineData(
+        """[{ "page": 2, "sections": ["Languages"] }, { "page": 1, "sections": ["WorkExperience"] }]""",
+        "unordered")]
+    [InlineData(
+        """[{ "page": 1, "sections": ["Languages"] }, { "page": 2, "sections": ["Languages"] }]""",
+        "more than once")]
+    [InlineData(
+        """[{ "page": 1, "sections": ["Languages"], "unexpected": true }]""",
+        "unknown property")]
+    [InlineData(
+        """[{ "page": 1, "sections": ["Languages", "Languages"] }]""",
+        "more than once")]
+    public async Task LoadAsync_RejectsInvalidExplicitLayouts(
+        string sectionOrder,
+        string expectedMessage)
+    {
+        var json = await WithSectionOrderAsync(sectionOrder);
+
+        var exception = await LoadInvalidAsync(json, buildSearch: false);
+
+        Assert.Contains(
+            expectedMessage,
+            exception.Message,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -475,6 +602,15 @@ public sealed class CvSelectionConfigurationTests
     }
 
     private static Task<string> ReadFixtureAsync() => File.ReadAllTextAsync(FixturePath);
+
+    private static async Task<string> WithSectionOrderAsync(string sectionOrder)
+    {
+        var configuration = JsonNode.Parse(await ReadFixtureAsync())!.AsObject();
+        configuration.Remove("limitToOnePage");
+        configuration.Remove("pageCount");
+        configuration["sectionOrder"] = JsonNode.Parse(sectionOrder);
+        return configuration.ToJsonString();
+    }
 
     private static string ReplaceSelection(string json, JsonObject selection)
     {

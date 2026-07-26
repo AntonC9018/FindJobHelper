@@ -23,7 +23,13 @@ public sealed record CvMeasurementSnapshot
         IReadOnlyDictionary<Section, LatexHeight> freshPageSectionChrome,
         LatexHeight documentHeader,
         LatexHeight documentFooter,
-        LatexHeight usablePageHeight)
+        LatexHeight usablePageHeight,
+        IReadOnlyDictionary<Section, LatexHeight>? currentPageSplitSectionStart = null,
+        IReadOnlyDictionary<Section, LatexHeight>? freshPageSplitSectionStart = null,
+        LatexHeight? splitSectionEnd = null,
+        LatexHeight? freshPageContinuation = null,
+        IReadOnlyDictionary<Section, LatexHeight>? currentPageExplicitStaticSections = null,
+        IReadOnlyDictionary<Section, LatexHeight>? freshPageExplicitStaticSections = null)
     {
         ExperienceItems = experienceItems;
         ExperienceHeadings = experienceHeadings;
@@ -31,6 +37,30 @@ public sealed record CvMeasurementSnapshot
         CurrentPageCompleteSections = currentPageCompleteSections;
         CurrentPageSectionChrome = currentPageSectionChrome;
         FreshPageSectionChrome = freshPageSectionChrome;
+        CurrentPageSplitSectionStart =
+            currentPageSplitSectionStart ?? currentPageSectionChrome;
+        FreshPageSplitSectionStart =
+            freshPageSplitSectionStart ?? freshPageSectionChrome;
+        SplitSectionEnd = splitSectionEnd ?? LatexHeight.Zero;
+        FreshPageContinuation = freshPageContinuation ?? LatexHeight.Zero;
+        CurrentPageExplicitStaticSections =
+            currentPageExplicitStaticSections ?? currentPageCompleteSections;
+        FreshPageExplicitStaticSections =
+            freshPageExplicitStaticSections
+            ?? currentPageCompleteSections.ToDictionary(
+                static pair => pair.Key,
+                pair => pair.Value.ScaledPoints == 0
+                    ? LatexHeight.Zero
+                    : new LatexHeight(checked(
+                        pair.Value.ScaledPoints
+                        - GetRequired(
+                            currentPageSectionChrome,
+                            pair.Key,
+                            "current-page section chrome").ScaledPoints
+                        + GetRequired(
+                            freshPageSectionChrome,
+                            pair.Key,
+                            "fresh-page section chrome").ScaledPoints)));
         DocumentHeader = documentHeader;
         DocumentFooter = documentFooter;
         UsablePageHeight = usablePageHeight;
@@ -42,6 +72,12 @@ public sealed record CvMeasurementSnapshot
     public IReadOnlyDictionary<Section, LatexHeight> CurrentPageCompleteSections { get; }
     public IReadOnlyDictionary<Section, LatexHeight> CurrentPageSectionChrome { get; }
     public IReadOnlyDictionary<Section, LatexHeight> FreshPageSectionChrome { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> CurrentPageSplitSectionStart { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> FreshPageSplitSectionStart { get; }
+    public LatexHeight SplitSectionEnd { get; }
+    public LatexHeight FreshPageContinuation { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> CurrentPageExplicitStaticSections { get; }
+    public IReadOnlyDictionary<Section, LatexHeight> FreshPageExplicitStaticSections { get; }
     public LatexHeight DocumentHeader { get; }
     public LatexHeight DocumentFooter { get; }
     public LatexHeight UsablePageHeight { get; }
@@ -63,6 +99,30 @@ public sealed record CvMeasurementSnapshot
 
     public LatexHeight GetFreshPageSectionChromeHeight(Section section)
         => GetRequired(FreshPageSectionChrome, section, "fresh-page section chrome");
+
+    public LatexHeight GetCurrentPageSplitSectionStartHeight(Section section)
+        => GetRequired(
+            CurrentPageSplitSectionStart,
+            section,
+            "current-page split-section start");
+
+    public LatexHeight GetFreshPageSplitSectionStartHeight(Section section)
+        => GetRequired(
+            FreshPageSplitSectionStart,
+            section,
+            "fresh-page split-section start");
+
+    public LatexHeight GetCurrentPageExplicitStaticSectionHeight(Section section)
+        => GetRequired(
+            CurrentPageExplicitStaticSections,
+            section,
+            "current-page explicit static section");
+
+    public LatexHeight GetFreshPageExplicitStaticSectionHeight(Section section)
+        => GetRequired(
+            FreshPageExplicitStaticSections,
+            section,
+            "fresh-page explicit static section");
 
     public LatexHeight DeriveFreshPageSectionHeight(
         Section section,
@@ -101,6 +161,12 @@ public sealed record CvMeasurementSnapshot
         IDictionary<Section, LatexHeight> currentPageCompleteSections,
         IDictionary<Section, LatexHeight> currentPageSectionChrome,
         IDictionary<Section, LatexHeight> freshPageSectionChrome,
+        IDictionary<Section, LatexHeight> currentPageSplitSectionStart,
+        IDictionary<Section, LatexHeight> freshPageSplitSectionStart,
+        LatexHeight splitSectionEnd,
+        LatexHeight freshPageContinuation,
+        IDictionary<Section, LatexHeight> currentPageExplicitStaticSections,
+        IDictionary<Section, LatexHeight> freshPageExplicitStaticSections,
         LatexHeight documentHeader,
         LatexHeight documentFooter,
         LatexHeight usablePageHeight)
@@ -113,7 +179,13 @@ public sealed record CvMeasurementSnapshot
             freshPageSectionChrome.ToFrozenDictionary(),
             documentHeader,
             documentFooter,
-            usablePageHeight);
+            usablePageHeight,
+            currentPageSplitSectionStart.ToFrozenDictionary(),
+            freshPageSplitSectionStart.ToFrozenDictionary(),
+            splitSectionEnd,
+            freshPageContinuation,
+            currentPageExplicitStaticSections.ToFrozenDictionary(),
+            freshPageExplicitStaticSections.ToFrozenDictionary());
 
     private static LatexHeight GetRequired<TKey>(
         IReadOnlyDictionary<TKey, LatexHeight> values,
@@ -143,6 +215,12 @@ internal enum LatexMeasurementKind
     ExperienceChrome,
     SectionChrome,
     FreshPageSectionChrome,
+    SplitSectionStart,
+    FreshPageSplitSectionStart,
+    SplitSectionEnd,
+    FreshPageContinuation,
+    ExplicitStaticSection,
+    FreshPageExplicitStaticSection,
     StaticSection,
     CompleteSection,
     DocumentHeader,
@@ -157,6 +235,10 @@ internal enum LatexMeasurementMode
     FreshPageFlowBlock,
     SectionChrome,
     FreshPageSectionChrome,
+    SplitSectionStart,
+    FreshPageSplitSectionStart,
+    SplitSectionEnd,
+    FreshPageContinuation,
     ExperienceItemMarginal,
     ExperienceChromeWithoutPermanentItems,
     DocumentHeader,

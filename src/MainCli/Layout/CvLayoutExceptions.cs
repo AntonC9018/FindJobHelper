@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace FindJobHelper.CVGeneration;
 
 public abstract class CvLayoutException : Exception
@@ -120,6 +122,53 @@ public sealed class PredictedPageCountMismatchException : CvLayoutException
     public int PredictedPageCount { get; }
 }
 
+public sealed class CvPageLayoutUnderfillException : CvLayoutException
+{
+    public CvPageLayoutUnderfillException(
+        CvPageLayoutBlock block,
+        int naturallyOccupiedPageCount)
+        : base(FormatMessage(block, naturallyOccupiedPageCount))
+    {
+        ArgumentNullException.ThrowIfNull(block);
+        if (naturallyOccupiedPageCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(naturallyOccupiedPageCount));
+        }
+
+        ConfiguredPages = block.ConfiguredPages;
+        FirstPage = block.FirstPage;
+        LastPage = block.LastPage;
+        AssignedSections = block.Sections;
+        RequiredPageCount = block.AllocatedPageCount;
+        NaturallyOccupiedPageCount = naturallyOccupiedPageCount;
+    }
+
+    public string ConfiguredPages { get; }
+
+    public int FirstPage { get; }
+
+    public int LastPage { get; }
+
+    public ImmutableArray<Section> AssignedSections { get; }
+
+    public int RequiredPageCount { get; }
+
+    public int NaturallyOccupiedPageCount { get; }
+
+    private static string FormatMessage(
+        CvPageLayoutBlock block,
+        int naturallyOccupiedPageCount)
+    {
+        ArgumentNullException.ThrowIfNull(block);
+        var sections = string.Join(
+            ", ",
+            block.Sections.Select(static section => section.ToDisplayString()));
+        return $"Explicit layout block {block.ConfiguredPages} ({sections}) requires {block.AllocatedPageCount} page(s), " +
+            $"but its selected section content naturally occupies {naturallyOccupiedPageCount} page(s). " +
+            "Explicit layouts are not padded with blank pages.";
+    }
+}
+
 public abstract class CvLatexException : CvLayoutException
 {
     protected CvLatexException(string message)
@@ -149,6 +198,26 @@ public sealed class CvSectionPageOverflowException : CvLatexException
     }
 
     public string? SectionLabel { get; }
+}
+
+public sealed class CvEventPageOverflowException : CvLatexException
+{
+    public CvEventPageOverflowException(
+        string? sectionLabel,
+        string? eventLabel)
+        : base(sectionLabel is null or ""
+            ? "A complete CV event exceeds the usable height of a fresh page."
+            : eventLabel is null or ""
+                ? $"A complete event in CV section '{sectionLabel}' exceeds the usable height of a fresh page."
+                : $"CV event '{eventLabel}' in section '{sectionLabel}' exceeds the usable height of a fresh page.")
+    {
+        SectionLabel = sectionLabel;
+        EventLabel = eventLabel;
+    }
+
+    public string? SectionLabel { get; }
+
+    public string? EventLabel { get; }
 }
 
 public sealed class CvLatexCompilationException : CvLatexException
@@ -184,6 +253,18 @@ public sealed class RenderedPageCountMismatchException : CvLatexException
     public int ConfiguredPageCount { get; }
 
     public int RenderedPageCount { get; }
+}
+
+public sealed class RenderedPageLayoutMismatchException : CvLatexException
+{
+    public RenderedPageLayoutMismatchException(string details)
+        : base($"The rendered PDF does not match the explicit page layout: {details}")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(details);
+        Details = details;
+    }
+
+    public string Details { get; }
 }
 
 public sealed class CvPdfNotProducedException : CvLatexException

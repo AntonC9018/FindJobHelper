@@ -360,6 +360,17 @@
     \par
 }
 
+% Explicit split sections keep their ending line inside the final atomic unit.
+% The fixed vbox makes its height additive and identical in measurement.
+\newcommand{\cvexplicitsectionend}{%
+    \par
+    \nointerlineskip
+    \vbox{%
+        \hsize=\linewidth
+        \strut\hfill
+    }%
+}
+
 % Complete section representations shared by production and measurement.
 % The fresh-page form deliberately owns every bit of page-top and boundary
 % spacing so it can be boxed and checked as one atomic unit.
@@ -388,6 +399,60 @@
 
 \newcommand{\cvsetmeasurementfreshsectionbox}[1]{%
     \cvsetflowcontentbox{\cvmeasurementbox}{\cvflowblockfreshcontent{#1}}%
+}
+
+\newcommand{\cvsetmeasurementsplitsectionstartbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementcandidatebox}{%
+        \cvflowblockfitskip
+        #1%
+        \cvmeasurementsentinelevent
+    }%
+    \cvsetflowcontentbox{\cvmeasurementreferencebox}{%
+        \cvmeasurementsentinelevent
+    }%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
+        -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+\newcommand{\cvsetmeasurementfreshsplitsectionstartbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementcandidatebox}{%
+        \cvflowblocknewpageskip
+        \cvflowblockfitskip
+        #1%
+        \cvmeasurementsentinelevent
+    }%
+    \cvsetflowcontentbox{\cvmeasurementreferencebox}{%
+        \cvmeasurementsentinelevent
+    }%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
+        -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
+}
+
+\newcommand{\cvsetmeasurementsplitsectionendbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementbox}{%
+        \cvexplicitsectionend
+    }%
+}
+
+\newcommand{\cvsetmeasurementfreshcontinuationbox}[1]{%
+    \cvsetflowcontentbox{\cvmeasurementcandidatebox}{%
+        \cvflowblocknewpageskip
+        \cvmeasurementsentinelevent
+    }%
+    \cvsetflowcontentbox{\cvmeasurementreferencebox}{%
+        \cvmeasurementsentinelevent
+    }%
+    \dimen0=\dimexpr
+        \ht\cvmeasurementcandidatebox+\dp\cvmeasurementcandidatebox
+        -\ht\cvmeasurementreferencebox-\dp\cvmeasurementreferencebox
+        \relax
+    \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}%
 }
 
 \newcommand{\cvmeasurementsentinelevent}{%
@@ -439,6 +504,53 @@
 % item measurement already carries its following inter-item/list-end spacing.
 \newcommand{\cvsetmeasurementexperiencechromebox}[1]{%
     \cvsetmeasurementbox{#1}%
+}
+
+% Explicit page layouts split event-based sections into atomic render units.
+% #1 is the section label, #2 is an optional event diagnostic, #3 and #4 are
+% the current-page and fresh-page prefixes, and #5 is section-ending content.
+\newif\ifcvexplicitforcefresh
+\newcount\cvexplicitlastunitpage
+\cvexplicitforcefreshfalse
+\newcommand{\cvexplicitnextunitfresh}{%
+    \global\cvexplicitforcefreshtrue
+}
+
+\NewEnviron{cvexplicitunit}[5]{%
+    \par
+    \cvsetflowcontentbox{\flowcurrentbox}{#3\BODY#5}%
+    \cvsetflowcontentbox{\flowfreshbox}{#4\BODY#5}%
+
+    \dimen0=\dimexpr\ht\flowfreshbox+\dp\flowfreshbox\relax
+    \ifdim\dimen0>\textheight
+        \if\relax\detokenize{#2}\relax
+            \PackageError{FindJobHelper}{FJH_SECTION_PAGE_OVERFLOW: #1}{The complete static section must fit on a fresh page.}%
+        \else
+            \PackageError{FindJobHelper}{FJH_EVENT_PAGE_OVERFLOW: #1 / #2}{A complete CV event must fit on a fresh page.}%
+        \fi
+    \fi
+
+    \ifcvexplicitforcefresh
+        \global\cvexplicitforcefreshfalse
+        \global\cvexplicitlastunitpage=\value{page}
+        \nointerlineskip\box\flowfreshbox
+    \else
+        \ifdim\pagetotal=0pt
+            \global\cvexplicitlastunitpage=\value{page}
+            \nointerlineskip\box\flowfreshbox
+        \else
+            \dimen0=\dimexpr\ht\flowcurrentbox+\dp\flowcurrentbox\relax
+            \dimen2=\dimexpr\pagegoal-\pagetotal\relax
+            \ifdim\dimen0>\dimen2
+                \newpage
+                \global\cvexplicitlastunitpage=\value{page}
+                \nointerlineskip\box\flowfreshbox
+            \else
+                \global\cvexplicitlastunitpage=\value{page}
+                \nointerlineskip\box\flowcurrentbox
+            \fi
+        \fi
+    \fi
 }
 
 % #1 is a stable section label used in overflow diagnostics.
