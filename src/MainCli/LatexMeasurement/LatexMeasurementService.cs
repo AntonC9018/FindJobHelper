@@ -48,7 +48,8 @@ public sealed class LatexMeasurementService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        var graph = BuildRequestGraph(database, currentModel);
+        var measuredSections = currentModel.SectionOrder.Distinct().ToArray();
+        var graph = BuildRequestGraph(database, currentModel, measuredSections);
         await _cache.InitializeAsync(cancellationToken);
         var hits = await _cache.LoadAsync(graph.WorkItems.Keys.ToArray(), cancellationToken);
 
@@ -93,28 +94,29 @@ public sealed class LatexMeasurementService
             }
         }
 
-        graph.VerifyComplete(database);
+        graph.VerifyComplete(database, measuredSections);
         return CvMeasurementSnapshot.CreateFrozen(
-            graph.ExperienceItems,
-            graph.ExperienceHeadings,
-            graph.ExperienceChrome,
-            graph.CurrentPageCompleteSections,
-            graph.CurrentPageSectionChrome,
-            graph.FreshPageSectionChrome,
-            graph.CurrentPageSplitSectionStart,
-            graph.FreshPageSplitSectionStart,
-            graph.SplitSectionEnd!.Value,
-            graph.FreshPageContinuation!.Value,
-            graph.CurrentPageExplicitStaticSections,
-            graph.FreshPageExplicitStaticSections,
-            graph.DocumentHeader!.Value,
-            graph.DocumentFooter!.Value,
-            graph.UsablePageHeight!.Value);
+            experienceItems: graph.ExperienceItems,
+            experienceHeadings: graph.ExperienceHeadings,
+            experienceChrome: graph.ExperienceChrome,
+            currentPageCompleteSections: graph.CurrentPageCompleteSections,
+            currentPageSectionChrome: graph.CurrentPageSectionChrome,
+            freshPageSectionChrome: graph.FreshPageSectionChrome,
+            currentPageSplitSectionStart: graph.CurrentPageSplitSectionStart,
+            freshPageSplitSectionStart: graph.FreshPageSplitSectionStart,
+            splitSectionEnd: graph.SplitSectionEnd!.Value,
+            freshPageContinuation: graph.FreshPageContinuation!.Value,
+            currentPageExplicitStaticSections: graph.CurrentPageExplicitStaticSections,
+            freshPageExplicitStaticSections: graph.FreshPageExplicitStaticSections,
+            documentHeader: graph.DocumentHeader!.Value,
+            documentFooter: graph.DocumentFooter!.Value,
+            usablePageHeight: graph.UsablePageHeight!.Value);
     }
 
     private RequestGraph BuildRequestGraph(
         ExperienceDatabase database,
-        CvDataModel currentModel)
+        CvDataModel currentModel,
+        IReadOnlyList<Section> measuredSections)
     {
         var graph = new RequestGraph(_ruleVersion);
         foreach (var identified in database.EnumerateExperienceItems())
@@ -153,8 +155,9 @@ public sealed class LatexMeasurementService
                 MeasurementDestination.ForExperienceChrome(identified.Id));
         }
 
-        foreach (var section in Enum.GetValues<Section>())
+        foreach (var section in measuredSections)
         {
+            var isStaticSection = section == Section.Languages;
             var chrome = CvLatexFragmentRenderer.Materialize(
                 CvLatexFragmentRenderer.RenderSectionChrome(section));
             graph.Add(
@@ -167,25 +170,31 @@ public sealed class LatexMeasurementService
                 chrome,
                 LatexMeasurementMode.FreshPageSectionChrome,
                 MeasurementDestination.ForFreshPageSectionChrome(section));
-            graph.Add(
-                CreateFragmentKey(LatexMeasurementKind.SplitSectionStart, chrome, section),
-                chrome,
-                LatexMeasurementMode.SplitSectionStart,
-                MeasurementDestination.ForCurrentPageSplitSectionStart(section));
-            graph.Add(
-                CreateFragmentKey(
-                    LatexMeasurementKind.FreshPageSplitSectionStart,
+            if (!isStaticSection)
+            {
+                graph.Add(
+                    CreateFragmentKey(LatexMeasurementKind.SplitSectionStart, chrome, section),
                     chrome,
-                    section),
-                chrome,
-                LatexMeasurementMode.FreshPageSplitSectionStart,
-                MeasurementDestination.ForFreshPageSplitSectionStart(section));
+                    LatexMeasurementMode.SplitSectionStart,
+                    MeasurementDestination.ForCurrentPageSplitSectionStart(section));
+                graph.Add(
+                    CreateFragmentKey(
+                        LatexMeasurementKind.FreshPageSplitSectionStart,
+                        chrome,
+                        section),
+                    chrome,
+                    LatexMeasurementMode.FreshPageSplitSectionStart,
+                    MeasurementDestination.ForFreshPageSplitSectionStart(section));
+            }
 
             if (CvLatexFragmentRenderer.IsSectionEmpty(section, currentModel))
             {
                 graph.CurrentPageCompleteSections.Add(section, LatexHeight.Zero);
-                graph.CurrentPageExplicitStaticSections.Add(section, LatexHeight.Zero);
-                graph.FreshPageExplicitStaticSections.Add(section, LatexHeight.Zero);
+                if (isStaticSection)
+                {
+                    graph.CurrentPageExplicitStaticSections.Add(section, LatexHeight.Zero);
+                    graph.FreshPageExplicitStaticSections.Add(section, LatexHeight.Zero);
+                }
                 continue;
             }
 
@@ -193,7 +202,7 @@ public sealed class LatexMeasurementService
                 CvLatexFragmentRenderer.RenderSectionInner(
                     section,
                     currentModel));
-            var kind = section == Section.Languages
+            var kind = isStaticSection
                 ? LatexMeasurementKind.StaticSection
                 : LatexMeasurementKind.CompleteSection;
             graph.Add(
@@ -201,7 +210,7 @@ public sealed class LatexMeasurementService
                 complete,
                 LatexMeasurementMode.FlowBlock,
                 MeasurementDestination.ForCompleteSection(section));
-            if (section == Section.Languages)
+            if (isStaticSection)
             {
                 var explicitCurrent = $@"\cvflowblockfitskip{complete}\cvexplicitsectionend";
                 var explicitFresh =
@@ -222,11 +231,6 @@ public sealed class LatexMeasurementService
                     explicitFresh,
                     LatexMeasurementMode.Box,
                     MeasurementDestination.ForFreshPageExplicitStaticSection(section));
-            }
-            else
-            {
-                graph.CurrentPageExplicitStaticSections.Add(section, LatexHeight.Zero);
-                graph.FreshPageExplicitStaticSections.Add(section, LatexHeight.Zero);
             }
         }
 
@@ -411,7 +415,9 @@ public sealed class LatexMeasurementService
             }
         }
 
-        public void VerifyComplete(ExperienceDatabase database)
+        public void VerifyComplete(
+            ExperienceDatabase database,
+            IReadOnlyCollection<Section> measuredSections)
         {
             var expectedItems = database.Experiences.Sum(static list => list.Items.Length);
             if (ExperienceItems.Count != expectedItems)
@@ -429,27 +435,33 @@ public sealed class LatexMeasurementService
                 throw new CvMeasurementInvariantException(
                     "Incomplete measurement snapshot: experience headings are missing.");
             }
-            if (CurrentPageCompleteSections.Count != Enum.GetValues<Section>().Length)
+            if (!ContainsExactly(CurrentPageCompleteSections, measuredSections))
             {
                 throw new CvMeasurementInvariantException(
                     "Incomplete measurement snapshot: complete sections are missing.");
             }
-            if (CurrentPageSectionChrome.Count != Enum.GetValues<Section>().Length
-                || FreshPageSectionChrome.Count != Enum.GetValues<Section>().Length)
+            if (!ContainsExactly(CurrentPageSectionChrome, measuredSections)
+                || !ContainsExactly(FreshPageSectionChrome, measuredSections))
             {
                 throw new CvMeasurementInvariantException(
                     "Incomplete measurement snapshot: section chrome is missing.");
             }
-            if (CurrentPageSplitSectionStart.Count != Enum.GetValues<Section>().Length
-                || FreshPageSplitSectionStart.Count != Enum.GetValues<Section>().Length
+            var dynamicSections = measuredSections
+                .Where(static section => section != Section.Languages)
+                .ToArray();
+            if (!ContainsExactly(CurrentPageSplitSectionStart, dynamicSections)
+                || !ContainsExactly(FreshPageSplitSectionStart, dynamicSections)
                 || SplitSectionEnd is null
                 || FreshPageContinuation is null)
             {
                 throw new CvMeasurementInvariantException(
                     "Incomplete measurement snapshot: split-section measurements are missing.");
             }
-            if (CurrentPageExplicitStaticSections.Count != Enum.GetValues<Section>().Length
-                || FreshPageExplicitStaticSections.Count != Enum.GetValues<Section>().Length)
+            var staticSections = measuredSections
+                .Where(static section => section == Section.Languages)
+                .ToArray();
+            if (!ContainsExactly(CurrentPageExplicitStaticSections, staticSections)
+                || !ContainsExactly(FreshPageExplicitStaticSections, staticSections))
             {
                 throw new CvMeasurementInvariantException(
                     "Incomplete measurement snapshot: explicit static-section measurements are missing.");
@@ -475,23 +487,13 @@ public sealed class LatexMeasurementService
                 }
             }
 
-            foreach (var section in Enum.GetValues<Section>())
+            foreach (var section in measuredSections)
             {
                 var currentChrome = CurrentPageSectionChrome[section].ScaledPoints;
                 var freshChrome = FreshPageSectionChrome[section].ScaledPoints;
-                var currentStart = CurrentPageSplitSectionStart[section].ScaledPoints;
-                var freshStart = FreshPageSplitSectionStart[section].ScaledPoints;
-                var currentExplicitStatic =
-                    CurrentPageExplicitStaticSections[section].ScaledPoints;
-                var freshExplicitStatic =
-                    FreshPageExplicitStaticSections[section].ScaledPoints;
                 var complete = CurrentPageCompleteSections[section].ScaledPoints;
                 if (currentChrome < 0
                     || freshChrome < 0
-                    || currentStart < 0
-                    || freshStart < 0
-                    || currentExplicitStatic < 0
-                    || freshExplicitStatic < 0
                     || complete < 0)
                 {
                     throw new CvMeasurementInvariantException(
@@ -508,15 +510,37 @@ public sealed class LatexMeasurementService
                     throw new CvMeasurementInvariantException(
                         $"Derived fresh-page height for section '{section}' cannot be negative.");
                 }
-                if (freshStart < currentStart)
+                if (section == Section.Languages)
                 {
-                    throw new CvMeasurementInvariantException(
-                        $"Fresh-page split-section start for '{section}' is shorter than its current-page form.");
+                    var currentExplicitStatic =
+                        CurrentPageExplicitStaticSections[section].ScaledPoints;
+                    var freshExplicitStatic =
+                        FreshPageExplicitStaticSections[section].ScaledPoints;
+                    if (currentExplicitStatic < 0 || freshExplicitStatic < 0)
+                    {
+                        throw new CvMeasurementInvariantException(
+                            $"Measured explicit static-section heights for '{section}' cannot be negative.");
+                    }
+                    if (freshExplicitStatic < currentExplicitStatic)
+                    {
+                        throw new CvMeasurementInvariantException(
+                            $"Fresh-page explicit static section '{section}' is shorter than its current-page form.");
+                    }
                 }
-                if (freshExplicitStatic < currentExplicitStatic)
+                else
                 {
-                    throw new CvMeasurementInvariantException(
-                        $"Fresh-page explicit static section '{section}' is shorter than its current-page form.");
+                    var currentStart = CurrentPageSplitSectionStart[section].ScaledPoints;
+                    var freshStart = FreshPageSplitSectionStart[section].ScaledPoints;
+                    if (currentStart < 0 || freshStart < 0)
+                    {
+                        throw new CvMeasurementInvariantException(
+                            $"Measured split-section start heights for '{section}' cannot be negative.");
+                    }
+                    if (freshStart < currentStart)
+                    {
+                        throw new CvMeasurementInvariantException(
+                            $"Fresh-page split-section start for '{section}' is shorter than its current-page form.");
+                    }
                 }
             }
 
@@ -527,6 +551,12 @@ public sealed class LatexMeasurementService
                     "Split-section ending and fresh-page continuation heights cannot be negative.");
             }
         }
+
+        private static bool ContainsExactly(
+            IReadOnlyDictionary<Section, LatexHeight> measurements,
+            IReadOnlyCollection<Section> expectedSections)
+            => measurements.Count == expectedSections.Count
+               && expectedSections.All(measurements.ContainsKey);
     }
 
     private sealed class MeasurementWorkItem(

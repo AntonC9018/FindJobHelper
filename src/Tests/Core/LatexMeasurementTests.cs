@@ -48,15 +48,15 @@ public sealed class LatexMeasurementTests
     public void SnapshotCheckedAccessors_ReportTheMissingTypedId()
     {
         var snapshot = new CvMeasurementSnapshot(
-            new Dictionary<ExperienceItemId, LatexHeight>(),
-            new Dictionary<ExperienceListId, LatexHeight>(),
-            new Dictionary<ExperienceListId, LatexHeight>(),
-            new Dictionary<Section, LatexHeight>(),
-            new Dictionary<Section, LatexHeight>(),
-            new Dictionary<Section, LatexHeight>(),
-            LatexHeight.Zero,
-            LatexHeight.Zero,
-            LatexHeight.Zero);
+            experienceItems: new Dictionary<ExperienceItemId, LatexHeight>(),
+            experienceHeadings: new Dictionary<ExperienceListId, LatexHeight>(),
+            experienceChrome: new Dictionary<ExperienceListId, LatexHeight>(),
+            currentPageCompleteSections: new Dictionary<Section, LatexHeight>(),
+            currentPageSectionChrome: new Dictionary<Section, LatexHeight>(),
+            freshPageSectionChrome: new Dictionary<Section, LatexHeight>(),
+            documentHeader: LatexHeight.Zero,
+            documentFooter: LatexHeight.Zero,
+            usablePageHeight: LatexHeight.Zero);
         var missing = new ExperienceItemId(new ExperienceListId(3), 4);
 
         var exception = Assert.Throws<KeyNotFoundException>(() => snapshot.GetExperienceItemHeight(missing));
@@ -68,15 +68,18 @@ public sealed class LatexMeasurementTests
     public void SnapshotKeepsDocumentPartsSeparateAndDerivesFreshSectionHeight()
     {
         var snapshot = new CvMeasurementSnapshot(
-            new Dictionary<ExperienceItemId, LatexHeight>(),
-            new Dictionary<ExperienceListId, LatexHeight>(),
-            new Dictionary<ExperienceListId, LatexHeight>(),
-            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(40) },
-            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(10) },
-            new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(15) },
-            new(5),
-            new(6),
-            new(100));
+            experienceItems: new Dictionary<ExperienceItemId, LatexHeight>(),
+            experienceHeadings: new Dictionary<ExperienceListId, LatexHeight>(),
+            experienceChrome: new Dictionary<ExperienceListId, LatexHeight>(),
+            currentPageCompleteSections:
+                new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(40) },
+            currentPageSectionChrome:
+                new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(10) },
+            freshPageSectionChrome:
+                new Dictionary<Section, LatexHeight> { [Section.WorkExperience] = new(15) },
+            documentHeader: new(5),
+            documentFooter: new(6),
+            usablePageHeight: new(100));
 
         Assert.Equal(5, snapshot.DocumentHeader.ScaledPoints);
         Assert.Equal(6, snapshot.DocumentFooter.ScaledPoints);
@@ -393,6 +396,47 @@ public sealed class LatexMeasurementTests
         Assert.Equal(cold.DocumentFooter, warm.DocumentFooter);
         Assert.Equal(cold.CurrentPageSectionChrome, warm.CurrentPageSectionChrome);
         Assert.Equal(cold.FreshPageSectionChrome, warm.FreshPageSectionChrome);
+    }
+
+    [Fact]
+    public async Task Service_AllowsOmittedSectionsAndKeepsSpecializedMeasurementsSparse()
+    {
+        using var fixture = new CacheFixture();
+        var database = CreateDatabase(CreateRichText(new PlainText { Text = "item" }));
+        var model = CreateEmptyModel();
+        model.SectionOrder = [Section.WorkExperience];
+        var runner = new RecordingRunner();
+        var service = new LatexMeasurementService(fixture.CachePath, runner, ruleVersion: 18);
+
+        var snapshot = await service.MeasureAsync(
+            database,
+            model,
+            fixture.TemplatePath,
+            CancellationToken.None);
+
+        Assert.Equal(
+            Section.WorkExperience,
+            Assert.Single(snapshot.CurrentPageCompleteSections).Key);
+        Assert.Equal(
+            Section.WorkExperience,
+            Assert.Single(snapshot.CurrentPageSectionChrome).Key);
+        Assert.Equal(
+            Section.WorkExperience,
+            Assert.Single(snapshot.FreshPageSectionChrome).Key);
+        Assert.Equal(
+            Section.WorkExperience,
+            Assert.Single(snapshot.CurrentPageSplitSectionStart).Key);
+        Assert.Equal(
+            Section.WorkExperience,
+            Assert.Single(snapshot.FreshPageSplitSectionStart).Key);
+        Assert.Empty(snapshot.CurrentPageExplicitStaticSections);
+        Assert.Empty(snapshot.FreshPageExplicitStaticSections);
+        Assert.DoesNotContain(
+            Assert.Single(runner.Batches),
+            static request =>
+                request.CacheKey.Kind
+                    is LatexMeasurementKind.ExplicitStaticSection
+                    or LatexMeasurementKind.FreshPageExplicitStaticSection);
     }
 
     [Fact]

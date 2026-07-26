@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FindJobHelper.CVGeneration;
 using MainCli;
@@ -124,6 +125,29 @@ public sealed class CvSelectionConfigurationTests
                 Assert.Equal(4, block.LastPage);
                 Assert.Equal(new[] { Section.PersonalProjects }, block.Sections);
             });
+    }
+
+    [Fact]
+    public void SectionOrderCollectionConverter_RoundTripsPageRangeSyntax()
+    {
+        const string json =
+            """[{"page":1,"sections":["Languages"]},{"pages":"2-3","sections":["WorkExperience"]}]""";
+
+        var sectionOrder = JsonSerializer.Deserialize<SectionOrderCollection>(json);
+
+        Assert.NotNull(sectionOrder);
+        Assert.Empty(sectionOrder.ValidationErrors);
+        Assert.True(sectionOrder.IsExplicit);
+        Assert.Equal(
+            new[] { Section.Languages, Section.WorkExperience },
+            sectionOrder.Sections);
+        Assert.Equal(3, Assert.IsType<CvPageLayout>(sectionOrder.PageLayout).PageCount);
+        Assert.Equal(json, JsonSerializer.Serialize(sectionOrder));
+        Assert.Equal(
+            typeof(SectionOrderCollection),
+            typeof(JsonCvSelectionConfiguration)
+                .GetProperty(nameof(JsonCvSelectionConfiguration.SectionOrder))!
+                .PropertyType);
     }
 
     [Fact]

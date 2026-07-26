@@ -247,23 +247,36 @@ public sealed class PageHeightSelectionTests
         var identifiedItem = Assert.Single(database.EnumerateExperienceItems());
         var identifiedList = Assert.Single(database.EnumerateExperienceLists());
         var snapshot = new CvMeasurementSnapshot(
-            new Dictionary<ExperienceItemId, LatexHeight> { [identifiedItem.Id] = new(1) },
-            new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(1) },
-            new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(1) },
-            new Dictionary<Section, LatexHeight> { [Section.Languages] = new(20) },
-            new Dictionary<Section, LatexHeight>
+            experienceItems:
+                new Dictionary<ExperienceItemId, LatexHeight>
+                {
+                    [identifiedItem.Id] = new(1),
+                },
+            experienceHeadings:
+                new Dictionary<ExperienceListId, LatexHeight>
+                {
+                    [identifiedList.Id] = new(1),
+                },
+            experienceChrome:
+                new Dictionary<ExperienceListId, LatexHeight>
+                {
+                    [identifiedList.Id] = new(1),
+                },
+            currentPageCompleteSections:
+                new Dictionary<Section, LatexHeight> { [Section.Languages] = new(20) },
+            currentPageSectionChrome: new Dictionary<Section, LatexHeight>
             {
                 [Section.Languages] = new(5),
                 [Section.WorkExperience] = new(1),
             },
-            new Dictionary<Section, LatexHeight>
+            freshPageSectionChrome: new Dictionary<Section, LatexHeight>
             {
                 [Section.Languages] = new(5),
                 [Section.WorkExperience] = new(1),
             },
-            new LatexHeight(10),
-            LatexHeight.Zero,
-            new LatexHeight(29));
+            documentHeader: new LatexHeight(10),
+            documentFooter: LatexHeight.Zero,
+            usablePageHeight: new LatexHeight(29));
 
         var exception = Assert.Throws<FixedCvContentLayoutException>(() => new PageLayoutSelectionAdmissionPolicy(
             database,
@@ -423,15 +436,28 @@ public sealed class PageHeightSelectionTests
             [Section.WorkExperience] = new(10),
         };
         var snapshot = new CvMeasurementSnapshot(
-            new Dictionary<ExperienceItemId, LatexHeight> { [identifiedItem.Id] = new(1) },
-            new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(5) },
-            new Dictionary<ExperienceListId, LatexHeight> { [identifiedList.Id] = new(5) },
-            new Dictionary<Section, LatexHeight> { [Section.Languages] = new(40) },
-            currentChrome,
-            freshChrome,
-            LatexHeight.Zero,
-            LatexHeight.Zero,
-            new(50));
+            experienceItems:
+                new Dictionary<ExperienceItemId, LatexHeight>
+                {
+                    [identifiedItem.Id] = new(1),
+                },
+            experienceHeadings:
+                new Dictionary<ExperienceListId, LatexHeight>
+                {
+                    [identifiedList.Id] = new(5),
+                },
+            experienceChrome:
+                new Dictionary<ExperienceListId, LatexHeight>
+                {
+                    [identifiedList.Id] = new(5),
+                },
+            currentPageCompleteSections:
+                new Dictionary<Section, LatexHeight> { [Section.Languages] = new(40) },
+            currentPageSectionChrome: currentChrome,
+            freshPageSectionChrome: freshChrome,
+            documentHeader: LatexHeight.Zero,
+            documentFooter: LatexHeight.Zero,
+            usablePageHeight: new(50));
 
         var exception = Assert.Throws<FixedCvContentLayoutException>(() =>
             new PageLayoutSelectionAdmissionPolicy(
@@ -541,22 +567,29 @@ public sealed class PageHeightSelectionTests
         Assert.Equal(lists.Length, headingHeights.Length);
         Assert.Equal(lists.Length, chromeHeights.Length);
         var snapshot = new CvMeasurementSnapshot(
-            items.Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
+            experienceItems: items
+                .Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
                 .ToDictionary(static x => x.Id, static x => x.Height),
-            lists.Select((list, index) => (list.Id, Height: new LatexHeight(headingHeights[index])))
+            experienceHeadings: lists
+                .Select((list, index) =>
+                    (list.Id, Height: new LatexHeight(headingHeights[index])))
                 .ToDictionary(static x => x.Id, static x => x.Height),
-            lists.Select((list, index) => (list.Id, Height: new LatexHeight(chromeHeights[index])))
+            experienceChrome: lists
+                .Select((list, index) =>
+                    (list.Id, Height: new LatexHeight(chromeHeights[index])))
                 .ToDictionary(static x => x.Id, static x => x.Height),
-            new Dictionary<Section, LatexHeight>(),
-            groups.Select(static group => group.Section).Distinct().ToDictionary(
+            currentPageCompleteSections: new Dictionary<Section, LatexHeight>(),
+            currentPageSectionChrome:
+                groups.Select(static group => group.Section).Distinct().ToDictionary(
                 static section => section,
                 static _ => new LatexHeight(5)),
-            groups.Select(static group => group.Section).Distinct().ToDictionary(
+            freshPageSectionChrome:
+                groups.Select(static group => group.Section).Distinct().ToDictionary(
                 static section => section,
                 static _ => new LatexHeight(5)),
-            new LatexHeight(10),
-            LatexHeight.Zero,
-            new LatexHeight(pageHeight));
+            documentHeader: new LatexHeight(10),
+            documentFooter: LatexHeight.Zero,
+            usablePageHeight: new LatexHeight(pageHeight));
         return new(
             database,
             snapshot,
@@ -581,20 +614,27 @@ public sealed class PageHeightSelectionTests
         Assert.Equal(items.Length, itemHeights.Length);
         var sections = groups.Select(static group => group.Section).Distinct().ToArray();
         var snapshot = new CvMeasurementSnapshot(
-            items.Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
+            experienceItems: items
+                .Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
                 .ToDictionary(static x => x.Id, static x => x.Height),
-            lists.ToDictionary(static list => list.Id, static _ => new LatexHeight(5)),
-            lists.ToDictionary(static list => list.Id, static _ => new LatexHeight(5)),
-            new Dictionary<Section, LatexHeight>(),
-            sections.ToDictionary(
+            experienceHeadings:
+                lists.ToDictionary(
+                    static list => list.Id,
+                    static _ => new LatexHeight(5)),
+            experienceChrome:
+                lists.ToDictionary(
+                    static list => list.Id,
+                    static _ => new LatexHeight(5)),
+            currentPageCompleteSections: new Dictionary<Section, LatexHeight>(),
+            currentPageSectionChrome: sections.ToDictionary(
                 static section => section,
                 _ => new LatexHeight(currentChromeHeight)),
-            sections.ToDictionary(
+            freshPageSectionChrome: sections.ToDictionary(
                 static section => section,
                 _ => new LatexHeight(freshChromeHeight)),
-            new(headerHeight),
-            new(footerHeight),
-            new(pageHeight));
+            documentHeader: new(headerHeight),
+            documentFooter: new(footerHeight),
+            usablePageHeight: new(pageHeight));
         return new(
             database,
             snapshot,

@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 
@@ -335,18 +334,25 @@ public sealed class ExplicitPageLayoutSelectionTests
             static section => section,
             static _ => LatexHeight.Zero);
         var snapshot = new CvMeasurementSnapshot(
-            items.Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
+            experienceItems: items
+                .Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
                 .ToDictionary(static pair => pair.Id, static pair => pair.Height),
-            lists.ToDictionary(static list => list.Id, _ => new LatexHeight(eventBaseHeight)),
-            lists.ToDictionary(static list => list.Id, _ => new LatexHeight(eventBaseHeight)),
-            completeSections,
-            currentChrome,
-            freshChrome,
-            new(headerHeight),
-            new(footerHeight),
-            new(pageHeight),
-            currentChrome,
-            freshChrome,
+            experienceHeadings:
+                lists.ToDictionary(
+                    static list => list.Id,
+                    _ => new LatexHeight(eventBaseHeight)),
+            experienceChrome:
+                lists.ToDictionary(
+                    static list => list.Id,
+                    _ => new LatexHeight(eventBaseHeight)),
+            currentPageCompleteSections: completeSections,
+            currentPageSectionChrome: currentChrome,
+            freshPageSectionChrome: freshChrome,
+            documentHeader: new(headerHeight),
+            documentFooter: new(footerHeight),
+            usablePageHeight: new(pageHeight),
+            currentPageSplitSectionStart: currentChrome,
+            freshPageSplitSectionStart: freshChrome,
             splitSectionEnd: LatexHeight.Zero,
             freshPageContinuation: LatexHeight.Zero);
         return new(

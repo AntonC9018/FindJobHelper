@@ -171,21 +171,23 @@ public sealed record CvMeasurementSnapshot
         LatexHeight documentFooter,
         LatexHeight usablePageHeight)
         => new(
-            experienceItems.ToFrozenDictionary(),
-            experienceHeadings.ToFrozenDictionary(),
-            experienceChrome.ToFrozenDictionary(),
-            currentPageCompleteSections.ToFrozenDictionary(),
-            currentPageSectionChrome.ToFrozenDictionary(),
-            freshPageSectionChrome.ToFrozenDictionary(),
-            documentHeader,
-            documentFooter,
-            usablePageHeight,
-            currentPageSplitSectionStart.ToFrozenDictionary(),
-            freshPageSplitSectionStart.ToFrozenDictionary(),
-            splitSectionEnd,
-            freshPageContinuation,
-            currentPageExplicitStaticSections.ToFrozenDictionary(),
-            freshPageExplicitStaticSections.ToFrozenDictionary());
+            experienceItems: experienceItems.ToFrozenDictionary(),
+            experienceHeadings: experienceHeadings.ToFrozenDictionary(),
+            experienceChrome: experienceChrome.ToFrozenDictionary(),
+            currentPageCompleteSections: currentPageCompleteSections.ToFrozenDictionary(),
+            currentPageSectionChrome: currentPageSectionChrome.ToFrozenDictionary(),
+            freshPageSectionChrome: freshPageSectionChrome.ToFrozenDictionary(),
+            documentHeader: documentHeader,
+            documentFooter: documentFooter,
+            usablePageHeight: usablePageHeight,
+            currentPageSplitSectionStart: currentPageSplitSectionStart.ToFrozenDictionary(),
+            freshPageSplitSectionStart: freshPageSplitSectionStart.ToFrozenDictionary(),
+            splitSectionEnd: splitSectionEnd,
+            freshPageContinuation: freshPageContinuation,
+            currentPageExplicitStaticSections:
+                currentPageExplicitStaticSections.ToFrozenDictionary(),
+            freshPageExplicitStaticSections:
+                freshPageExplicitStaticSections.ToFrozenDictionary());
 
     private static LatexHeight GetRequired<TKey>(
         IReadOnlyDictionary<TKey, LatexHeight> values,
