@@ -15,6 +15,25 @@ dotnet run --project src/MainCli/MainCli.csproj -- `
   --output-directory path/to/output
 ```
 
+The default output format is `tex`: it uses the LaTeX renderer and publishes the
+compiled `CurmanchiiAnton.pdf`. The equivalent explicit invocation adds
+`--output-format tex`.
+
+To publish a clean Markdown CV instead, use:
+
+```powershell
+dotnet run --project src/MainCli/MainCli.csproj -- `
+  --config path/to/config.json `
+  --output-directory path/to/output `
+  --output-format md
+```
+
+This publishes `CurmanchiiAnton.md` without compiling the final PDF. Markdown still
+requires the LaTeX template and LaTeX measurement tooling: it uses the same measured
+heights, selection admission, exact-page checks, and explicit-layout validation as the
+PDF path. It does not implement separate pagination and contains no page-boundary
+markers.
+
 To print every tag accepted by `requiredTags`, run:
 
 ```powershell
@@ -30,10 +49,15 @@ dotnet run --project src/MainCli/MainCli.csproj -- `
   --debug
 ```
 
-This creates `CurmanchiiAnton-debug.md` instead of a PDF. Debug generation still uses
-LaTeX height measurement and the same page-fit admission rules as normal generation,
-so its selected content has page-fit parity with the PDF path, but it skips final
-LaTeX/PDF compilation. Sensitive phone information remains blurred.
+`--debug` overrides `--output-format`, skips final LaTeX/PDF compilation, and publishes
+both the clean `CurmanchiiAnton.md` and annotated `CurmanchiiAnton-debug.md` from the
+same selected CV model. Sensitive phone information remains blurred in both files.
+
+| Invocation | Published artifacts | `--open` target |
+| --- | --- | --- |
+| Default or `--output-format tex` | `CurmanchiiAnton.pdf` | PDF |
+| `--output-format md` | `CurmanchiiAnton.md` | Clean Markdown |
+| `--debug`, with either output format | `CurmanchiiAnton.md`, `CurmanchiiAnton-debug.md` | Debug Markdown |
 
 ## Configuration
 
@@ -127,7 +151,7 @@ event—including its description, links, and selected bullets—remains atomic.
 Every block must naturally use its complete declared span. For example, a `pages:
 "2-3"` block must contain enough selected content to occupy two pages without counting
 the forced break, document header, or document footer. Underfilled blocks fail before
-either a PDF or debug Markdown artifact is published. Selection is never padded and
+any requested PDF or Markdown artifact is published. Selection is never padded and
 does not bypass MMR, score thresholds, section budgets, or required-item rules merely
 to fill a range.
 

@@ -1,5 +1,8 @@
 using CommandDotNet;
 
-return await new AppRunner<CvGenerationCommand>()
+var appSettings = new AppSettings();
+appSettings.ArgumentTypeDescriptors.Add(new CvOutputFormatTypeDescriptor());
+
+return await new AppRunner<CvGenerationCommand>(appSettings)
     .UseDefaultMiddleware()
     .RunAsync(args);

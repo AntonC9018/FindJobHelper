@@ -16,6 +16,9 @@ public sealed class CvGenerationCliEndToEndTests
         Assert.Contains("list-tags", result.StandardOutput);
         Assert.Contains("--config", result.StandardOutput);
         Assert.Contains("--output-directory", result.StandardOutput);
+        Assert.Contains("--output-format", result.StandardOutput);
+        Assert.Contains("tex", result.StandardOutput);
+        Assert.Contains("md", result.StandardOutput);
         Assert.Contains("--debug", result.StandardOutput);
         Assert.Contains("--open", result.StandardOutput);
     }
@@ -49,8 +52,11 @@ public sealed class CvGenerationCliEndToEndTests
         Assert.Contains("output-directory is required", result.StandardError);
     }
 
-    [Fact]
-    public async Task Generate_DebugPublishesOnlyAnnotatedMarkdown()
+    [Theory]
+    [InlineData("tex")]
+    [InlineData("md")]
+    public async Task Generate_DebugOverridesRequestedFormatAndPublishesBothMarkdownVariants(
+        string requestedOutputFormat)
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-e2e-{Guid.NewGuid():N}");
         try
@@ -60,35 +66,173 @@ public sealed class CvGenerationCliEndToEndTests
                 FixturePath,
                 "--output-directory",
                 outputDirectory,
+                "--output-format",
+                requestedOutputFormat,
                 "--debug");
 
-            Assert.True(
-                result.ExitCode == 0,
-                $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
+            AssertSuccessful(result);
 
-            var files = Directory.GetFiles(outputDirectory)
-                .Select(Path.GetFileName)
-                .Where(static file => file is not null)
-                .Select(static file => file!)
-                .ToArray();
-            var markdownFile = Assert.Single(files);
-            Assert.Equal("CurmanchiiAnton-debug.md", markdownFile);
-            Assert.DoesNotContain(files, file => file is "main.tex" or "log-stdout.txt" or "log-stderr.txt");
+            var files = GetFileNames(outputDirectory);
+            Assert.Equal(2, files.Length);
+            Assert.Contains("CurmanchiiAnton.md", files);
+            Assert.Contains("CurmanchiiAnton-debug.md", files);
+            Assert.DoesNotContain("CurmanchiiAnton.pdf", files);
+            Assert.DoesNotContain(
+                files,
+                file => file is "main.tex" or "log-stdout.txt" or "log-stderr.txt");
 
-            var markdownPath = Path.Combine(outputDirectory, markdownFile);
-            var markdownBytes = await File.ReadAllBytesAsync(markdownPath);
-            Assert.False(markdownBytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }));
-            var markdown = await File.ReadAllTextAsync(markdownPath);
+            var cleanMarkdownPath = Path.Combine(outputDirectory, "CurmanchiiAnton.md");
+            var debugMarkdownPath = Path.Combine(outputDirectory, "CurmanchiiAnton-debug.md");
+            var cleanMarkdown = await ReadAndAssertMarkdownEncodingAsync(cleanMarkdownPath);
+            var debugMarkdown = await ReadAndAssertMarkdownEncodingAsync(debugMarkdownPath);
+
+            foreach (var markdown in new[] { cleanMarkdown, debugMarkdown })
+            {
+                Assert.StartsWith("# Anton Curmanschii\n", markdown, StringComparison.Ordinal);
+                Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
+                Assert.Contains(
+                    "**Technologies:** E2E JSON Configuration",
+                    markdown,
+                    StringComparison.Ordinal);
+                Assert.Contains("## Work Experience", markdown, StringComparison.Ordinal);
+                Assert.Contains(
+                    "**Phone:** 202\\*\\*\\*\\*\\*\\*\\*\\*\\*",
+                    markdown,
+                    StringComparison.Ordinal);
+                Assert.DoesNotContain(
+                    "202\\-555\\-0100",
+                    markdown,
+                    StringComparison.Ordinal);
+                Assert.DoesNotContain(@"\begin{document}", markdown, StringComparison.Ordinal);
+                Assert.DoesNotContain(@"\cvevent", markdown, StringComparison.Ordinal);
+            }
+
+            Assert.DoesNotContain("`rank:", cleanMarkdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("MMR terms:", cleanMarkdown, StringComparison.Ordinal);
+            Assert.Contains("`rank:", debugMarkdown, StringComparison.Ordinal);
+            Assert.Contains("- `rank:", debugMarkdown, StringComparison.Ordinal);
+
+            var cleanMessageIndex = result.StandardOutput.IndexOf(
+                $"Generated '{cleanMarkdownPath}'.",
+                StringComparison.Ordinal);
+            var debugMessageIndex = result.StandardOutput.IndexOf(
+                $"Generated '{debugMarkdownPath}'.",
+                StringComparison.Ordinal);
+            Assert.True(cleanMessageIndex >= 0);
+            Assert.True(debugMessageIndex > cleanMessageIndex);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_MarkdownPublishesOnlyCleanMarkdownWithUnblurredContactData()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-clean-markdown-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                FixturePath,
+                "--output-directory",
+                outputDirectory,
+                "--output-format",
+                "mD");
+
+            AssertSuccessful(result);
+
+            var markdownFile = Assert.Single(GetFileNames(outputDirectory));
+            Assert.Equal("CurmanchiiAnton.md", markdownFile);
+            var markdown = await ReadAndAssertMarkdownEncodingAsync(
+                Path.Combine(outputDirectory, markdownFile));
+
             Assert.StartsWith("# Anton Curmanschii\n", markdown, StringComparison.Ordinal);
+            Assert.Contains(
+                "**Phone:** 202\\-555\\-0100",
+                markdown,
+                StringComparison.Ordinal);
             Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
-            Assert.Contains("**Technologies:** E2E JSON Configuration", markdown, StringComparison.Ordinal);
             Assert.Contains("## Work Experience", markdown, StringComparison.Ordinal);
-            Assert.Contains("`rank:", markdown, StringComparison.Ordinal);
-            Assert.Contains("- `rank:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("`rank:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("raw:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("coverage:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("matches:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("MMR terms:", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain(@"\begin{document}", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain(@"\cvevent", markdown, StringComparison.Ordinal);
-            Assert.DoesNotContain("202-555-0100", markdown, StringComparison.Ordinal);
-            Assert.DoesNotContain('\r', markdown);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_UnsupportedOutputFormatFailsBeforePublishingArtifacts()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-invalid-format-e2e-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputDirectory);
+        var unrelatedFile = Path.Combine(outputDirectory, "keep.txt");
+        await File.WriteAllTextAsync(unrelatedFile, "keep");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                FixturePath,
+                "--output-directory",
+                outputDirectory,
+                "--output-format",
+                "html",
+                "--debug");
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(
+                "'html' is not a valid CvOutputFormat",
+                result.StandardOutput,
+                StringComparison.Ordinal);
+            Assert.Equal(new[] { "keep.txt" }, GetFileNames(outputDirectory));
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_ExplicitTexPublishesOnlyPdf()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-explicit-tex-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "--config",
+                FixturePath,
+                "--output-directory",
+                outputDirectory,
+                "--output-format",
+                "TeX");
+
+            AssertSuccessful(result);
+
+            var pdfFile = Assert.Single(GetFileNames(outputDirectory));
+            Assert.Equal("CurmanchiiAnton.pdf", pdfFile);
         }
         finally
         {
@@ -182,22 +326,39 @@ public sealed class CvGenerationCliEndToEndTests
         }
     }
 
-    [Fact]
-    public async Task Generate_DebugUnattainableExactCountFailsWithoutPublishingMarkdown()
+    [Theory]
+    [InlineData("md", false)]
+    [InlineData("tex", true)]
+    [InlineData("md", true)]
+    public async Task Generate_MarkdownPathsRetainUnattainableExactPageCountValidation(
+        string requestedOutputFormat,
+        bool debug)
     {
         var outputDirectory = Path.Combine(Path.GetTempPath(), $"FindJobHelper-unattainable-e2e-{Guid.NewGuid():N}");
         try
         {
-            var result = await RunCliAsync(
+            var arguments = new List<string>
+            {
                 "--config",
                 UnattainableFixturePath,
                 "--output-directory",
                 outputDirectory,
-                "--debug");
+                "--output-format",
+                requestedOutputFormat,
+            };
+            if (debug)
+            {
+                arguments.Add("--debug");
+            }
+
+            var result = await RunCliAsync([.. arguments]);
 
             Assert.NotEqual(0, result.ExitCode);
             Assert.Contains("Configured pageCount 2", result.StandardError, StringComparison.Ordinal);
-            Assert.False(File.Exists(Path.Combine(outputDirectory, "CurmanchiiAnton-debug.md")));
+            if (Directory.Exists(outputDirectory))
+            {
+                Assert.Empty(Directory.GetFiles(outputDirectory));
+            }
         }
         finally
         {
@@ -209,11 +370,13 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     [Theory]
-    [InlineData(false, "CurmanchiiAnton.pdf")]
-    [InlineData(true, "CurmanchiiAnton-debug.md")]
+    [InlineData(null, false)]
+    [InlineData("md", false)]
+    [InlineData("tex", true)]
+    [InlineData("md", true)]
     public async Task Generate_UnderfilledExplicitLayoutFailsWithoutPublishingArtifacts(
-        bool debug,
-        string artifactFileName)
+        string? requestedOutputFormat,
+        bool debug)
     {
         var outputDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -238,6 +401,11 @@ public sealed class CvGenerationCliEndToEndTests
                 "--output-directory",
                 outputDirectory,
             };
+            if (requestedOutputFormat is not null)
+            {
+                arguments.Add("--output-format");
+                arguments.Add(requestedOutputFormat);
+            }
             if (debug)
             {
                 arguments.Add("--debug");
@@ -254,7 +422,6 @@ public sealed class CvGenerationCliEndToEndTests
                 "naturally occupies",
                 result.StandardError,
                 StringComparison.Ordinal);
-            Assert.False(File.Exists(Path.Combine(outputDirectory, artifactFileName)));
             if (Directory.Exists(outputDirectory))
             {
                 Assert.Empty(Directory.GetFiles(outputDirectory));
@@ -268,6 +435,33 @@ public sealed class CvGenerationCliEndToEndTests
                 Directory.Delete(outputDirectory, recursive: true);
             }
         }
+    }
+
+    private static void AssertSuccessful(ProcessResult result)
+    {
+        Assert.True(
+            result.ExitCode == 0,
+            $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
+    }
+
+    private static string[] GetFileNames(string directory) =>
+        Directory.GetFiles(directory)
+            .Select(Path.GetFileName)
+            .Where(static file => file is not null)
+            .Select(static file => file!)
+            .OrderBy(static file => file, StringComparer.Ordinal)
+            .ToArray();
+
+    private static async Task<string> ReadAndAssertMarkdownEncodingAsync(string path)
+    {
+        var markdownBytes = await File.ReadAllBytesAsync(path);
+        Assert.False(markdownBytes.AsSpan().StartsWith(new byte[] { 0xEF, 0xBB, 0xBF }));
+
+        var markdown = await File.ReadAllTextAsync(path);
+        Assert.DoesNotContain('\r', markdown);
+        Assert.EndsWith("\n", markdown, StringComparison.Ordinal);
+        Assert.False(markdown.EndsWith("\n\n", StringComparison.Ordinal));
+        return markdown;
     }
 
     private static async Task<ProcessResult> RunCliAsync(params string[] arguments)

@@ -12,10 +12,6 @@ using Location = FindJobHelper.CVGeneration.Location;
 
 public sealed class CvGenerationCommand
 {
-    private const string FinalPdfFileName = "CurmanchiiAnton.pdf";
-    private const string FinalDebugMarkdownFileName =
-        "CurmanchiiAnton-debug.md";
-
     [Command("list-tags", Description = "List all tags available for CV selection.")]
     public void ListTags()
     {
@@ -37,11 +33,12 @@ public sealed class CvGenerationCommand
         try
         {
             return await GenerateCore(
-                arguments.Config,
-                arguments.OutputDirectory,
-                arguments.Debug,
-                arguments.Open,
-                cancellationToken);
+                configPath: arguments.Config,
+                outputDirectory: arguments.OutputDirectory,
+                outputFormat: arguments.OutputFormat,
+                isDebug: arguments.Debug,
+                openInOs: arguments.Open,
+                cancellationToken: cancellationToken);
         }
         catch (CvConfigurationException ex)
         {
@@ -58,6 +55,7 @@ public sealed class CvGenerationCommand
     private static async Task<int> GenerateCore(
         string configPath,
         string outputDirectory,
+        CvOutputFormat outputFormat,
         bool isDebug,
         bool openInOs,
         CancellationToken cancellationToken)
@@ -65,6 +63,7 @@ public sealed class CvGenerationCommand
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
 
+        var artifactPlan = CvArtifactPlan.Create(outputFormat, isDebug);
         var configuration = await CvSelectionConfigurationLoader.LoadAsync(
             configPath,
             cancellationToken);
@@ -164,52 +163,74 @@ public sealed class CvGenerationCommand
 
         try
         {
-            string stagedArtifactPath;
-            string finalArtifactFileName;
-            if (isDebug)
+            var stagedArtifactPaths =
+                new Dictionary<CvArtifactKind, string>(artifactPlan.Artifacts.Length);
+            foreach (var artifact in artifactPlan.Artifacts)
             {
-                finalArtifactFileName = FinalDebugMarkdownFileName;
-                stagedArtifactPath = Path.Combine(stagingDirectory, finalArtifactFileName);
-                using var writer = new CodegenTextWriter
+                switch (artifact.Kind)
                 {
-                    NewLine = "\n",
-                    PreserveNonWhitespaceIndentBehavior =
-                        CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
-                };
-                CvMarkdownRenderer.Render(currentModel, writer);
-                await File.WriteAllTextAsync(
-                    stagedArtifactPath,
-                    writer.ToString(),
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                    cancellationToken);
-            }
-            else
-            {
-                finalArtifactFileName = FinalPdfFileName;
-                var artifacts = await CvTemplate.Generate(new()
-                {
-                    Model = currentModel,
-                    CancellationToken = cancellationToken,
-                    ConfigFilePath = templatePath,
-                    OutputDirectory = stagingDirectory,
-                    PageCount = searchConfiguration.PageCount,
-                    PageLayout = searchConfiguration.PageLayout,
-                });
-                stagedArtifactPath = artifacts.PdfPath;
+                    case CvArtifactKind.Pdf:
+                        var artifacts = await CvTemplate.Generate(new()
+                        {
+                            Model = currentModel,
+                            CancellationToken = cancellationToken,
+                            ConfigFilePath = templatePath,
+                            OutputDirectory = stagingDirectory,
+                            PageCount = searchConfiguration.PageCount,
+                            PageLayout = searchConfiguration.PageLayout,
+                        });
+                        stagedArtifactPaths.Add(artifact.Kind, artifacts.PdfPath);
+                        break;
+                    case CvArtifactKind.CleanMarkdown:
+                        stagedArtifactPaths.Add(
+                            artifact.Kind,
+                            await StageMarkdownAsync(
+                                currentModel,
+                                CvMarkdownRenderMode.Clean,
+                                artifact.FileName,
+                                stagingDirectory,
+                                cancellationToken));
+                        break;
+                    case CvArtifactKind.AnnotatedMarkdown:
+                        stagedArtifactPaths.Add(
+                            artifact.Kind,
+                            await StageMarkdownAsync(
+                                currentModel,
+                                CvMarkdownRenderMode.Annotated,
+                                artifact.FileName,
+                                stagingDirectory,
+                                cancellationToken));
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(
+                            nameof(artifact),
+                            artifact,
+                            "Unsupported CV artifact kind.");
+                }
             }
 
             Directory.CreateDirectory(fullOutputDirectory);
-            var publishedArtifactPath = Path.Combine(
-                fullOutputDirectory,
-                finalArtifactFileName);
-            File.Move(stagedArtifactPath, publishedArtifactPath, overwrite: true);
+            var publishedArtifactPaths =
+                new Dictionary<CvArtifactKind, string>(artifactPlan.Artifacts.Length);
+            foreach (var artifact in artifactPlan.Artifacts)
+            {
+                var publishedArtifactPath = Path.Combine(
+                    fullOutputDirectory,
+                    artifact.FileName);
+                File.Move(
+                    stagedArtifactPaths[artifact.Kind],
+                    publishedArtifactPath,
+                    overwrite: true);
+                publishedArtifactPaths.Add(artifact.Kind, publishedArtifactPath);
+                Console.WriteLine($"Generated '{publishedArtifactPath}'.");
+            }
 
             if (openInOs)
             {
-                ExplorerHelper.OpenFolderAndSelectFile(publishedArtifactPath);
+                ExplorerHelper.OpenFolderAndSelectFile(
+                    publishedArtifactPaths[artifactPlan.OpenTarget]);
             }
 
-            Console.WriteLine($"Generated '{publishedArtifactPath}'.");
             return ExitCodes.Success;
         }
         finally
@@ -230,6 +251,29 @@ public sealed class CvGenerationCommand
         }
     }
 
+    private static async Task<string> StageMarkdownAsync(
+        CvDataModel model,
+        CvMarkdownRenderMode renderMode,
+        string fileName,
+        string stagingDirectory,
+        CancellationToken cancellationToken)
+    {
+        var stagedArtifactPath = Path.Combine(stagingDirectory, fileName);
+        using var writer = new CodegenTextWriter
+        {
+            NewLine = "\n",
+            PreserveNonWhitespaceIndentBehavior =
+                CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
+        };
+        CvMarkdownRenderer.Render(model, renderMode, writer);
+        await File.WriteAllTextAsync(
+            stagedArtifactPath,
+            writer.ToString(),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            cancellationToken);
+        return stagedArtifactPath;
+    }
+
     private static ImmutableArray<CategorizedInfoList> CreateMetadataLists(
         ConfiguredCvSearch searchConfiguration) =>
     [
@@ -242,6 +286,15 @@ public sealed class CvGenerationCommand
     ];
 }
 
+public enum CvOutputFormat
+{
+    // CommandDotNet treats a zero-valued value-type property as having no default.
+    // Starting at 1 makes the Tex property initializer an optional CLI default.
+    // None = 0,
+    Tex = 1,
+    Md = 2,
+}
+
 public sealed class CvGenerationArguments : IArgumentModel
 {
     [Option("config", Description = "Path to the JSON CV selection configuration.")]
@@ -250,7 +303,16 @@ public sealed class CvGenerationArguments : IArgumentModel
     [Option("output-directory", Description = "Destination directory for the generated artifact.")]
     public string OutputDirectory { get; set; } = null!;
 
-    [Option("debug", Description = "Publish an annotated Markdown CV instead of compiling a PDF.")]
+    [Option(
+        "output-format",
+        Description =
+            "Output format: tex uses the LaTeX renderer and publishes a compiled PDF; md publishes clean Markdown.")]
+    public CvOutputFormat OutputFormat { get; set; } = CvOutputFormat.Tex;
+
+    [Option(
+        "debug",
+        Description =
+            "Override --output-format and publish both clean and annotated Markdown without compiling a PDF.")]
     public bool Debug { get; set; }
 
     [Option("open", Description = "Select the generated artifact after a successful generation.")]

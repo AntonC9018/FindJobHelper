@@ -25,6 +25,41 @@ public sealed class CvMarkdownRendererTests
     [Fact]
     public async Task Render_WritesAnnotatedCvSnapshotWithLfAndFinalNewline()
     {
+        var markdown = Render(CreateModel(), CvMarkdownRenderMode.Annotated);
+
+        AssertMarkdownShape(markdown);
+        Assert.Contains("`rank:", markdown, StringComparison.Ordinal);
+        Assert.Contains("MMR terms:", markdown, StringComparison.Ordinal);
+
+        await Verify(markdown);
+    }
+
+    [Fact]
+    public async Task Render_WritesCleanCvSnapshotWithLfAndFinalNewline()
+    {
+        var markdown = Render(CreateModel(), CvMarkdownRenderMode.Clean);
+
+        AssertMarkdownShape(markdown);
+        Assert.DoesNotContain("`rank:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("raw:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("coverage:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("matches:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("MMR terms:", markdown, StringComparison.Ordinal);
+
+        await Verify(markdown);
+    }
+
+    private static void AssertMarkdownShape(string markdown)
+    {
+        Assert.DoesNotContain('\r', markdown);
+        Assert.EndsWith("\n", markdown, StringComparison.Ordinal);
+        Assert.False(markdown.EndsWith("\n\n", StringComparison.Ordinal));
+        Assert.DoesNotContain("Personal Projects", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Personal", markdown, StringComparison.Ordinal);
+    }
+
+    private static CvDataModel CreateModel()
+    {
         var educationRequirement = new RequiredTagGroup(
             new("Education"),
             [new(new("Education"), 1)],
@@ -71,7 +106,7 @@ public sealed class CvMarkdownRendererTests
                     4.23f,
                     [new(playwrightRequirement, 4.23f)]),
             }.ToImmutableArray();
-        var model = new CvDataModel
+        return new CvDataModel
         {
             Name = new("Anton", "Curmanschii"),
             Profession = new("Software Developer"),
@@ -192,22 +227,19 @@ public sealed class CvMarkdownRendererTests
                 Section.WorkExperience,
             ],
         };
+    }
 
+    private static string Render(
+        CvDataModel model,
+        CvMarkdownRenderMode mode)
+    {
         using var writer = new CodegenTextWriter
         {
             NewLine = "\n",
             PreserveNonWhitespaceIndentBehavior =
                 CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
         };
-        CvMarkdownRenderer.Render(model, writer);
-        var markdown = writer.ToString();
-
-        Assert.DoesNotContain('\r', markdown);
-        Assert.EndsWith("\n", markdown, StringComparison.Ordinal);
-        Assert.False(markdown.EndsWith("\n\n", StringComparison.Ordinal));
-        Assert.DoesNotContain("Personal Projects", markdown, StringComparison.Ordinal);
-        Assert.DoesNotContain("Personal", markdown, StringComparison.Ordinal);
-
-        await Verify(markdown);
+        CvMarkdownRenderer.Render(model, mode, writer);
+        return writer.ToString();
     }
 }

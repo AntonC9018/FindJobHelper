@@ -7,12 +7,25 @@ using FindJobHelper.Core.Helper;
 
 namespace FindJobHelper.CVGeneration;
 
+internal enum CvMarkdownRenderMode
+{
+    Clean,
+    Annotated,
+}
+
 internal static class CvMarkdownRenderer
 {
-    internal static void Render(CvDataModel model, ICodegenTextWriter writer)
+    internal static void Render(
+        CvDataModel model,
+        CvMarkdownRenderMode mode,
+        ICodegenTextWriter writer)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(writer);
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Markdown render mode.");
+        }
 
         var blocks = new List<FormattableString>
         {
@@ -38,7 +51,7 @@ internal static class CvMarkdownRenderer
 
         blocks.AddRange(model.SectionOrder
             .Where(section => !CvLatexFragmentRenderer.IsSectionEmpty(section, model))
-            .Select(section => RenderSection(section, model)));
+            .Select(section => RenderSection(section, model, mode)));
 
         var footer = RenderFooter(model);
         if (footer is not null)
@@ -70,12 +83,15 @@ internal static class CvMarkdownRenderer
         return $"**{Text(list.Category.DisplayName)}:** {values}";
     }
 
-    private static FormattableString RenderSection(Section section, CvDataModel model)
+    private static FormattableString RenderSection(
+        Section section,
+        CvDataModel model,
+        CvMarkdownRenderMode mode)
     {
         var contents = model.DispatchSection(
             section,
             renderLanguages: RenderLanguages,
-            renderEvents: RenderEvents);
+            renderEvents: events => RenderEvents(events, mode));
         return $$"""
             ## {{section.ToDisplayString()}}
 
@@ -97,17 +113,21 @@ internal static class CvMarkdownRenderer
         return $"{items.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)}";
     }
 
-    private static FormattableString RenderEvents(ImmutableArray<Event> events)
+    private static FormattableString RenderEvents(
+        ImmutableArray<Event> events,
+        CvMarkdownRenderMode mode)
     {
-        var items = events.Select(RenderEvent);
+        var items = events.Select(@event => RenderEvent(@event, mode));
         return $"{items.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
     }
 
-    private static FormattableString RenderEvent(Event @event)
+    private static FormattableString RenderEvent(
+        Event @event,
+        CvMarkdownRenderMode mode)
     {
         var blocks = new List<FormattableString>
         {
-            $"### {ScoreAnnotation(@event.DebugInfo)} {Text(@event.Title)}",
+            $"### {AnnotationPrefix(mode, @event.DebugInfo)}{Text(@event.Title)}",
         };
 
         var place = @event.Place.IsPersonal
@@ -121,7 +141,7 @@ internal static class CvMarkdownRenderer
         }
 
         var bullets = @event.SubItems
-            .Select(RenderSubItem)
+            .Select(item => RenderSubItem(item, mode))
             .ToList();
         if (!@event.Urls.IsEmpty)
         {
@@ -138,12 +158,40 @@ internal static class CvMarkdownRenderer
         return $"{blocks.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
     }
 
-    private static FormattableString RenderSubItem(SubEvent item)
+    private static FormattableString RenderSubItem(
+        SubEvent item,
+        CvMarkdownRenderMode mode)
     {
         var content =
-            $"{ScoreAnnotation(item)} {item.Text.ToMarkdownString()}";
+            $"{AnnotationPrefix(mode, item)}{item.Text.ToMarkdownString()}";
         return $"- {content}";
     }
+
+    private static string AnnotationPrefix(
+        CvMarkdownRenderMode mode,
+        EventDebugInfo debugInfo) =>
+        mode switch
+        {
+            CvMarkdownRenderMode.Clean => string.Empty,
+            CvMarkdownRenderMode.Annotated => $"{ScoreAnnotation(debugInfo)} ",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "Unsupported Markdown render mode."),
+        };
+
+    private static string AnnotationPrefix(
+        CvMarkdownRenderMode mode,
+        SubEvent item) =>
+        mode switch
+        {
+            CvMarkdownRenderMode.Clean => string.Empty,
+            CvMarkdownRenderMode.Annotated => $"{ScoreAnnotation(item)} ",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "Unsupported Markdown render mode."),
+        };
 
     private static FormattableString? RenderFooter(CvDataModel model)
     {
