@@ -495,14 +495,34 @@ public record struct Event()
     public required RegularString Title;
     public required Place Place;
     public required DateRange DateRange;
-    public float DebugScore;
-    public float DebugRawScore;
-    public ImmutableArray<DebugTagScore> DebugTagScores = [];
-    public ImmutableArray<DebugRequirementCoverage> DebugRequirementCoverage = [];
-    public ImmutableArray<DebugTagMatch> DebugTagMatches = [];
+    public EventDebugInfo DebugInfo = new();
     public IRichTextNode? Text;
     public ImmutableArray<SubEvent> SubItems = [];
     public ImmutableArray<RegularString> Urls = [];
+}
+
+public sealed class EventDebugInfo
+{
+    private float _rawScore;
+
+    public float Score { get; set; }
+
+    public float RawScore
+    {
+        get => _rawScore == 0
+               && Score != 0
+               && RequirementCoverage.IsEmpty
+               && TagMatches.IsEmpty
+            ? Score
+            : _rawScore;
+        set => _rawScore = value;
+    }
+
+    public ImmutableArray<DebugTagScore> TagScores { get; set; } = [];
+
+    public ImmutableArray<DebugRequirementCoverage> RequirementCoverage { get; set; } = [];
+
+    public ImmutableArray<DebugTagMatch> TagMatches { get; set; } = [];
 }
 
 public readonly record struct DebugTagScore(RegularString Tag, float Score);

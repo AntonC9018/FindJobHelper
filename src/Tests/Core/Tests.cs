@@ -120,9 +120,9 @@ public sealed class SomeTests
 
         var ev = searchBuilder.Build().Run(db.Experiences).Get(workKey);
         var settings = new VerifySettings();
-        settings.IgnoreMember<Event>(x => x.DebugRawScore);
-        settings.IgnoreMember<Event>(x => x.DebugRequirementCoverage);
-        settings.IgnoreMember<Event>(x => x.DebugTagMatches);
+        settings.IgnoreMember<EventDebugInfo>(x => x.RawScore);
+        settings.IgnoreMember<EventDebugInfo>(x => x.RequirementCoverage);
+        settings.IgnoreMember<EventDebugInfo>(x => x.TagMatches);
         settings.IgnoreMember<SubEvent>(x => x.DebugRawScore);
         settings.IgnoreMember<SubEvent>(x => x.DebugRequirementCoverage);
         settings.IgnoreMember<SubEvent>(x => x.DebugTagMatches);

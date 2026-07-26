@@ -458,7 +458,10 @@ public static class ExperienceListSorter
                 Place = t.List.Place,
                 Title = t.List.Title,
                 Text = t.List.Description,
-                DebugScore = t.TotalScore,
+                DebugInfo = new()
+                {
+                    Score = t.TotalScore,
+                },
                 SubItems = subBuilder.ToImmutable(),
                 Urls = t.List.Urls,
             });

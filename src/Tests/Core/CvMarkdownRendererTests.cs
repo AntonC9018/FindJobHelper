@@ -8,7 +8,22 @@ namespace FindJobHelper.Core.Tests;
 public sealed class CvMarkdownRendererTests
 {
     [Fact]
-    public void Render_WritesAnnotatedCvSnapshotWithLfAndFinalNewline()
+    public void EventDebugInfo_RawScoreFallsBackToScoreForLegacyDiagnostics()
+    {
+        var debugInfo = new EventDebugInfo
+        {
+            Score = 5,
+        };
+
+        Assert.Equal(5, debugInfo.RawScore);
+
+        debugInfo.RawScore = 3;
+
+        Assert.Equal(3, debugInfo.RawScore);
+    }
+
+    [Fact]
+    public async Task Render_WritesAnnotatedCvSnapshotWithLfAndFinalNewline()
     {
         var educationRequirement = new RequiredTagGroup(
             new("Education"),
@@ -95,20 +110,23 @@ public sealed class CvMarkdownRendererTests
                     Title = "BSc Computer Science",
                     Place = new("University"),
                     DateRange = DateRange.Completed(new(2018), new(2022)),
-                    DebugScore = 5,
-                    DebugRawScore = 5,
-                    DebugTagScores = [new("Education", 5)],
-                    DebugRequirementCoverage =
-                    [
-                        new(educationRequirement, 5),
-                    ],
-                    DebugTagMatches =
-                    [
-                        new(
-                            new("Education"),
-                            5,
-                            [new(educationRequirement, 5)]),
-                    ],
+                    DebugInfo = new()
+                    {
+                        Score = 5,
+                        RawScore = 5,
+                        TagScores = [new("Education", 5)],
+                        RequirementCoverage =
+                        [
+                            new(educationRequirement, 5),
+                        ],
+                        TagMatches =
+                        [
+                            new(
+                                new("Education"),
+                                5,
+                                [new(educationRequirement, 5)]),
+                        ],
+                    },
                     Text = new PlainText { Text = "Completed with distinction." },
                 },
             ],
@@ -119,15 +137,18 @@ public sealed class CvMarkdownRendererTests
                     Title = "Backend Developer",
                     Place = Place.Personal,
                     DateRange = DateRange.Ongoing(new(2022)),
-                    DebugScore = -2.34f,
-                    DebugRawScore = 12.85f,
-                    DebugTagScores =
-                    [
-                        new("Unity", 8.62f),
-                        new("Tooling Development", 4.23f),
-                    ],
-                    DebugRequirementCoverage = coverage,
-                    DebugTagMatches = matches,
+                    DebugInfo = new()
+                    {
+                        Score = -2.34f,
+                        RawScore = 12.85f,
+                        TagScores =
+                        [
+                            new("Unity", 8.62f),
+                            new("Tooling Development", 4.23f),
+                        ],
+                        RequirementCoverage = coverage,
+                        TagMatches = matches,
+                    },
                     Text = new RichText
                     {
                         Items =
@@ -181,53 +202,12 @@ public sealed class CvMarkdownRendererTests
         CvMarkdownRenderer.Render(model, writer);
         var markdown = writer.ToString();
 
-        Assert.Equal(
-            """
-            # Anton Curmanschii
-
-            Software Developer
-
-            **Location:** Example City, Example Country
-            **Website:** <https://profile.test/about_(me)?view=full>
-            **Skills:** \.NET, SQL
-            **GitHub:** <https://github.test/Anton?tab=repositories>
-
-            ## Summary
-
-            Builds **reliable systems** with [`.NET`](<https://dot.net/>)\.
-
-            ## Education
-
-            ### `rank: 5; raw: 5` `coverage: Education=5` `matches: Education=5 via Education=5` BSc Computer Science
-
-            *2018 \- 2022 · University*
-
-            Completed with distinction\.
-
-            ## Languages
-
-            - **English:** C2 · Technical Writing
-            - **Russian:** Native
-
-            ## Work Experience
-
-            ### `rank: -2.34; raw: 12.85` `coverage: .NET [configured: C#, .NET]=9.38; Playwright=4.23` `matches: Unity=8.62 via .NET=8.62; Tooling Development=4.23 via Playwright=4.23` Backend Developer
-
-            *2022 \- current*
-
-            Owned *backend delivery*\.
-
-            - `rank: -2.34; raw: 12.85; mmr: -0.056` `MMR terms: +0.214 relevance -0.071 similarity -0.199 saturation` `coverage: .NET [configured: C#, .NET]=9.38; Playwright=4.23` `matches: Unity=8.62 via .NET=8.62; Tooling Development=4.23 via Playwright=4.23` `ASP.NET Core` feature
-              with a [**design note**](<https://example.test/details_(one)?x=1&y=2>)
-            - **Links:** <https://event.test/demo_(one)?x=1&y=2>
-
-            <https://anton.test/> · <https://github.test/Anton>
-            """ + "\n",
-            markdown);
         Assert.DoesNotContain('\r', markdown);
         Assert.EndsWith("\n", markdown, StringComparison.Ordinal);
         Assert.False(markdown.EndsWith("\n\n", StringComparison.Ordinal));
         Assert.DoesNotContain("Personal Projects", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("Personal", markdown, StringComparison.Ordinal);
+
+        await Verify(markdown);
     }
 }

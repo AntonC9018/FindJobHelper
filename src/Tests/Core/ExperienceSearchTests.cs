@@ -501,14 +501,14 @@ public sealed class ExperienceSearchTests
 
         var @event = Assert.Single(result.Get(WorkKey));
         var subItem = Assert.Single(@event.SubItems);
-        var eventDebugTags = @event.DebugTagScores
+        var eventDebugTags = @event.DebugInfo.TagScores
             .Select(x => (Tag: x.Tag.Value, x.Score))
             .ToArray();
         var debugTags = subItem.DebugTagScores
             .Select(x => (Tag: x.Tag.Value, x.Score))
             .ToArray();
 
-        Assert.Equal(10f, @event.DebugScore);
+        Assert.Equal(10f, @event.DebugInfo.Score);
         Assert.Equal(10f, subItem.DebugScore);
         Assert.Same(sourceItem.Text, subItem.Text);
         Assert.Equal(

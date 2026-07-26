@@ -107,7 +107,7 @@ internal static class CvMarkdownRenderer
     {
         var blocks = new List<FormattableString>
         {
-            $"### {ScoreAnnotation(@event)} {Text(@event.Title)}",
+            $"### {ScoreAnnotation(@event.DebugInfo)} {Text(@event.Title)}",
         };
 
         var place = @event.Place.IsPersonal
@@ -161,30 +161,24 @@ internal static class CvMarkdownRenderer
             : (FormattableString) $"{string.Join(" · ", links)}";
     }
 
-    private static string ScoreAnnotation(Event @event)
+    private static string ScoreAnnotation(EventDebugInfo debugInfo)
     {
-        var rawScore = @event.DebugRawScore == 0
-                       && @event.DebugScore != 0
-                       && @event.DebugRequirementCoverage.IsEmpty
-                       && @event.DebugTagMatches.IsEmpty
-            ? @event.DebugScore
-            : @event.DebugRawScore;
         var annotations = new List<string>
         {
             CodeSpan(
-                $"rank: {FormatScore(@event.DebugScore)}; " +
-                $"raw: {FormatScore(rawScore)}"),
+                $"rank: {FormatScore(debugInfo.Score)}; " +
+                $"raw: {FormatScore(debugInfo.RawScore)}"),
         };
-        if (!@event.DebugRequirementCoverage.IsEmpty)
+        if (!debugInfo.RequirementCoverage.IsEmpty)
         {
             annotations.Add(CodeSpan(
-                $"coverage: {FormatCoverage(@event.DebugRequirementCoverage)}"));
+                $"coverage: {FormatCoverage(debugInfo.RequirementCoverage)}"));
         }
 
-        if (!@event.DebugTagMatches.IsEmpty)
+        if (!debugInfo.TagMatches.IsEmpty)
         {
             annotations.Add(CodeSpan(
-                $"matches: {FormatMatches(@event.DebugTagMatches)}"));
+                $"matches: {FormatMatches(debugInfo.TagMatches)}"));
         }
 
         return string.Join(" ", annotations);

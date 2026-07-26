@@ -880,18 +880,18 @@ internal static class ExperienceSelectionEngine
                     : score * maxRelevance / options.RelevanceWeight;
 
             return new(
-                selectionOrdinal,
-                matches.Sum,
-                recencyMultiplier,
-                adjustedRelevance,
-                relevance,
-                redundancy,
-                saturation,
-                weightedRelevance,
-                weightedSimilarity,
-                weightedSaturation,
-                score,
-                rawEquivalentScore);
+                SelectionOrdinal: selectionOrdinal,
+                RawRelevance: matches.Sum,
+                RecencyMultiplier: recencyMultiplier,
+                AdjustedRelevance: adjustedRelevance,
+                NormalizedRelevance: relevance,
+                MaximumCosineSimilarity: redundancy,
+                Saturation: saturation,
+                WeightedRelevanceTerm: weightedRelevance,
+                WeightedSimilarityPenalty: weightedSimilarity,
+                WeightedSaturationPenalty: weightedSaturation,
+                NormalizedMmrScore: score,
+                RawEquivalentRankScore: rawEquivalentScore);
         }
 
         private float MaxSimilarity(ScoredTags matches)
@@ -1391,13 +1391,16 @@ internal static class ExperienceSelectionEngine
                 Place = t.List.Place,
                 Title = t.List.Title,
                 Text = hasItems ? t.List.Description : null,
-                DebugScore = t.TotalScore,
-                DebugRawScore = items.Sum(x => x.Matches.Sum),
-                DebugTagScores = ToDebugTagScores(items.Select(x => x.Matches)),
-                DebugRequirementCoverage = ToDebugRequirementCoverage(
-                    items.Select(x => x.Matches)),
-                DebugTagMatches = ToDebugTagMatches(
-                    items.Select(x => x.Matches)),
+                DebugInfo = new()
+                {
+                    Score = t.TotalScore,
+                    RawScore = items.Sum(x => x.Matches.Sum),
+                    TagScores = ToDebugTagScores(items.Select(x => x.Matches)),
+                    RequirementCoverage = ToDebugRequirementCoverage(
+                        items.Select(x => x.Matches)),
+                    TagMatches = ToDebugTagMatches(
+                        items.Select(x => x.Matches)),
+                },
                 SubItems = subBuilder.ToImmutable(),
                 Urls = hasItems ? t.List.Urls : [],
             });
