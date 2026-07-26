@@ -31,6 +31,43 @@ public sealed class PageHeightSelectionTests
         Assert.Equal(30, policy.CurrentHeight.ScaledPoints);
     }
 
+    [Fact]
+    public void Selection_ContinuesPastNegativeMmrCandidatesUntilNoBulletFits()
+    {
+        var tag = new Tag("match");
+        var seed = Item("seed", tag, 10);
+        var taller = Item("taller", tag, 9);
+        var fitting = Item("fitting", tag, 8);
+        var list = Experience(
+            "work",
+            ExperienceType.Job,
+            seed,
+            taller,
+            fitting);
+        var database = Database(list);
+        var builder = new SearchBuilder();
+        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0.9f,
+            SaturationQuota: 1,
+            SaturationPenalty: 1));
+        builder.Configure(
+            WorkKey,
+            static experience => experience.Type == ExperienceType.Job,
+            static options => options.TotalItemBudget = 3);
+        var policy = Policy(
+            database,
+            pageHeight: 40,
+            itemHeights: [10, 11, 10],
+            (WorkKey, Section.WorkExperience));
+
+        var result = builder.Build().Run(database, policy);
+
+        Assert.Equal(new[] { "seed", "fitting" }, Texts(result.Get(WorkKey)));
+        Assert.DoesNotContain("taller", Texts(result.Get(WorkKey)));
+        Assert.Equal(40, policy.CurrentHeight.ScaledPoints);
+    }
+
     [Theory]
     [InlineData(30, true)]
     [InlineData(31, false)]

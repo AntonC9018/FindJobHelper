@@ -184,6 +184,8 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
 
     public bool PrioritizeMinimums => true;
 
+    public bool FillAvailableCapacity => PageCount.IsExact;
+
     public CvPageCount PageCount { get; }
 
     internal int PredictedPageCount => _explicitPageLayout?.PageCount

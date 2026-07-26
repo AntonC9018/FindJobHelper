@@ -261,6 +261,37 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_UnconstrainedRunStopsAtNonPositiveMmrScore()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(new()
+        {
+            [tag] = 1,
+        });
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 0.9f,
+            SaturationQuota: 1,
+            SaturationPenalty: 1));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job);
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("seed", (tag, 10)),
+                Item("negative", (tag, 9))),
+        ]);
+
+        Assert.Equal(new[] { "seed" }, Texts(result.Get(WorkKey)));
+        var budget = Assert.Single(result.Diagnostics.Budgets);
+        Assert.Equal(int.MaxValue, budget.RequestedMaximum);
+        Assert.Equal(1, budget.ActualCount);
+    }
+
+    [Fact]
     public void Search_UsesZeroScoreCandidateToMeetMinimum()
     {
         var tag = new Tag("a");

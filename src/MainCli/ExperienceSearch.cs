@@ -371,6 +371,8 @@ internal interface ISelectionAdmissionPolicy
 {
     bool PrioritizeMinimums { get; }
 
+    bool FillAvailableCapacity { get; }
+
     SelectionAdmissionDecision Evaluate(SelectionAdmission admission);
 
     void Commit(SelectionAdmission admission);
@@ -406,6 +408,8 @@ internal sealed class UnlimitedSelectionAdmissionPolicy : ISelectionAdmissionPol
     }
 
     public bool PrioritizeMinimums => false;
+
+    public bool FillAvailableCapacity => false;
 
     public SelectionAdmissionDecision Evaluate(SelectionAdmission admission)
         => SelectionAdmissionDecision.Accepted;
@@ -594,7 +598,13 @@ internal static class ExperienceSelectionEngine
         while (context.HasRemainingBudget)
         {
             var next = ranker.BestCandidate(candidates, context.Added, rejected);
-            if (next is null || ranker.Score(next.Value) <= 0)
+            if (next is null)
+            {
+                break;
+            }
+
+            if (!admissionPolicy.FillAvailableCapacity
+                && ranker.Score(next.Value) <= 0)
             {
                 break;
             }
