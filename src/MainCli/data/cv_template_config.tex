@@ -65,10 +65,15 @@
 
 %use customized header
 \usepackage{fancyhdr}
+\usepackage{zref-lastpage}
 \pagestyle{fancy}
 
 %less space between header and content
 \setlength{\headheight}{-5pt}
+
+% Keep the footer close enough to the page that it remains visible with the
+% deliberately narrow bottom margin.
+\setlength{\footskip}{12pt}
 
 \usepackage{needspace}
 
@@ -119,6 +124,18 @@
 
 %remove bottom header line
 \renewcommand{\footrulewidth}{0pt}
+
+% LastPage's absolute-page property follows physical PDF pages independently
+% of the displayed page-number representation. The fallback is used on the
+% first latexmk pass, before the final page reference has been written.
+\makeatletter
+\newcommand{\cvtotalpages}{\zref@extractdefault{LastPage}{abspage}{1}}
+\makeatother
+\fancyfoot[C]{%
+    \ifnum\cvtotalpages>1
+        \footnotesize\textcolor{bgcol}{Page \arabic{page} of \cvtotalpages}%
+    \fi
+}
 
 %remove pagenum
 \renewcommand{\thepage}{}

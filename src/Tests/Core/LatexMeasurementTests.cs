@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using CliWrap;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
@@ -741,6 +743,12 @@ public sealed class LatexMeasurementTests
 
             Assert.Equal(1, ReadPageCount(shortDirectory));
             Assert.Equal(2, ReadPageCount(twoPageDirectory));
+            Assert.Empty(await ReadPdfFooters(shortDirectory));
+
+            var twoPageFooters = await ReadPdfFooters(twoPageDirectory);
+            AssertFooterLayout(
+                twoPageFooters,
+                expectedPageCount: 2);
         }
         finally
         {
@@ -790,6 +798,9 @@ public sealed class LatexMeasurementTests
             });
 
             Assert.Equal(4, ReadPageCount(outputDirectory));
+            AssertFooterLayout(
+                await ReadPdfFooters(outputDirectory),
+                expectedPageCount: 4);
             var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
             var markers = LatexExplicitLayoutMarkerParser.Parse(log);
             Assert.Equal(
@@ -1122,6 +1133,79 @@ public sealed class LatexMeasurementTests
             $"LaTeX log did not contain its standard output page-count line. Output lines: {string.Join(" | ", log.Split('\n').Where(static line => line.Contains("Output", StringComparison.OrdinalIgnoreCase)))}");
         return pageCount;
     }
+
+    private static async Task<IReadOnlyList<PdfFooter>> ReadPdfFooters(string outputDirectory)
+    {
+        var bboxPath = Path.Combine(outputDirectory, "main-bbox.html");
+        await Cli.Wrap("pdftotext")
+            .WithArguments([
+                "-bbox-layout",
+                Path.Combine(outputDirectory, "main.pdf"),
+                bboxPath,
+            ])
+            .ExecuteAsync();
+
+        var document = XDocument.Load(bboxPath);
+        var footers = new List<PdfFooter>();
+        var pageNumber = 0;
+        foreach (var page in document.Descendants().Where(static element => element.Name.LocalName == "page"))
+        {
+            pageNumber++;
+            var pageWidth = double.Parse(
+                page.Attribute("width")!.Value,
+                System.Globalization.CultureInfo.InvariantCulture);
+            foreach (var line in page.Descendants().Where(static element => element.Name.LocalName == "line"))
+            {
+                var words = line.Descendants()
+                    .Where(static element => element.Name.LocalName == "word")
+                    .ToArray();
+                var text = string.Join(" ", words.Select(static word => word.Value));
+                if (!Regex.IsMatch(text, @"^Page \d+ of \d+$", RegexOptions.CultureInvariant))
+                {
+                    continue;
+                }
+
+                footers.Add(new PdfFooter(
+                    PageNumber: pageNumber,
+                    Text: text,
+                    PageWidth: pageWidth,
+                    XMin: words.Min(static word => ParseCoordinate(word, "xMin")),
+                    XMax: words.Max(static word => ParseCoordinate(word, "xMax"))));
+            }
+        }
+
+        return footers;
+    }
+
+    private static double ParseCoordinate(XElement element, string attributeName)
+        => double.Parse(
+            element.Attribute(attributeName)!.Value,
+            System.Globalization.CultureInfo.InvariantCulture);
+
+    private static void AssertFooterLayout(
+        IReadOnlyList<PdfFooter> footers,
+        int expectedPageCount)
+    {
+        Assert.Equal(expectedPageCount, footers.Count);
+        for (var pageNumber = 1; pageNumber <= expectedPageCount; pageNumber++)
+        {
+            var footer = Assert.Single(footers, footer => footer.PageNumber == pageNumber);
+            Assert.Equal($"Page {pageNumber} of {expectedPageCount}", footer.Text);
+            Assert.InRange(
+                Math.Abs(((footer.XMin + footer.XMax) / 2) - (footer.PageWidth / 2)),
+                low: 0,
+                high: 1);
+            Assert.InRange(footer.XMin, low: 0, high: footer.PageWidth);
+            Assert.InRange(footer.XMax, low: 0, high: footer.PageWidth);
+        }
+    }
+
+    private sealed record PdfFooter(
+        int PageNumber,
+        string Text,
+        double PageWidth,
+        double XMin,
+        double XMax);
 
     private static ImmutableArray<Event> CreateRenderedEvents(string prefix, int count)
         => Enumerable.Range(1, count)
