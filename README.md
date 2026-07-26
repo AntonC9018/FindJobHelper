@@ -101,6 +101,7 @@ The object form assigns sections to exact pages or inclusive page ranges:
 
 ```jsonc
 {
+  "pageCount": 4,
   "sectionOrder": [
     { "page": 1, "sections": ["Languages", "Education"] },
     { "pages": "2-3", "sections": ["WorkExperience"] },
@@ -115,12 +116,13 @@ layout. `page` is a positive integer; `pages` is a strict inclusive `start-end` 
 whose start is less than its end. Empty section lists, unknown properties or section
 names, malformed ranges, and mixtures of strings and objects are configuration errors.
 
-The final page or range derives the exact page count, so `pageCount` and
-`limitToOnePage` are redundant and rejected in this form. A controlled page break is
-inserted between blocks. Within an event-based section, the heading stays with its first
-visible event and is printed only once; later jobs, projects, or degrees may move to a
-new page, but every complete event—including its description, links, and selected
-bullets—remains atomic. `Languages` remains an atomic section.
+The final page or range derives the exact page count. `pageCount` is optional in this
+form; when supplied, it must match the derived count. `limitToOnePage` remains
+redundant and is rejected. A controlled page break is inserted between blocks. Within
+an event-based section, the heading stays with its first visible event and is printed
+only once; later jobs, projects, or degrees may move to a new page, but every complete
+event—including its description, links, and selected bullets—remains atomic.
+`Languages` remains an atomic section.
 
 Every block must naturally use its complete declared span. For example, a `pages:
 "2-3"` block must contain enough selected content to occupy two pages without counting

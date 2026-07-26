@@ -126,21 +126,87 @@ public sealed class CvSelectionConfigurationTests
             });
     }
 
+    [Fact]
+    public async Task LoadAsync_AcceptsMatchingPageCountWithExplicitLayout()
+    {
+        var json = await WithSectionOrderAsync(
+            """
+            [
+              { "page": 1, "sections": ["Languages", "Education"] },
+              { "pages": "2-3", "sections": ["WorkExperience"] },
+              { "page": 4, "sections": ["PersonalProjects"] }
+            ]
+            """);
+        var document = JsonNode.Parse(json)!.AsObject();
+        document["pageCount"] = 4;
+
+        var configuration = await LoadAsync(document.ToJsonString());
+        var search = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
+
+        Assert.Equal(CvPageCount.Exact(4), configuration.PageCount);
+        Assert.Equal(CvPageCount.Exact(4), search.PageCount);
+        Assert.Equal(4, Assert.IsType<CvPageLayout>(configuration.PageLayout).PageCount);
+        Assert.Same(configuration.PageLayout, search.PageLayout);
+    }
+
     [Theory]
-    [InlineData("pageCount", "2")]
-    [InlineData("limitToOnePage", "false")]
-    public async Task LoadAsync_RejectsRedundantPageControlsWithExplicitLayout(
-        string propertyName,
-        string propertyValue)
+    [InlineData(3)]
+    [InlineData(5)]
+    public async Task LoadAsync_RejectsMismatchedPageCountWithExplicitLayout(int pageCount)
+    {
+        var json = await WithSectionOrderAsync(
+            """
+            [
+              { "page": 1, "sections": ["Languages"] },
+              { "pages": "2-4", "sections": ["WorkExperience"] }
+            ]
+            """);
+        var document = JsonNode.Parse(json)!.AsObject();
+        document["pageCount"] = pageCount;
+
+        var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
+
+        Assert.Contains($"'pageCount' is {pageCount}", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "object-form 'sectionOrder' defines 4 page(s)",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("null")]
+    public async Task LoadAsync_RejectsInvalidPageCountWithExplicitLayoutWithoutMismatch(
+        string pageCount)
     {
         var json = await WithSectionOrderAsync(
             """[{ "page": 1, "sections": ["WorkExperience"] }]""");
         var document = JsonNode.Parse(json)!.AsObject();
-        document[propertyName] = JsonNode.Parse(propertyValue);
+        document["pageCount"] = JsonNode.Parse(pageCount);
 
         var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
 
-        Assert.Contains(propertyName, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "'pageCount' must be a positive 32-bit integer",
+            exception.Message,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "object-form 'sectionOrder' defines",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsLimitToOnePageWithExplicitLayout()
+    {
+        var json = await WithSectionOrderAsync(
+            """[{ "page": 1, "sections": ["WorkExperience"] }]""");
+        var document = JsonNode.Parse(json)!.AsObject();
+        document["limitToOnePage"] = false;
+
+        var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
+
+        Assert.Contains("limitToOnePage", exception.Message, StringComparison.Ordinal);
         Assert.Contains("derived", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 

@@ -87,17 +87,21 @@ internal sealed class JsonCvSelectionConfiguration
     {
         var errors = new List<string>();
         var parsedSectionOrder = ParseSectionOrder(errors);
+        var pageLayout = parsedSectionOrder.PageLayout;
         if (parsedSectionOrder.IsExplicit)
         {
-            if (IsPageCountSpecified)
-            {
-                errors.Add(
-                    "'pageCount' cannot be supplied with object-form 'sectionOrder' because the page count is derived from the layout.");
-            }
             if (IsLimitToOnePageSpecified)
             {
                 errors.Add(
                     "'limitToOnePage' cannot be supplied with object-form 'sectionOrder' because the page count is derived from the layout.");
+            }
+            if (IsPageCountSpecified
+                && PageCount is > 0
+                && pageLayout is not null
+                && PageCount.Value != pageLayout.PageCount)
+            {
+                errors.Add(
+                    $"'pageCount' is {PageCount.Value}, but object-form 'sectionOrder' defines {pageLayout.PageCount} page(s).");
             }
         }
         else if (IsLimitToOnePageSpecified && IsPageCountSpecified)
@@ -183,7 +187,6 @@ internal sealed class JsonCvSelectionConfiguration
             throw new CvConfigurationException(errors);
         }
 
-        var pageLayout = parsedSectionOrder.PageLayout;
         return new(
             pageLayout is null
                 ? ResolvePageCount()
