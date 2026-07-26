@@ -467,7 +467,7 @@ public sealed class TagsDatabaseBuilder
         }
 
         var graph = Ret().ToFrozenDictionary();
-        var ret = new TagsDatabase(graph);
+        var ret = new TagsDatabase(graph, context.AllKeys.ToImmutableArray());
         return new(null, ret);
 
         IEnumerable<KeyValuePair<Tag, Relations>> Ret()
@@ -508,33 +508,33 @@ public sealed class TagsDatabaseBuilder
             switch (missingBehavior)
             {
                 case MissingOverlapBehavior.Error:
-                {
-                    if (Less(x.AC, minac))
                     {
-                        TransitivityError();
-                    }
-                    break;
-                }
-                case MissingOverlapBehavior.UseMinimum:
-                {
-                    if (x.AC == OverlapDict.NoneValue)
-                    {
-                        ref var v = ref context.NewMaxMinOverlaps[x.A].GetValueRefOrAddDefault(x.C, out bool exists);
-                        if (!exists || minac.Value > v.Value)
+                        if (Less(x.AC, minac))
                         {
-                            v = minac;
+                            TransitivityError();
                         }
+                        break;
                     }
-                    else if (Less(x.AC, minac))
+                case MissingOverlapBehavior.UseMinimum:
                     {
-                        TransitivityError();
+                        if (x.AC == OverlapDict.NoneValue)
+                        {
+                            ref var v = ref context.NewMaxMinOverlaps[x.A].GetValueRefOrAddDefault(x.C, out bool exists);
+                            if (!exists || minac.Value > v.Value)
+                            {
+                                v = minac;
+                            }
+                        }
+                        else if (Less(x.AC, minac))
+                        {
+                            TransitivityError();
+                        }
+                        break;
                     }
-                    break;
-                }
                 default:
-                {
-                    throw new NotImplementedException();
-                }
+                    {
+                        throw new NotImplementedException();
+                    }
             }
 
             void TransitivityError()
@@ -675,11 +675,36 @@ public readonly struct Relations
 
 public sealed class TagsDatabase
 {
+    private readonly ImmutableArray<Tag> _declarationOrder;
+
     public FrozenDictionary<Tag, Relations> TagsGraph { get; }
 
     public TagsDatabase(FrozenDictionary<Tag, Relations> tagsGraph)
+        : this(tagsGraph, tagsGraph.Keys.ToImmutableArray())
+    {
+    }
+
+    internal TagsDatabase(
+        FrozenDictionary<Tag, Relations> tagsGraph,
+        ImmutableArray<Tag> declarationOrder)
     {
         TagsGraph = tagsGraph;
+        _declarationOrder = declarationOrder;
+    }
+
+    internal ImmutableArray<Tag> DeclarationOrder => _declarationOrder;
+
+    internal Tag Resolve(Tag tag)
+    {
+        foreach (var declaredTag in _declarationOrder)
+        {
+            if (declaredTag == tag)
+            {
+                return declaredTag;
+            }
+        }
+
+        throw new InvalidOperationException($"Not found tag {tag.Name}");
     }
 }
 
@@ -690,11 +715,25 @@ public readonly record struct TagNode(Tag Tag, Relations Relations)
 
 public static class TagsDatabaseExtensions
 {
-    extension (TagsDatabase self)
+    private sealed class RequiredGroupBuilder(Tag canonicalTag)
+    {
+        public Tag CanonicalTag { get; } = canonicalTag;
+        public List<ConfiguredTagWeight> ConfiguredTags { get; } = new();
+        public float MaximumWeight { get; set; } = float.NegativeInfinity;
+    }
+
+    private sealed class ProjectionBuilder(Tag targetTag)
+    {
+        public Tag TargetTag { get; } = targetTag;
+        public float MaximumCoefficient { get; set; } = float.NegativeInfinity;
+        public List<TagMatchOrigin> Origins { get; } = new();
+    }
+
+    extension(TagsDatabase self)
     {
         public WeightedTags Weighted(ReadOnlySpan<(string Tag, float Weight)> inputs)
         {
-            var converted = new(Tag Tag, float Weight)[inputs.Length];
+            var converted = new (Tag Tag, float Weight)[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
                 converted[i] = (new Tag(inputs[i].Tag), inputs[i].Weight);
@@ -704,27 +743,108 @@ public static class TagsDatabaseExtensions
 
         public WeightedTags Weighted(ReadOnlySpan<(Tag Tag, float Weight)> inputs)
         {
-            var ret = new WeightedTags();
-            foreach (var t in inputs)
+            var aliases = AliasCanonicals();
+            var groupBuilders = new Dictionary<Tag, RequiredGroupBuilder>();
+            var groupOrder = new List<RequiredGroupBuilder>();
+            foreach (var (configuredTag, weight) in inputs)
             {
-                var tag = self.Find(t.Tag).Tag;
-                ret.Add(tag, t.Weight);
-            }
-            // explore connections
-            foreach (var t in inputs)
-            {
-                foreach (var link in self.RelationsOf(t.Tag))
+                var resolvedTag = self.Resolve(configuredTag);
+                var canonicalTag = aliases[resolvedTag];
+                if (!groupBuilders.TryGetValue(canonicalTag, out var builder))
                 {
-                    var ab = link.PercentageOfSelfIncludedInTheOtherTag.Value;
-                    var candidate = ab * t.Weight;
-                    ref var x = ref CollectionsMarshal.GetValueRefOrAddDefault(ret, link.OtherTag, out bool exists);
-                    if (!exists || x < candidate)
-                    {
-                        x = candidate;
-                    }
+                    builder = new(canonicalTag);
+                    groupBuilders.Add(canonicalTag, builder);
+                    groupOrder.Add(builder);
+                }
+
+                builder.ConfiguredTags.Add(new(configuredTag, weight));
+                builder.MaximumWeight = Math.Max(builder.MaximumWeight, weight);
+            }
+
+            var groups = groupOrder
+                .Select(x => new RequiredTagGroup(
+                    x.CanonicalTag,
+                    x.ConfiguredTags.ToImmutableArray(),
+                    x.MaximumWeight))
+                .ToImmutableArray();
+            var projectionBuilders = new Dictionary<Tag, ProjectionBuilder>();
+            var projectionOrder = new List<ProjectionBuilder>();
+            foreach (var group in groups)
+            {
+                AddProjection(group.CanonicalTag, group.MaximumWeight, group);
+                foreach (var link in self.RelationsOf(group.CanonicalTag))
+                {
+                    AddProjection(
+                        link.OtherTag,
+                        link.PercentageOfSelfIncludedInTheOtherTag.Value
+                            * group.MaximumWeight,
+                        group);
                 }
             }
-            return ret;
+
+            return new(
+                groups,
+                projectionOrder
+                    .Select(x => new WeightedTagProjection(
+                        x.TargetTag,
+                        x.MaximumCoefficient,
+                        x.Origins.ToImmutableArray()))
+                    .ToImmutableArray());
+
+            void AddProjection(
+                Tag targetTag,
+                float coefficient,
+                RequiredTagGroup group)
+            {
+                if (!projectionBuilders.TryGetValue(targetTag, out var projection))
+                {
+                    projection = new(targetTag);
+                    projectionBuilders.Add(targetTag, projection);
+                    projectionOrder.Add(projection);
+                }
+
+                projection.MaximumCoefficient = Math.Max(
+                    projection.MaximumCoefficient,
+                    coefficient);
+                if (coefficient > 0)
+                {
+                    projection.Origins.Add(new(group, coefficient));
+                }
+            }
+
+            Dictionary<Tag, Tag> AliasCanonicals()
+            {
+                var ret = new Dictionary<Tag, Tag>();
+                foreach (var tag in self.DeclarationOrder)
+                {
+                    var canonical = tag;
+                    foreach (var earlierTag in self.DeclarationOrder)
+                    {
+                        if (earlierTag == tag)
+                        {
+                            break;
+                        }
+
+                        if (AreAliases(earlierTag, tag))
+                        {
+                            canonical = ret[earlierTag];
+                            break;
+                        }
+                    }
+
+                    ret.Add(tag, canonical);
+                }
+
+                return ret;
+            }
+
+            bool AreAliases(Tag left, Tag right)
+            {
+                return self.RelationsOf(left).GetOverlapWith(right)
+                           == OverlapScore.Full
+                       && self.RelationsOf(right).GetOverlapWith(left)
+                           == OverlapScore.Full;
+            }
         }
 
         public Relations RelationsOf(Tag tag)
@@ -738,11 +858,12 @@ public static class TagsDatabaseExtensions
 
         public TagNode Find(Tag tag)
         {
-            if (!self.TagsGraph.TryGetValue(tag, out var x))
+            var resolved = self.Resolve(tag);
+            if (!self.TagsGraph.TryGetValue(resolved, out var x))
             {
                 throw new InvalidOperationException($"Not found tag {tag.Name}");
             }
-            return new(tag, x);
+            return new(resolved, x);
         }
 
         public TagNode Find(string text)
@@ -752,22 +873,44 @@ public static class TagsDatabaseExtensions
         }
     }
 
-    extension (WeightedTags self)
+    extension(WeightedTags self)
     {
         public ScoredTags Match(ImmutableArray<TagReference> tags)
         {
-            return new(Ret());
-
-            IEnumerable<(Tag Tag, float Score)> Ret()
+            var matches = ImmutableArray.CreateBuilder<ScoredTagMatch>();
+            var coverage =
+                ImmutableDictionary.CreateBuilder<RequiredTagGroup, float>();
+            foreach (var tagReference in tags)
             {
-                foreach (var t in tags)
+                if (!self.TryGetValue(
+                        tagReference.Tag,
+                        out var projection))
                 {
-                    if (self.TryGetValue(t.Tag, out var weight))
+                    continue;
+                }
+
+                var evidenceScore = (float) tagReference.Score;
+                matches.Add(new(
+                    projection,
+                    evidenceScore,
+                    evidenceScore * projection.MaximumCoefficient));
+                foreach (var origin in projection.Origins)
+                {
+                    var contribution = evidenceScore * origin.Coefficient;
+                    if (contribution <= 0)
                     {
-                        yield return (t.Tag, weight * t.Score);
+                        continue;
                     }
+
+                    coverage[origin.RequiredTagGroup] =
+                        coverage.GetValueOrDefault(origin.RequiredTagGroup)
+                        + contribution;
                 }
             }
+
+            return new(
+                matches.DrainToImmutable(),
+                coverage.ToImmutable());
         }
     }
 }
@@ -780,7 +923,7 @@ public static class TagDatabaseSerializer
         ReferenceHandler = ReferenceHandler.Preserve,
     };
 
-    extension (TagsDatabase db)
+    extension(TagsDatabase db)
     {
         public async Task Serialize(Stream output, CancellationToken cancellationToken)
         {

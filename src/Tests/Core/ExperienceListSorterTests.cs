@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
-using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -170,7 +169,7 @@ public sealed class ExperienceListSorterTests
         var tag = new Tag("match");
 
         var texts = SelectTexts(
-            tags: new WeightedTags { [tag] = 1 },
+            tags: WeightedTags.Create([(tag, 1)]),
             budget: 1,
             scoreLowerBound: 0,
             mmr: MmrOptions.Default,
@@ -189,7 +188,7 @@ public sealed class ExperienceListSorterTests
         var tag = new Tag("match");
 
         var texts = SelectTexts(
-            tags: new WeightedTags { [tag] = 1 },
+            tags: WeightedTags.Create([(tag, 1)]),
             budget: 3,
             scoreLowerBound: 0,
             mmr: new(
@@ -226,7 +225,7 @@ public sealed class ExperienceListSorterTests
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             SelectTexts(
-                tags: new WeightedTags { [tag] = 1 },
+                tags: WeightedTags.Create([(tag, 1)]),
                 budget: 2,
                 scoreLowerBound: 0,
                 mmr: MmrOptions.Default,
@@ -335,11 +334,10 @@ public sealed class ExperienceListSorterTests
         var newTag = new Tag("new");
 
         var selectedText = SelectTexts(
-            tags: new WeightedTags
-            {
-                [selectedTag] = 1,
-                [newTag] = 1,
-            },
+            tags: WeightedTags.Create([
+                (selectedTag, 1),
+                (newTag, 1),
+            ]),
             budget: 2,
             scoreLowerBound: 0,
             mmr: new(
@@ -372,11 +370,10 @@ public sealed class ExperienceListSorterTests
         var different = Item(Text("different"), (tagB, 5));
 
         return SelectTexts(
-            tags: new WeightedTags
-            {
-                [tagA] = 1,
-                [tagB] = 1,
-            },
+            tags: WeightedTags.Create([
+                (tagA, 1),
+                (tagB, 1),
+            ]),
             budget: budget,
             scoreLowerBound: scoreLowerBound,
             mmr: mmr,

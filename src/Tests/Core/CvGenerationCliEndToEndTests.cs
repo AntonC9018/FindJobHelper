@@ -83,8 +83,8 @@ public sealed class CvGenerationCliEndToEndTests
             Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
             Assert.Contains("**Technologies:** E2E JSON Configuration", markdown, StringComparison.Ordinal);
             Assert.Contains("## Work Experience", markdown, StringComparison.Ordinal);
-            Assert.Contains("`score:", markdown, StringComparison.Ordinal);
-            Assert.Contains("- `score:", markdown, StringComparison.Ordinal);
+            Assert.Contains("`rank:", markdown, StringComparison.Ordinal);
+            Assert.Contains("- `rank:", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain(@"\begin{document}", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain(@"\cvevent", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain("202-555-0100", markdown, StringComparison.Ordinal);

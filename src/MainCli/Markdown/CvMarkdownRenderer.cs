@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using CodegenCS;
+using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 
 namespace FindJobHelper.CVGeneration;
@@ -106,7 +107,7 @@ internal static class CvMarkdownRenderer
     {
         var blocks = new List<FormattableString>
         {
-            $"### {ScoreAnnotation(@event.DebugScore, @event.DebugTagScores)} {Text(@event.Title)}",
+            $"### {ScoreAnnotation(@event)} {Text(@event.Title)}",
         };
 
         var place = @event.Place.IsPersonal
@@ -140,7 +141,7 @@ internal static class CvMarkdownRenderer
     private static FormattableString RenderSubItem(SubEvent item)
     {
         var content =
-            $"{ScoreAnnotation(item.DebugScore, item.DebugTagScores)} {item.Text.ToMarkdownString()}";
+            $"{ScoreAnnotation(item)} {item.Text.ToMarkdownString()}";
         return $"- {content}";
     }
 
@@ -160,35 +161,136 @@ internal static class CvMarkdownRenderer
             : (FormattableString) $"{string.Join(" · ", links)}";
     }
 
-    private static string ScoreAnnotation(float score, ImmutableArray<DebugTagScore> tagScores)
+    private static string ScoreAnnotation(Event @event)
     {
-        var value = new StringBuilder()
-            .Append("score: ")
-            .Append(FormatScore(score));
-        if (!tagScores.IsEmpty)
+        var rawScore = @event.DebugRawScore == 0
+                       && @event.DebugScore != 0
+                       && @event.DebugRequirementCoverage.IsEmpty
+                       && @event.DebugTagMatches.IsEmpty
+            ? @event.DebugScore
+            : @event.DebugRawScore;
+        var annotations = new List<string>
         {
-            value.Append(" (");
-            for (var index = 0; index < tagScores.Length; index++)
-            {
-                if (index > 0)
-                {
-                    value.Append(", ");
-                }
-                var tagScore = tagScores[index];
-                value.Append(tagScore.Tag.Value)
-                    .Append(':')
-                    .Append(FormatScore(tagScore.Score));
-            }
-            value.Append(')');
+            CodeSpan(
+                $"rank: {FormatScore(@event.DebugScore)}; " +
+                $"raw: {FormatScore(rawScore)}"),
+        };
+        if (!@event.DebugRequirementCoverage.IsEmpty)
+        {
+            annotations.Add(CodeSpan(
+                $"coverage: {FormatCoverage(@event.DebugRequirementCoverage)}"));
         }
 
+        if (!@event.DebugTagMatches.IsEmpty)
+        {
+            annotations.Add(CodeSpan(
+                $"matches: {FormatMatches(@event.DebugTagMatches)}"));
+        }
+
+        return string.Join(" ", annotations);
+    }
+
+    private static string ScoreAnnotation(SubEvent item)
+    {
+        if (item.DebugMmrScoreBreakdown is not { } breakdown)
+        {
+            return CodeSpan(
+                $"rank: {FormatScore(item.DebugScore)}; " +
+                $"raw: {FormatScore(item.DebugRawScore)}");
+        }
+
+        var annotations = new List<string>
+        {
+            CodeSpan(
+                $"rank: {FormatScore(breakdown.RawEquivalentRankScore)}; " +
+                $"raw: {FormatScore(breakdown.RawRelevance)}; " +
+                $"mmr: {FormatScore(breakdown.NormalizedMmrScore)}"),
+            CodeSpan(
+                $"MMR terms: {FormatSignedScore(breakdown.WeightedRelevanceTerm)} relevance " +
+                $"{FormatSignedScore(-breakdown.WeightedSimilarityPenalty)} similarity " +
+                $"{FormatSignedScore(-breakdown.WeightedSaturationPenalty)} saturation"),
+        };
+        if (!item.DebugRequirementCoverage.IsEmpty)
+        {
+            annotations.Add(CodeSpan(
+                $"coverage: {FormatCoverage(item.DebugRequirementCoverage)}"));
+        }
+
+        if (!item.DebugTagMatches.IsEmpty)
+        {
+            annotations.Add(CodeSpan(
+                $"matches: {FormatMatches(item.DebugTagMatches)}"));
+        }
+
+        return string.Join(" ", annotations);
+    }
+
+    private static string FormatCoverage(
+        ImmutableArray<DebugRequirementCoverage> coverage)
+    {
+        return string.Join(
+            "; ",
+            coverage.Select(x =>
+                $"{FormatRequirementLabel(x.Requirement)}={FormatScore(x.Score)}"));
+    }
+
+    private static string FormatMatches(
+        ImmutableArray<DebugTagMatch> matches)
+    {
+        return string.Join(
+            "; ",
+            matches.Select(match =>
+            {
+                var value =
+                    $"{match.TargetTag.Name}={FormatScore(match.RawContribution)}";
+                if (match.Origins.IsEmpty)
+                {
+                    return value;
+                }
+
+                return value
+                       + " via "
+                       + string.Join(
+                           ", ",
+                           match.Origins.Select(origin =>
+                               $"{origin.Requirement.CanonicalTag.Name}=" +
+                               $"{FormatScore(origin.Contribution)}"));
+            }));
+    }
+
+    private static string FormatRequirementLabel(RequiredTagGroup requirement)
+    {
+        var configuredNames = requirement.ConfiguredTags
+            .Select(x => x.Tag.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (configuredNames.Length == 1
+            && string.Equals(
+                configuredNames[0],
+                requirement.CanonicalTag.Name,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return requirement.CanonicalTag.Name;
+        }
+
+        return requirement.CanonicalTag.Name
+               + " [configured: "
+               + string.Join(", ", configuredNames)
+               + "]";
+    }
+
+    private static string CodeSpan(string value)
+    {
         var output = new StringBuilder(value.Length + 2);
-        MarkdownConverter.AppendMarkdownCodeSpan(output, value.ToString());
+        MarkdownConverter.AppendMarkdownCodeSpan(output, value);
         return output.ToString();
     }
 
     private static string FormatScore(float value) =>
-        value.ToString("0.##", CultureInfo.InvariantCulture);
+        value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    private static string FormatSignedScore(float value) =>
+        value.ToString("+0.###;-0.###;+0", CultureInfo.InvariantCulture);
 
     private static string CategoryValue(Category category, RegularString value) =>
         category.IsUrl ? Autolink(value.Value) : Text(value);

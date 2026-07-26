@@ -275,7 +275,7 @@ public sealed class ExplicitPageLayoutSelectionTests
     private static ExperienceSearch WorkSearch(Tag tag, int maximum)
     {
         var builder = new SearchBuilder();
-        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Tags(WeightedTags.Create([(tag, 1)]));
         builder.Configure(
             WorkKey,
             static experience => experience.Type == ExperienceType.Job,
@@ -290,7 +290,7 @@ public sealed class ExplicitPageLayoutSelectionTests
     private static ExperienceSearch WorkAndProjectSearch(Tag tag)
     {
         var builder = new SearchBuilder();
-        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Tags(WeightedTags.Create([(tag, 1)]));
         builder.Configure(
             WorkKey,
             static experience => experience.Type == ExperienceType.Job,

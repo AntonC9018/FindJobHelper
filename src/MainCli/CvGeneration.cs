@@ -2,12 +2,12 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using CliWrap;
 using CodegenCS;
 using CodegenCS.IO;
+using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 
 namespace FindJobHelper.CVGeneration;
@@ -205,20 +205,20 @@ public static class CvTemplate
                     @"\typeout{{FJH_LAYOUT_FOOTER:\number\value{{page}}}}");
 
         writer.Write($$$$"""
-        \input{{{{{ p.ConfigFilePath.Replace('\\', '/') }}}}}
+        \input{{{{{p.ConfigFilePath.Replace('\\', '/')}}}}}
 
         \begin{document}
 
         \pagestyle{fancy}
 
-        {{{{ CvLatexFragmentRenderer.RenderDocumentHeader(p.Model) }}}}
+        {{{{CvLatexFragmentRenderer.RenderDocumentHeader(p.Model)}}}}
 
         % Main Content
 
-        {{{{ sections.Render() }}}}
+        {{{{sections.Render()}}}}
 
-        {{{{ documentFooter }}}}
-        {{{{ footerMarker }}}}
+        {{{{documentFooter}}}}
+        {{{{footerMarker}}}}
 
         \end{document}
         """);
@@ -412,7 +412,7 @@ public static class CvTemplate
             return $"{filePath}{newExtension}";
         }
 
-        var s = filePath.AsSpan()[.. extensionStart];
+        var s = filePath.AsSpan()[..extensionStart];
         return $"{s}{newExtension}";
     }
 
@@ -496,13 +496,29 @@ public record struct Event()
     public required Place Place;
     public required DateRange DateRange;
     public float DebugScore;
+    public float DebugRawScore;
     public ImmutableArray<DebugTagScore> DebugTagScores = [];
+    public ImmutableArray<DebugRequirementCoverage> DebugRequirementCoverage = [];
+    public ImmutableArray<DebugTagMatch> DebugTagMatches = [];
     public IRichTextNode? Text;
     public ImmutableArray<SubEvent> SubItems = [];
     public ImmutableArray<RegularString> Urls = [];
 }
 
 public readonly record struct DebugTagScore(RegularString Tag, float Score);
+
+public sealed record DebugRequirementCoverage(
+    RequiredTagGroup Requirement,
+    float Score);
+
+public sealed record DebugTagMatchOrigin(
+    RequiredTagGroup Requirement,
+    float Contribution);
+
+public sealed record DebugTagMatch(
+    Tag TargetTag,
+    float RawContribution,
+    ImmutableArray<DebugTagMatchOrigin> Origins);
 
 public readonly record struct SubEvent
 {
@@ -523,11 +539,43 @@ public readonly record struct SubEvent
         DebugTagScores = debugTagScores.IsDefault
             ? []
             : debugTagScores;
+        DebugRawScore = debugScore;
+        DebugRequirementCoverage = [];
+        DebugTagMatches = [];
+        DebugMmrScoreBreakdown = null;
+    }
+
+    public SubEvent(
+        MmrScoreBreakdown scoreBreakdown,
+        IRichTextNode text,
+        ImmutableArray<DebugTagScore> debugTagScores,
+        ImmutableArray<DebugRequirementCoverage> debugRequirementCoverage,
+        ImmutableArray<DebugTagMatch> debugTagMatches)
+    {
+        ArgumentNullException.ThrowIfNull(scoreBreakdown);
+        ArgumentNullException.ThrowIfNull(text);
+        DebugScore = scoreBreakdown.RawEquivalentRankScore;
+        DebugRawScore = scoreBreakdown.RawRelevance;
+        Text = text;
+        DebugTagScores = debugTagScores.IsDefault
+            ? []
+            : debugTagScores;
+        DebugRequirementCoverage = debugRequirementCoverage.IsDefault
+            ? []
+            : debugRequirementCoverage;
+        DebugTagMatches = debugTagMatches.IsDefault
+            ? []
+            : debugTagMatches;
+        DebugMmrScoreBreakdown = scoreBreakdown;
     }
 
     public float DebugScore { get; }
+    public float DebugRawScore { get; }
     public IRichTextNode Text { get; }
     public ImmutableArray<DebugTagScore> DebugTagScores { get; }
+    public ImmutableArray<DebugRequirementCoverage> DebugRequirementCoverage { get; }
+    public ImmutableArray<DebugTagMatch> DebugTagMatches { get; }
+    public MmrScoreBreakdown? DebugMmrScoreBreakdown { get; }
 }
 public readonly record struct Place(RegularString Name)
 {

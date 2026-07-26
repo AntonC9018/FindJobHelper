@@ -15,10 +15,9 @@ public sealed class ExperienceSearchTests
     public void Search_DefaultsMissingBudgetsToUnboundedRange()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(WorkKey, _ => true);
 
         var result = builder.Build().Run([
@@ -42,11 +41,10 @@ public sealed class ExperienceSearchTests
         var tagA = new Tag("a");
         var tagB = new Tag("b");
 
-        var builder = NewBuilder(new()
-        {
-            [tagA] = 1,
-            [tagB] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tagA, 1),
+            (tagB, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0.9f,
             SaturationQuota: 1,
@@ -84,12 +82,11 @@ public sealed class ExperienceSearchTests
         var tagB = new Tag("b");
         var tagC = new Tag("c");
 
-        var builder = NewBuilder(new()
-        {
-            [tagA] = 1,
-            [tagB] = 1,
-            [tagC] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tagA, 1),
+            (tagB, 1),
+            (tagC, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -130,11 +127,10 @@ public sealed class ExperienceSearchTests
     {
         var tagA = new Tag("a");
         var tagB = new Tag("b");
-        var builder = NewBuilder(new()
-        {
-            [tagA] = 1,
-            [tagB] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tagA, 1),
+            (tagB, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -169,11 +165,10 @@ public sealed class ExperienceSearchTests
     {
         var tagA = new Tag("a");
         var tagB = new Tag("b");
-        var builder = NewBuilder(new()
-        {
-            [tagA] = 1,
-            [tagB] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tagA, 1),
+            (tagB, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0,
             SaturationQuota: 1,
@@ -195,10 +190,9 @@ public sealed class ExperienceSearchTests
     public void Search_CanRankItemsGloballyWithoutPreservingEveryList()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -235,10 +229,9 @@ public sealed class ExperienceSearchTests
     public void Search_SkipsNonSeedZeroScoreCandidatesAfterMinimumIsMet()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0,
             SaturationQuota: 1,
@@ -264,10 +257,9 @@ public sealed class ExperienceSearchTests
     public void Search_UnconstrainedRunStopsAtNonPositiveMmrScore()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0.9f,
             SaturationQuota: 1,
@@ -295,10 +287,9 @@ public sealed class ExperienceSearchTests
     public void Search_UsesZeroScoreCandidateToMeetMinimum()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0,
             SaturationQuota: 1,
@@ -328,10 +319,9 @@ public sealed class ExperienceSearchTests
     public void Search_DoesNotUseLowerBoundRejectedCandidateToMeetMinimum()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0,
             SaturationQuota: 1,
@@ -364,10 +354,9 @@ public sealed class ExperienceSearchTests
     [Fact]
     public void Search_RejectsMinimumBudgetAboveTotal()
     {
-        var builder = NewBuilder(new()
-        {
-            [new("a")] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (new Tag("a"), 1),
+        ]));
         builder.Configure(
             WorkKey,
             _ => true,
@@ -386,10 +375,7 @@ public sealed class ExperienceSearchTests
     public void SearchBuilder_UsesConfiguredBudgets()
     {
         var tag = new Tag("a");
-        var tags = new WeightedTags
-        {
-            [tag] = 1,
-        };
+        var tags = WeightedTags.Create([(tag, 1)]);
         var builder = NewBuilder(tags);
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0,
@@ -421,10 +407,7 @@ public sealed class ExperienceSearchTests
     public void SearchBuilder_DefaultsMissingBudgetsToUnboundedRange()
     {
         var tag = new Tag("a");
-        var tags = new WeightedTags
-        {
-            [tag] = 1,
-        };
+        var tags = WeightedTags.Create([(tag, 1)]);
         var builder = NewBuilder(tags);
         builder.Configure(WorkKey, static _ => true);
 
@@ -447,10 +430,9 @@ public sealed class ExperienceSearchTests
     public void Search_AppliesLowerBoundPerPredicate()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -491,11 +473,10 @@ public sealed class ExperienceSearchTests
         var tagA = new Tag("a");
         var tagB = new Tag("b");
         var unmatched = new Tag("unmatched");
-        var builder = NewBuilder(new()
-        {
-            [tagA] = 0.5f,
-            [tagB] = 2f,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tagA, 0.5f),
+            (tagB, 2f),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -542,10 +523,9 @@ public sealed class ExperienceSearchTests
     public void Search_DebugScoreReflectsMmrPenalties()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0.9f,
             SaturationQuota: 1,
@@ -572,10 +552,16 @@ public sealed class ExperienceSearchTests
         Assert.Equal(2, subItems.Length);
         Assert.Equal(10f, subItems[0].DebugScore);
         Assert.InRange(subItems[1].DebugScore, 2.33f, 2.34f);
+        Assert.Equal(9, Assert.Single(subItems[1].DebugTagScores).Score);
+        Assert.Equal(
+            9,
+            Assert.Single(subItems[1].DebugRequirementCoverage).Score);
+        var breakdown = Assert.IsType<MmrScoreBreakdown>(
+            subItems[1].DebugMmrScoreBreakdown);
         Assert.InRange(
-            Assert.Single(subItems[1].DebugTagScores).Score,
-            2.33f,
-            2.34f);
+            breakdown.NormalizedMmrScore,
+            0.209f,
+            0.211f);
     }
 
     [Fact]
@@ -607,7 +593,7 @@ public sealed class ExperienceSearchTests
 
         SearchResult Run(float recencyBoost)
         {
-            var builder = NewBuilder(new() { [tag] = 1 });
+            var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
             builder.Mmr(new MmrOptions(
                 RelevanceWeight: 1,
                 SaturationQuota: 1,
@@ -628,7 +614,7 @@ public sealed class ExperienceSearchTests
     public void Search_RecencyBoostInterpolatesLinearlyBetweenSectionDates()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -654,14 +640,14 @@ public sealed class ExperienceSearchTests
         Assert.Equal(10, oldest.DebugScore);
         Assert.InRange(middle.DebugScore, 12.5f, 12.501f);
         Assert.Equal(15, newest.DebugScore);
-        Assert.Equal(15, Assert.Single(newest.DebugTagScores).Score);
+        Assert.Equal(10, Assert.Single(newest.DebugTagScores).Score);
     }
 
     [Fact]
     public void Search_RecencyBoostDoesNothingWithoutDateSpread()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -687,7 +673,7 @@ public sealed class ExperienceSearchTests
     public void Search_RecencyBoostDoesNotAffectScoreLowerBound()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -711,7 +697,7 @@ public sealed class ExperienceSearchTests
     public void Search_RecencyBoostUsesIndependentSectionDateRanges()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -758,7 +744,7 @@ public sealed class ExperienceSearchTests
     public void Search_RecencyBoostTreatsOngoingExperienceAsEndingToday()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 1,
             SaturationQuota: 1,
@@ -800,7 +786,7 @@ public sealed class ExperienceSearchTests
     public void Search_RecencyBoostOnlyScalesMmrRelevance()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0.9f,
             SaturationQuota: 1,
@@ -834,7 +820,7 @@ public sealed class ExperienceSearchTests
     [InlineData(float.PositiveInfinity)]
     public void Search_RejectsInvalidRecencyBoost(float recencyBoost)
     {
-        var builder = NewBuilder([]);
+        var builder = NewBuilder(WeightedTags.Empty);
         builder.Configure(
             WorkKey,
             _ => true,
@@ -850,10 +836,9 @@ public sealed class ExperienceSearchTests
     {
         var matching = new Tag("matching");
         var unrelated = new Tag("unrelated");
-        var builder = NewBuilder(new()
-        {
-            [matching] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (matching, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -914,7 +899,7 @@ public sealed class ExperienceSearchTests
     public void Search_IncludeEmptyListsStillEmitsHeadingsAtZeroItemBudget()
     {
         var tag = new Tag("matching");
-        var builder = NewBuilder(new() { [tag] = 1 });
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -939,10 +924,9 @@ public sealed class ExperienceSearchTests
     public void Search_KnownKeyWithNoCandidatesReturnsEmpty()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             ProjectKey,
             e => e.Type == ExperienceType.Project,
@@ -967,10 +951,9 @@ public sealed class ExperienceSearchTests
     public void Search_UnknownKeyThrows()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             ProjectKey,
             e => e.Type == ExperienceType.Project,
@@ -984,10 +967,9 @@ public sealed class ExperienceSearchTests
     [Fact]
     public void Search_DuplicateKeyThrows()
     {
-        var builder = NewBuilder(new()
-        {
-            [new("a")] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (new Tag("a"), 1),
+        ]));
         builder.Configure(WorkKey, _ => true);
         builder.Configure(WorkKey, _ => false);
 
@@ -998,10 +980,9 @@ public sealed class ExperienceSearchTests
     public void Search_MultiplePredicateMatchThrows()
     {
         var tag = new Tag("a");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             _ => true,
@@ -1030,10 +1011,9 @@ public sealed class ExperienceSearchTests
         var tag = new Tag("a");
         var dependency = Item("dependency");
         var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1068,10 +1048,9 @@ public sealed class ExperienceSearchTests
         var tag = new Tag("a");
         var dependency = Item("dependency", (tag, 1));
         var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1095,10 +1074,9 @@ public sealed class ExperienceSearchTests
         var tag = new Tag("a");
         var dependency = Item("dependency");
         var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1124,10 +1102,9 @@ public sealed class ExperienceSearchTests
     public void Search_IfAnyIsScopedToTheSameExperience()
     {
         var tag = new Tag("match");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1158,10 +1135,9 @@ public sealed class ExperienceSearchTests
     public void Search_EmptyHeadingDoesNotTriggerOnlyIfAnyItem()
     {
         var tag = new Tag("match");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1187,10 +1163,9 @@ public sealed class ExperienceSearchTests
     public void Search_SelectingSoleIfAnyItemNormallyIsAllowed()
     {
         var tag = new Tag("match");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1217,10 +1192,9 @@ public sealed class ExperienceSearchTests
     public void Search_SelectingOneIfAnyItemTriggersOtherIfAnySiblings()
     {
         var tag = new Tag("match");
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1266,10 +1240,9 @@ public sealed class ExperienceSearchTests
             "second conditional",
             ItemRequirement.IfAny,
             [dependency]);
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1316,10 +1289,9 @@ public sealed class ExperienceSearchTests
     public void Search_AlwaysWorksWithoutTagMatchAndTriggersIfAny()
     {
         var queryTag = new Tag("query");
-        var builder = NewBuilder(new()
-        {
-            [queryTag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (queryTag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1355,10 +1327,9 @@ public sealed class ExperienceSearchTests
     public void Search_ZeroBudgetGroupSuppressesAlwaysItems()
     {
         var matchingTag = new Tag("matching");
-        var builder = NewBuilder(new()
-        {
-            [matchingTag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (matchingTag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1380,10 +1351,9 @@ public sealed class ExperienceSearchTests
     {
         var matchingTag = new Tag("matching");
         var thesisTag = new Tag("Thesis");
-        var builder = NewBuilder(new()
-        {
-            [matchingTag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (matchingTag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1406,11 +1376,10 @@ public sealed class ExperienceSearchTests
     {
         var repeatedTag = new Tag("repeated");
         var diverseTag = new Tag("diverse");
-        var builder = NewBuilder(new()
-        {
-            [repeatedTag] = 1,
-            [diverseTag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (repeatedTag, 1),
+            (diverseTag, 1),
+        ]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0.9f,
             SaturationQuota: 1,
@@ -1445,10 +1414,9 @@ public sealed class ExperienceSearchTests
         var first = Item("first", (tag, 10));
         var second = ItemDependingOn("second", [first], (tag, 9));
         SetDependencies(first, second);
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1474,10 +1442,9 @@ public sealed class ExperienceSearchTests
         var dependency = Item("dependency");
         var first = ItemDependingOn("first", [dependency], (tag, 10));
         var second = ItemDependingOn("second", [dependency], (tag, 9));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1504,10 +1471,9 @@ public sealed class ExperienceSearchTests
         var tag = new Tag("a");
         var dependency = Item("dependency", (tag, 1));
         var dependent = ItemDependingOn("dependent", [dependency], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1535,10 +1501,9 @@ public sealed class ExperienceSearchTests
         var tag = new Tag("a");
         var predecessor = Item("predecessor");
         var ordered = ItemAfter("ordered", [predecessor], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1564,10 +1529,9 @@ public sealed class ExperienceSearchTests
         var tag = new Tag("a");
         var predecessor = Item("predecessor", (tag, 9));
         var ordered = ItemAfter("ordered", [predecessor], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1595,10 +1559,9 @@ public sealed class ExperienceSearchTests
         var first = Item("first", (tag, 8));
         var second = ItemAfter("second", [first], (tag, 9));
         var third = ItemAfter("third", [second], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1624,10 +1587,9 @@ public sealed class ExperienceSearchTests
         var third = Item("third", (tag, 8));
         var second = ItemAfter("second", [third]);
         var first = ItemAfter("first", [second], (tag, 10));
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1657,10 +1619,9 @@ public sealed class ExperienceSearchTests
         var first = Item("first", (tag, 10));
         var second = ItemAfter("second", [first], (tag, 9));
         SetAfter(first, second);
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
@@ -1686,10 +1647,9 @@ public sealed class ExperienceSearchTests
         var first = Item("first", (tag, 10));
         var second = ItemAfter("second", [first]);
         SetDependencies(first, second);
-        var builder = NewBuilder(new()
-        {
-            [tag] = 1,
-        });
+        var builder = NewBuilder(WeightedTags.Create([
+            (tag, 1),
+        ]));
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,

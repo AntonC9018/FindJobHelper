@@ -161,12 +161,36 @@ MMR score =
 
 Where:
 
-- `normalizedRelevance` is the candidate's weighted tag-match score, including its
+- `normalizedRelevance` is the candidate's raw weighted tag-match score, including its
   recency multiplier, divided by the highest adjusted relevance among all candidates.
-- `maxSimilarity` is the highest cosine similarity between the candidate's tag-score
-  vector and any already selected bullet's vector.
-- `saturation` is a weighted penalty for matching tags that have already appeared at
-  least `saturationQuota` times.
+  When several requirements reach the same experience tag, raw relevance uses only the
+  largest effective coefficient, so aliases and overlapping relation paths do not
+  inflate relevance.
+- `maxSimilarity` is the highest cosine similarity between the candidate's explicit
+  requirement-coverage vector and any already selected bullet's vector.
+- `saturation` is a weighted penalty for explicit requirements that have already
+  appeared in at least `saturationQuota` selected bullets.
+
+Configured tags that are bidirectional full-overlap aliases form one requirement group.
+The first-declared database tag is its canonical name, and the group's configured weight
+is the maximum alias weight. For example, configuring both `C#` and `.NET` at `1.5`
+creates one canonical `.NET` requirement with weight `1.5`, not `3`.
+
+Every matched experience tag retains all explicit requirements that reached it. Its
+largest effective coefficient contributes to raw relevance, while every positive origin
+contributes to requirement coverage:
+
+```text
+raw contribution for an experience tag =
+    evidence score × maximum effective requirement coefficient
+
+coverage for an explicit requirement =
+    sum of its effective contributions across matched experience tags
+```
+
+This means an indirect `Unity` or `Game Programming` match reached from `.NET` still
+occupies the `.NET` MMR dimension. Transitive intermediate tags do not become MMR
+dimensions unless they were explicitly configured as requirements.
 
 The configuration requires all three MMR parameters:
 
@@ -186,10 +210,11 @@ The standard starting values are:
 }
 ```
 
-With `saturationQuota: 2`, the first two selected bullets containing a tag incur no
-saturation penalty from that tag. A third candidate containing it is penalized once, a
-fourth twice, and so on. The contribution is proportional to how much of the candidate's
-tag-match score comes from that repeated tag.
+With `saturationQuota: 2`, the first two selected bullets covering a requirement incur no
+saturation penalty from that requirement. A third candidate covering it is penalized once, a
+fourth twice, and so on. Each selected bullet increments a canonical requirement at
+most once. A candidate's contribution is proportional to how much of its total
+requirement coverage comes from that repeated requirement.
 
 The similarity and saturation penalties are global across the selected experience
 bullets, not reset for each section. Selection stops normally when no remaining
@@ -208,6 +233,12 @@ candidate has a positive MMR score, unless a section minimum still needs to be f
   it is a hard pre-MMR filter.
 
 Change one dimension at a time. Use `--debug` after each change to inspect aggregate
-and per-bullet scores directly in the generated CV. The annotated Markdown preserves
-the configured section order and selected content, making it easier to see whether tag
-weights, MMR settings, or section budgets need the next adjustment.
+and per-bullet scores directly in the generated CV. Per-bullet annotations keep raw
+matches separate from the signed MMR rank and show the relevance, similarity, and
+saturation terms, canonical requirement coverage, configured aliases, and
+target-to-origin contributions. Negative scores remain visible when page filling or a
+section minimum forces their selection. Event headings aggregate only raw relevance,
+signed rank, coverage, and matches; they do not imply an event-level MMR formula. The
+annotated Markdown preserves the configured section order and selected content, making
+it easier to see whether tag weights, MMR settings, or section budgets need the next
+adjustment.

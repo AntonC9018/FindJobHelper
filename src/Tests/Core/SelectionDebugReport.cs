@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using FindJobHelper.Core.Helper;
-using FindJobHelper.CVGeneration;
 using MainCli;
 
 namespace FindJobHelper.Core.Tests;
@@ -45,8 +44,8 @@ internal static class SelectionDebugReport
     public static string ToMarkdown(ImmutableArray<SelectionDebugRun> runs)
     {
         var ret = new StringBuilder();
-        ret.AppendLine("| scenario | preset | section | event | selected item | reason | raw | mmr/debug | tags | dependency notes | budget minimum/maximum vs actual |");
-        ret.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- |");
+        ret.AppendLine("| scenario | preset | section | event | selected item | reason | selection | raw | rank | mmr | MMR terms | coverage | matches | dependency notes | budget minimum/maximum vs actual |");
+        ret.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |");
 
         foreach (var run in runs)
         {
@@ -69,11 +68,20 @@ internal static class SelectionDebugReport
                 ret.Append(" | ");
                 ret.Append(EscapeCell(trace.Reason.ToString().ToLowerInvariant()));
                 ret.Append(" | ");
+                ret.Append(trace.ScoreBreakdown.SelectionOrdinal);
+                ret.Append(" | ");
                 ret.Append(FormatFloat(trace.RawScore));
                 ret.Append(" | ");
                 ret.Append(FormatFloat(trace.DebugScore));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(FormatDebugTags(trace.DebugTagScores)));
+                ret.Append(FormatFloat(
+                    trace.ScoreBreakdown.NormalizedMmrScore));
+                ret.Append(" | ");
+                ret.Append(EscapeCell(FormatMmrTerms(trace.ScoreBreakdown)));
+                ret.Append(" | ");
+                ret.Append(EscapeCell(FormatCoverage(trace.Matches)));
+                ret.Append(" | ");
+                ret.Append(EscapeCell(FormatMatches(trace.Matches)));
                 ret.Append(" | ");
                 ret.Append(EscapeCell(dependencyNotes));
                 ret.Append(" | ");
@@ -219,17 +227,72 @@ internal static class SelectionDebugReport
             : $"requires {trace.Item.DependsOn.Length}";
     }
 
-    private static string FormatDebugTags(
-        ImmutableArray<DebugTagScore> debugTags)
+    private static string FormatMmrTerms(MmrScoreBreakdown breakdown)
     {
-        if (debugTags.IsDefaultOrEmpty)
-        {
-            return "";
-        }
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{breakdown.WeightedRelevanceTerm:+0.###;-0.###;+0} relevance " +
+            $"{-breakdown.WeightedSimilarityPenalty:+0.###;-0.###;+0} similarity " +
+            $"{-breakdown.WeightedSaturationPenalty:+0.###;-0.###;+0} saturation");
+    }
 
+    private static string FormatCoverage(ScoredTags matches)
+    {
         return string.Join(
             "; ",
-            debugTags.Select(x => $"{x.Tag.Value}={FormatFloat(x.Score)}"));
+            matches.RequirementGroupCoverage
+                .OrderByDescending(x => x.Value)
+                .ThenBy(
+                    x => x.Key.CanonicalTag.Name,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(x =>
+                    $"{FormatRequirementLabel(x.Key)}={FormatFloat(x.Value)}"));
+    }
+
+    private static string FormatMatches(ScoredTags matches)
+    {
+        return string.Join(
+            "; ",
+            matches.Matches
+                .OrderByDescending(x => x.RawContribution)
+                .ThenBy(
+                    x => x.TargetTag.Name,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(match =>
+                {
+                    var origins = string.Join(
+                        ", ",
+                        match.Projection.Origins
+                            .Select(origin => (
+                                Origin: origin,
+                                Contribution:
+                                match.EvidenceScore * origin.Coefficient))
+                            .OrderByDescending(x => x.Contribution)
+                            .ThenBy(
+                                x => x.Origin.RequiredTagGroup.CanonicalTag.Name,
+                                StringComparer.OrdinalIgnoreCase)
+                            .Select(x =>
+                                $"{x.Origin.RequiredTagGroup.CanonicalTag.Name}=" +
+                                $"{FormatFloat(x.Contribution)}"));
+                    return origins.Length == 0
+                        ? $"{match.TargetTag.Name}={FormatFloat(match.RawContribution)}"
+                        : $"{match.TargetTag.Name}={FormatFloat(match.RawContribution)} via {origins}";
+                }));
+    }
+
+    private static string FormatRequirementLabel(RequiredTagGroup requirement)
+    {
+        var configuredNames = requirement.ConfiguredTags
+            .Select(x => x.Tag.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return configuredNames.Length == 1
+               && string.Equals(
+                   configuredNames[0],
+                   requirement.CanonicalTag.Name,
+                   StringComparison.OrdinalIgnoreCase)
+            ? requirement.CanonicalTag.Name
+            : $"{requirement.CanonicalTag.Name} [configured: {string.Join(", ", configuredNames)}]";
     }
 
     private static string FormatBudget(SelectionBudgetTrace budget)

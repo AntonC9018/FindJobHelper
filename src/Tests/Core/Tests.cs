@@ -119,7 +119,15 @@ public sealed class SomeTests
             });
 
         var ev = searchBuilder.Build().Run(db.Experiences).Get(workKey);
-        await Verify(ev);
+        var settings = new VerifySettings();
+        settings.IgnoreMember<Event>(x => x.DebugRawScore);
+        settings.IgnoreMember<Event>(x => x.DebugRequirementCoverage);
+        settings.IgnoreMember<Event>(x => x.DebugTagMatches);
+        settings.IgnoreMember<SubEvent>(x => x.DebugRawScore);
+        settings.IgnoreMember<SubEvent>(x => x.DebugRequirementCoverage);
+        settings.IgnoreMember<SubEvent>(x => x.DebugTagMatches);
+        settings.IgnoreMember<SubEvent>(x => x.DebugMmrScoreBreakdown);
+        await Verify(ev, settings);
     }
 
     private static readonly RichText text = RichText.Create($"""

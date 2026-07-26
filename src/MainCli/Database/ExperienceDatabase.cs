@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -110,6 +111,25 @@ public sealed record class MmrOptions(
                 "Saturation penalty must be non-negative.");
         }
     }
+}
+
+public sealed record MmrScoreBreakdown(
+    int SelectionOrdinal,
+    float RawRelevance,
+    float RecencyMultiplier,
+    float AdjustedRelevance,
+    float NormalizedRelevance,
+    float MaximumCosineSimilarity,
+    float Saturation,
+    float WeightedRelevanceTerm,
+    float WeightedSimilarityPenalty,
+    float WeightedSaturationPenalty,
+    float NormalizedMmrScore,
+    float RawEquivalentRankScore)
+{
+    public float FinalSignedNormalizedMmrScore => NormalizedMmrScore;
+
+    public float SignedRawEquivalentRankScore => RawEquivalentRankScore;
 }
 
 public static class ExperienceListSorter
@@ -923,24 +943,255 @@ public sealed class ExperienceDatabase
     }
 }
 
-public sealed class WeightedTags : Dictionary<Tag, float>
+public readonly record struct ConfiguredTagWeight(Tag Tag, float Weight);
+
+public sealed class RequiredTagGroup
 {
-    public bool IsEmpty => Count == 0;
+    public RequiredTagGroup(
+        Tag canonicalTag,
+        ImmutableArray<ConfiguredTagWeight> configuredTags,
+        float maximumWeight)
+    {
+        if (configuredTags.IsDefaultOrEmpty)
+        {
+            throw new ArgumentException(
+                "A required-tag group must contain at least one configured tag.",
+                nameof(configuredTags));
+        }
+
+        CanonicalTag = canonicalTag;
+        ConfiguredTags = configuredTags;
+        MaximumWeight = maximumWeight;
+    }
+
+    public Tag CanonicalTag { get; }
+
+    public ImmutableArray<ConfiguredTagWeight> ConfiguredTags { get; }
+
+    public ImmutableArray<ConfiguredTagWeight> ConfiguredAliases => ConfiguredTags;
+
+    public float MaximumWeight { get; }
+
+    public float MaximumGroupWeight => MaximumWeight;
 }
 
-public sealed class ScoredTags : Dictionary<Tag, float>
+public sealed class TagMatchOrigin
 {
+    public TagMatchOrigin(
+        RequiredTagGroup requiredTagGroup,
+        float coefficient)
+    {
+        ArgumentNullException.ThrowIfNull(requiredTagGroup);
+        RequiredTagGroup = requiredTagGroup;
+        Coefficient = coefficient;
+    }
+
+    public RequiredTagGroup RequiredTagGroup { get; }
+
+    public RequiredTagGroup Group => RequiredTagGroup;
+
+    public float Coefficient { get; }
+
+    public float EffectiveCoefficient => Coefficient;
+}
+
+public sealed class WeightedTagProjection
+{
+    public WeightedTagProjection(
+        Tag targetTag,
+        float maximumCoefficient,
+        ImmutableArray<TagMatchOrigin> origins)
+    {
+        TargetTag = targetTag;
+        MaximumCoefficient = maximumCoefficient;
+        Origins = origins.IsDefault ? [] : origins;
+    }
+
+    public Tag TargetTag { get; }
+
+    public Tag ExperienceTag => TargetTag;
+
+    public float MaximumCoefficient { get; }
+
+    public float MaximumRawCoefficient => MaximumCoefficient;
+
+    public ImmutableArray<TagMatchOrigin> Origins { get; }
+}
+
+public sealed class WeightedTags : IReadOnlyCollection<WeightedTagProjection>
+{
+    private readonly ImmutableDictionary<Tag, WeightedTagProjection> _byTarget;
+
+    public static WeightedTags Empty { get; } = new([], []);
+
+    internal WeightedTags(
+        ImmutableArray<RequiredTagGroup> requiredTagGroups,
+        ImmutableArray<WeightedTagProjection> projections)
+    {
+        RequiredTagGroups = requiredTagGroups.IsDefault ? [] : requiredTagGroups;
+        Projections = projections.IsDefault ? [] : projections;
+        _byTarget = Projections.ToImmutableDictionary(x => x.TargetTag);
+    }
+
+    public ImmutableArray<RequiredTagGroup> RequiredTagGroups { get; }
+
+    public ImmutableArray<WeightedTagProjection> Projections { get; }
+
+    public int Count => Projections.Length;
+
+    public bool IsEmpty => Projections.IsEmpty;
+
+    public static WeightedTags Create(
+        ReadOnlySpan<(Tag Tag, float Weight)> inputs)
+    {
+        var groupBuilders = new Dictionary<Tag, DirectGroupBuilder>();
+        var groupOrder = new List<DirectGroupBuilder>();
+        foreach (var (tag, weight) in inputs)
+        {
+            if (!groupBuilders.TryGetValue(tag, out var builder))
+            {
+                builder = new(tag);
+                groupBuilders.Add(tag, builder);
+                groupOrder.Add(builder);
+            }
+
+            builder.ConfiguredTags.Add(new(tag, weight));
+            builder.MaximumWeight = Math.Max(builder.MaximumWeight, weight);
+        }
+
+        var groups = groupOrder
+            .Select(x => new RequiredTagGroup(
+                x.Tag,
+                x.ConfiguredTags.ToImmutableArray(),
+                x.MaximumWeight))
+            .ToImmutableArray();
+        var projections = groups
+            .Select(group => new WeightedTagProjection(
+                group.CanonicalTag,
+                group.MaximumWeight,
+                group.MaximumWeight > 0
+                    ? [new(group, group.MaximumWeight)]
+                    : []))
+            .ToImmutableArray();
+        return new(groups, projections);
+    }
+
+    public static WeightedTags CreateNamed(
+        ReadOnlySpan<(string Tag, float Weight)> inputs)
+    {
+        var converted = new (Tag Tag, float Weight)[inputs.Length];
+        for (var index = 0; index < inputs.Length; index++)
+        {
+            converted[index] = (new(inputs[index].Tag), inputs[index].Weight);
+        }
+
+        return Create(converted);
+    }
+
+    public static WeightedTags Direct(
+        ReadOnlySpan<(Tag Tag, float Weight)> inputs)
+        => Create(inputs);
+
+    public static WeightedTags DirectNamed(
+        ReadOnlySpan<(string Tag, float Weight)> inputs)
+        => CreateNamed(inputs);
+
+    public bool TryGetValue(
+        Tag targetTag,
+        out WeightedTagProjection projection)
+        => _byTarget.TryGetValue(targetTag, out projection!);
+
+    public ImmutableArray<WeightedTagProjection>.Enumerator GetEnumerator()
+        => Projections.GetEnumerator();
+
+    IEnumerator<WeightedTagProjection> IEnumerable<WeightedTagProjection>.GetEnumerator()
+        => ((IEnumerable<WeightedTagProjection>) Projections).GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator()
+        => ((IEnumerable) Projections).GetEnumerator();
+
+    private sealed class DirectGroupBuilder(Tag tag)
+    {
+        public Tag Tag { get; } = tag;
+        public List<ConfiguredTagWeight> ConfiguredTags { get; } = new();
+        public float MaximumWeight { get; set; } = float.NegativeInfinity;
+    }
+}
+
+public sealed class ScoredTagMatch
+{
+    public ScoredTagMatch(
+        WeightedTagProjection projection,
+        float evidenceScore,
+        float rawContribution)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        Projection = projection;
+        EvidenceScore = evidenceScore;
+        RawContribution = rawContribution;
+    }
+
+    public WeightedTagProjection Projection { get; }
+
+    public Tag TargetTag => Projection.TargetTag;
+
+    public float EvidenceScore { get; }
+
+    public float RawContribution { get; }
+}
+
+public sealed class ScoredTags : IReadOnlyDictionary<Tag, float>
+{
+    private readonly ImmutableDictionary<Tag, float> _scores;
+
+    public static ScoredTags Empty { get; } = new(
+        [],
+        ImmutableDictionary<RequiredTagGroup, float>.Empty);
+
+    internal ScoredTags(
+        ImmutableArray<ScoredTagMatch> matches,
+        ImmutableDictionary<RequiredTagGroup, float> requirementCoverage)
+    {
+        MatchProvenance = matches.IsDefault ? [] : matches;
+        RequirementGroupCoverage = requirementCoverage;
+        RequirementCoverage = requirementCoverage.ToImmutableDictionary(
+            x => x.Key.CanonicalTag,
+            x => x.Value);
+        _scores = MatchProvenance.ToImmutableDictionary(
+            x => x.TargetTag,
+            x => x.RawContribution);
+        Sum = MatchProvenance.Sum(x => x.RawContribution);
+    }
+
+    public ImmutableArray<ScoredTagMatch> MatchProvenance { get; }
+
+    public ImmutableArray<ScoredTagMatch> Matches => MatchProvenance;
+
+    public IReadOnlyDictionary<Tag, float> RequirementCoverage { get; }
+
+    public IReadOnlyDictionary<RequiredTagGroup, float> RequirementGroupCoverage { get; }
+
     public float Sum { get; }
 
-    public ScoredTags(IEnumerable<(Tag Tag, float Score)> x)
-    {
-        foreach (var i in x)
-        {
-            Sum += i.Score;
-            Add(i.Tag, i.Score);
-        }
-    }
+    public int Count => _scores.Count;
+
     public bool IsEmpty => Count == 0;
+
+    public IEnumerable<Tag> Keys => _scores.Keys;
+
+    public IEnumerable<float> Values => _scores.Values;
+
+    public float this[Tag key] => _scores[key];
+
+    public bool ContainsKey(Tag key) => _scores.ContainsKey(key);
+
+    public bool TryGetValue(Tag key, out float value)
+        => _scores.TryGetValue(key, out value);
+
+    public IEnumerator<KeyValuePair<Tag, float>> GetEnumerator()
+        => _scores.GetEnumerator();
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
 // Main database builder
@@ -1016,7 +1267,7 @@ public static class ExperienceDatabaseSerializer
         },
     };
 
-    extension (ExperienceDatabase db)
+    extension(ExperienceDatabase db)
     {
         public async Task Serialize(Stream output, CancellationToken cancellationToken)
         {

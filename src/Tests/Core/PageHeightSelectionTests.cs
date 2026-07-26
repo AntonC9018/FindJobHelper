@@ -46,7 +46,7 @@ public sealed class PageHeightSelectionTests
             fitting);
         var database = Database(list);
         var builder = new SearchBuilder();
-        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Tags(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(
             RelevanceWeight: 0.9f,
             SaturationQuota: 1,
@@ -66,6 +66,12 @@ public sealed class PageHeightSelectionTests
         Assert.Equal(new[] { "seed", "fitting" }, Texts(result.Get(WorkKey)));
         Assert.DoesNotContain("taller", Texts(result.Get(WorkKey)));
         Assert.Equal(40, policy.CurrentHeight.ScaledPoints);
+        var fittingTrace = Assert.Single(
+            result.Diagnostics.Items,
+            x => x.Item.Text.ToString() == "fitting");
+        Assert.True(fittingTrace.DebugScore < 0);
+        Assert.True(
+            fittingTrace.ScoreBreakdown.NormalizedMmrScore < 0);
     }
 
     [Theory]
@@ -513,7 +519,7 @@ public sealed class PageHeightSelectionTests
         params (ExperienceKey Key, ExperienceType Type, int Minimum, int Maximum)[] groups)
     {
         var builder = new SearchBuilder();
-        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Tags(WeightedTags.Create([(tag, 1)]));
         foreach (var group in groups)
         {
             builder.Configure(
@@ -531,7 +537,7 @@ public sealed class PageHeightSelectionTests
     private static ExperienceSearch RequiredWorkHeadingsSearch(Tag tag, int maximum)
     {
         var builder = new SearchBuilder();
-        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Tags(WeightedTags.Create([(tag, 1)]));
         builder.Configure(
             WorkKey,
             static experience => experience.Type == ExperienceType.Job,
@@ -546,7 +552,7 @@ public sealed class PageHeightSelectionTests
     private static ExperienceSearch SearchWithRequiredHeadings(Tag tag)
     {
         var builder = new SearchBuilder();
-        builder.Tags(new WeightedTags { [tag] = 1 });
+        builder.Tags(WeightedTags.Create([(tag, 1)]));
         builder.Configure(
             EducationKey,
             static experience => experience.Type.IsDegree(),

@@ -133,7 +133,7 @@ public sealed class SearchBuilder
     public void Tags(WeightedTags tags)
     {
         ArgumentNullException.ThrowIfNull(tags);
-        _tags = CopyTags(tags);
+        _tags = tags;
     }
 
     public void Mmr(MmrOptions options)
@@ -217,7 +217,7 @@ public sealed class SearchBuilder
         }
 
         return new(
-            CopyTags(_tags),
+            _tags,
             _mmr,
             groups.DrainToImmutable());
     }
@@ -228,17 +228,6 @@ public sealed class SearchBuilder
         {
             throw new InvalidOperationException("Experience search keys cannot be empty.");
         }
-    }
-
-    private static WeightedTags CopyTags(WeightedTags tags)
-    {
-        var copy = new WeightedTags();
-        foreach (var (tag, weight) in tags)
-        {
-            copy.Add(tag, weight);
-        }
-
-        return copy;
     }
 
     private sealed record SearchPredicate(
@@ -434,6 +423,8 @@ internal sealed record SelectionItemTrace(
     SelectionItemReason Reason,
     float RawScore,
     float DebugScore,
+    MmrScoreBreakdown ScoreBreakdown,
+    ScoredTags Matches,
     ImmutableArray<DebugTagScore> DebugTagScores,
     ExperienceListItem? DependencyOf);
 
@@ -655,10 +646,9 @@ internal static class ExperienceSelectionEngine
                 {
                     if (context.Scores.TryGetValue(added, out var matches))
                     {
-                        context.DebugScores[added] = ranker.RawEquivalentScore(
+                        context.ScoreBreakdowns[added] = ranker.AddSelected(
                             matches,
                             candidate.RecencyMultiplier);
-                        ranker.AddSelected(matches);
                     }
                 });
         }
@@ -694,7 +684,7 @@ internal static class ExperienceSelectionEngine
             var dateRange = newestDay - oldestDay;
             foreach (var (list, endDate) in datedLists)
             {
-                var normalizedRecency = (endDate.DayNumber - oldestDay) / (float)dateRange;
+                var normalizedRecency = (endDate.DayNumber - oldestDay) / (float) dateRange;
                 result[list] = 1 + recencyBoost * Math.Clamp(normalizedRecency, 0, 1);
             }
         }
@@ -792,7 +782,9 @@ internal static class ExperienceSelectionEngine
         float maxRelevance)
     {
         private readonly List<ScoredTags> _selected = new();
-        private readonly Dictionary<Tag, int> _selectedTagCounts = new();
+        private readonly Dictionary<Tag, int>
+            _selectedRequirementCounts = new();
+        private int _selectionOrdinal;
 
         public MmrCandidate? BestCandidate(
             IEnumerable<MmrCandidate> candidates,
@@ -823,31 +815,31 @@ internal static class ExperienceSelectionEngine
             return best;
         }
 
-        public void AddSelected(ScoredTags matches)
-        {
-            _selected.Add(matches);
-
-            foreach (var tag in matches.Keys)
-            {
-                ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(
-                    _selectedTagCounts,
-                    tag,
-                    out _);
-                count += 1;
-            }
-        }
-
-        public float RawEquivalentScore(
+        public MmrScoreBreakdown AddSelected(
             ScoredTags matches,
             float recencyMultiplier)
         {
-            var score = Score(matches, recencyMultiplier);
-            if (options.RelevanceWeight <= 0 || maxRelevance <= 0)
+            var breakdown = Breakdown(
+                matches,
+                recencyMultiplier,
+                ++_selectionOrdinal);
+            _selected.Add(matches);
+
+            foreach (var (requirement, coverage) in matches.RequirementCoverage)
             {
-                return Math.Max(0, score);
+                if (coverage <= 0)
+                {
+                    continue;
+                }
+
+                ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(
+                    _selectedRequirementCounts,
+                    requirement,
+                    out _);
+                count += 1;
             }
 
-            return Math.Max(0, score * maxRelevance / options.RelevanceWeight);
+            return breakdown;
         }
 
         public float Score(MmrCandidate candidate)
@@ -858,16 +850,48 @@ internal static class ExperienceSelectionEngine
         private float Score(
             ScoredTags matches,
             float recencyMultiplier)
+            => Breakdown(
+                matches,
+                recencyMultiplier,
+                selectionOrdinal: 0).NormalizedMmrScore;
+
+        private MmrScoreBreakdown Breakdown(
+            ScoredTags matches,
+            float recencyMultiplier,
+            int selectionOrdinal)
         {
+            var adjustedRelevance = matches.Sum * recencyMultiplier;
             var relevance = maxRelevance <= 0
                 ? 0
-                : matches.Sum * recencyMultiplier / maxRelevance;
+                : adjustedRelevance / maxRelevance;
             var redundancy = MaxSimilarity(matches);
             var saturation = Saturation(matches);
+            var weightedRelevance = options.RelevanceWeight * relevance;
+            var weightedSimilarity =
+                (1 - options.RelevanceWeight) * redundancy;
+            var weightedSaturation =
+                options.SaturationPenalty * saturation;
+            var score = weightedRelevance
+                - weightedSimilarity
+                - weightedSaturation;
+            var rawEquivalentScore =
+                options.RelevanceWeight <= 0 || maxRelevance <= 0
+                    ? score
+                    : score * maxRelevance / options.RelevanceWeight;
 
-            return options.RelevanceWeight * relevance
-                - (1 - options.RelevanceWeight) * redundancy
-                - options.SaturationPenalty * saturation;
+            return new(
+                selectionOrdinal,
+                matches.Sum,
+                recencyMultiplier,
+                adjustedRelevance,
+                relevance,
+                redundancy,
+                saturation,
+                weightedRelevance,
+                weightedSimilarity,
+                weightedSaturation,
+                score,
+                rawEquivalentScore);
         }
 
         private float MaxSimilarity(ScoredTags matches)
@@ -884,22 +908,36 @@ internal static class ExperienceSelectionEngine
 
         private float Saturation(ScoredTags matches)
         {
-            if (matches.Sum <= 0)
+            float totalCoverage = 0;
+            foreach (var (_, coverage) in OrderedCoverage(
+                         matches.RequirementCoverage))
+            {
+                totalCoverage += coverage;
+            }
+
+            if (totalCoverage <= 0)
             {
                 return 0;
             }
 
             float ret = 0;
-            foreach (var (tag, score) in matches)
+            foreach (var (requirement, coverage) in OrderedCoverage(
+                         matches.RequirementCoverage))
             {
-                var selectedCount = _selectedTagCounts.GetValueOrDefault(tag);
+                if (coverage <= 0)
+                {
+                    continue;
+                }
+
+                var selectedCount =
+                    _selectedRequirementCounts.GetValueOrDefault(requirement);
                 var overQuota = selectedCount - options.SaturationQuota + 1;
                 if (overQuota <= 0)
                 {
                     continue;
                 }
 
-                ret += (score / matches.Sum) * overQuota;
+                ret += (coverage / totalCoverage) * overQuota;
             }
 
             return ret;
@@ -909,18 +947,24 @@ internal static class ExperienceSelectionEngine
             ScoredTags a,
             ScoredTags b)
         {
-            if (a.Count == 0 || b.Count == 0)
+            var aCoverage = a.RequirementCoverage;
+            var bCoverage = b.RequirementCoverage;
+            if (aCoverage.Count == 0 || bCoverage.Count == 0)
             {
                 return 0;
             }
 
             float dot = 0;
-            var smaller = a.Count <= b.Count ? a : b;
-            var larger = ReferenceEquals(smaller, a) ? b : a;
+            var smaller = aCoverage.Count <= bCoverage.Count
+                ? aCoverage
+                : bCoverage;
+            var larger = ReferenceEquals(smaller, aCoverage)
+                ? bCoverage
+                : aCoverage;
 
-            foreach (var (tag, score) in smaller)
+            foreach (var (requirement, score) in OrderedCoverage(smaller))
             {
-                if (larger.TryGetValue(tag, out var otherScore))
+                if (larger.TryGetValue(requirement, out var otherScore))
                 {
                     dot += score * otherScore;
                 }
@@ -931,7 +975,9 @@ internal static class ExperienceSelectionEngine
                 return 0;
             }
 
-            var norm = MathF.Sqrt(SquaredLength(a) * SquaredLength(b));
+            var norm = MathF.Sqrt(
+                SquaredLength(aCoverage)
+                * SquaredLength(bCoverage));
             if (norm <= 0)
             {
                 return 0;
@@ -940,15 +986,25 @@ internal static class ExperienceSelectionEngine
             return dot / norm;
         }
 
-        private static float SquaredLength(ScoredTags tags)
+        private static float SquaredLength(
+            IReadOnlyDictionary<Tag, float> coverage)
         {
             float ret = 0;
-            foreach (var score in tags.Values)
+            foreach (var (_, score) in OrderedCoverage(coverage))
             {
                 ret += score * score;
             }
 
             return ret;
+        }
+
+        private static IEnumerable<
+            KeyValuePair<Tag, float>> OrderedCoverage(
+            IReadOnlyDictionary<Tag, float> coverage)
+        {
+            return coverage.OrderBy(
+                x => x.Key.Name,
+                StringComparer.OrdinalIgnoreCase);
         }
 
         private static int BreakTie(
@@ -1021,7 +1077,8 @@ internal static class ExperienceSelectionEngine
         public readonly HashSet<ExperienceListItem> Added = new(ItemReferenceComparer.Instance);
         public readonly Dictionary<ExperienceKey, Dictionary<ExperienceList, List<ExperienceListItem>>> Results = new();
         public readonly Dictionary<ExperienceListItem, ScoredTags> Scores = new();
-        public readonly Dictionary<ExperienceListItem, float> DebugScores = new();
+        public readonly Dictionary<ExperienceListItem, MmrScoreBreakdown>
+            ScoreBreakdowns = new();
         public readonly Dictionary<ExperienceListItem, SelectionItemReason> Reasons = new(ItemReferenceComparer.Instance);
         public readonly Dictionary<ExperienceListItem, ExperienceListItem> DependencyTargets = new(ItemReferenceComparer.Instance);
 
@@ -1172,12 +1229,14 @@ internal static class ExperienceSelectionEngine
                         foreach (var item in sortedItems)
                         {
                             var matches = MatchesOf(item);
-                            var debugScore = DebugScoreOf(item);
+                            var scoreBreakdown = ScoreBreakdownOf(item);
+                            var debugScore =
+                                scoreBreakdown.RawEquivalentRankScore;
                             totalScore += debugScore;
                             outputItems.Add(new(
                                 item,
                                 matches,
-                                debugScore));
+                                scoreBreakdown));
 
                             itemTraces.Add(new(
                                 group.Key,
@@ -1186,7 +1245,9 @@ internal static class ExperienceSelectionEngine
                                 Reasons.GetValueOrDefault(item, SelectionItemReason.Direct),
                                 matches.Sum,
                                 debugScore,
-                                ToDebugTagScores(matches, debugScore),
+                                scoreBreakdown,
+                                matches,
+                                ToDebugTagScores(matches),
                                 DependencyTargets.GetValueOrDefault(item)));
                         }
 
@@ -1221,11 +1282,12 @@ internal static class ExperienceSelectionEngine
                     : EmptyScoredTags.Instance;
             }
 
-            float DebugScoreOf(ExperienceListItem item)
+            MmrScoreBreakdown ScoreBreakdownOf(ExperienceListItem item)
             {
-                return DebugScores.TryGetValue(item, out var score)
-                    ? score
-                    : MatchesOf(item).Sum;
+                return ScoreBreakdowns.TryGetValue(item, out var breakdown)
+                    ? breakdown
+                    : throw new InvalidOperationException(
+                        "Selected experience item did not have an MMR score breakdown.");
             }
         }
 
@@ -1299,7 +1361,10 @@ internal static class ExperienceSelectionEngine
     private readonly record struct OutputItem(
         ExperienceListItem Item,
         ScoredTags Matches,
-        float DebugScore);
+        MmrScoreBreakdown ScoreBreakdown)
+    {
+        public float DebugScore => ScoreBreakdown.RawEquivalentRankScore;
+    }
 
     private static ImmutableArray<Event> ToOutput(IEnumerable<OutputEvent> s)
     {
@@ -1313,9 +1378,11 @@ internal static class ExperienceSelectionEngine
             foreach (var x in items)
             {
                 subBuilder.Add(new(
-                    x.DebugScore,
+                    x.ScoreBreakdown,
                     x.Item.Text,
-                    ToDebugTagScores(x.Matches, x.DebugScore)));
+                    ToDebugTagScores(x.Matches),
+                    ToDebugRequirementCoverage(x.Matches),
+                    ToDebugTagMatches(x.Matches)));
             }
 
             builder.Add(new()
@@ -1325,7 +1392,12 @@ internal static class ExperienceSelectionEngine
                 Title = t.List.Title,
                 Text = hasItems ? t.List.Description : null,
                 DebugScore = t.TotalScore,
-                DebugTagScores = ToDebugTagScores(items.Select(x => (x.Matches, x.DebugScore))),
+                DebugRawScore = items.Sum(x => x.Matches.Sum),
+                DebugTagScores = ToDebugTagScores(items.Select(x => x.Matches)),
+                DebugRequirementCoverage = ToDebugRequirementCoverage(
+                    items.Select(x => x.Matches)),
+                DebugTagMatches = ToDebugTagMatches(
+                    items.Select(x => x.Matches)),
                 SubItems = subBuilder.ToImmutable(),
                 Urls = hasItems ? t.List.Urls : [],
             });
@@ -1336,38 +1408,29 @@ internal static class ExperienceSelectionEngine
     }
 
     private static ImmutableArray<DebugTagScore> ToDebugTagScores(
-        ScoredTags matches,
-        float debugScore)
+        ScoredTags matches)
     {
         if (matches.IsEmpty)
         {
             return [];
         }
 
-        var scale = matches.Sum <= 0
-            ? 0
-            : debugScore / matches.Sum;
-
         return matches
-            .Select(x => new DebugTagScore(x.Key.Name, x.Value * scale))
+            .Select(x => new DebugTagScore(x.Key.Name, x.Value))
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Tag.Value, StringComparer.OrdinalIgnoreCase)
             .ToImmutableArray();
     }
 
     private static ImmutableArray<DebugTagScore> ToDebugTagScores(
-        IEnumerable<(ScoredTags Matches, float DebugScore)> matches)
+        IEnumerable<ScoredTags> matches)
     {
         var totals = new Dictionary<Tag, float>();
-        foreach (var (scoredTags, debugScore) in matches)
+        foreach (var scoredTags in matches)
         {
-            var scale = scoredTags.Sum <= 0
-                ? 0
-                : debugScore / scoredTags.Sum;
-
             foreach (var (tag, score) in scoredTags)
             {
-                totals[tag] = totals.GetValueOrDefault(tag) + score * scale;
+                totals[tag] = totals.GetValueOrDefault(tag) + score;
             }
         }
 
@@ -1384,6 +1447,111 @@ internal static class ExperienceSelectionEngine
             .ToImmutableArray();
     }
 
+    private static ImmutableArray<DebugRequirementCoverage>
+        ToDebugRequirementCoverage(ScoredTags matches)
+    {
+        return matches.RequirementGroupCoverage
+            .Where(x => IsMeaningfulScore(x.Value))
+            .OrderByDescending(x => x.Value)
+            .ThenBy(
+                x => x.Key.CanonicalTag.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(x => new DebugRequirementCoverage(x.Key, x.Value))
+            .ToImmutableArray();
+    }
+
+    private static ImmutableArray<DebugRequirementCoverage>
+        ToDebugRequirementCoverage(IEnumerable<ScoredTags> matches)
+    {
+        var totals = new Dictionary<RequiredTagGroup, float>();
+        foreach (var scoredTags in matches)
+        {
+            foreach (var (requirement, score) in scoredTags.RequirementGroupCoverage)
+            {
+                totals[requirement] =
+                    totals.GetValueOrDefault(requirement) + score;
+            }
+        }
+
+        return totals
+            .Where(x => IsMeaningfulScore(x.Value))
+            .OrderByDescending(x => x.Value)
+            .ThenBy(
+                x => x.Key.CanonicalTag.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(x => new DebugRequirementCoverage(x.Key, x.Value))
+            .ToImmutableArray();
+    }
+
+    private static ImmutableArray<DebugTagMatch> ToDebugTagMatches(
+        ScoredTags matches)
+    {
+        return matches.Matches
+            .Where(x => IsMeaningfulScore(x.RawContribution))
+            .OrderByDescending(x => x.RawContribution)
+            .ThenBy(
+                x => x.TargetTag.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(match => new DebugTagMatch(
+                match.TargetTag,
+                match.RawContribution,
+                match.Projection.Origins
+                    .Select(origin => new DebugTagMatchOrigin(
+                        origin.RequiredTagGroup,
+                        match.EvidenceScore * origin.Coefficient))
+                    .Where(x => IsMeaningfulScore(x.Contribution))
+                    .OrderByDescending(x => x.Contribution)
+                    .ThenBy(
+                        x => x.Requirement.CanonicalTag.Name,
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToImmutableArray()))
+            .ToImmutableArray();
+    }
+
+    private static ImmutableArray<DebugTagMatch> ToDebugTagMatches(
+        IEnumerable<ScoredTags> matches)
+    {
+        var rawTotals = new Dictionary<Tag, float>();
+        var originTotals =
+            new Dictionary<(Tag Target, RequiredTagGroup Requirement), float>();
+        foreach (var scoredTags in matches)
+        {
+            foreach (var match in scoredTags.Matches)
+            {
+                rawTotals[match.TargetTag] =
+                    rawTotals.GetValueOrDefault(match.TargetTag)
+                    + match.RawContribution;
+                foreach (var origin in match.Projection.Origins)
+                {
+                    var key = (match.TargetTag, origin.RequiredTagGroup);
+                    originTotals[key] =
+                        originTotals.GetValueOrDefault(key)
+                        + match.EvidenceScore * origin.Coefficient;
+                }
+            }
+        }
+
+        return rawTotals
+            .Where(x => IsMeaningfulScore(x.Value))
+            .OrderByDescending(x => x.Value)
+            .ThenBy(x => x.Key.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(target => new DebugTagMatch(
+                target.Key,
+                target.Value,
+                originTotals
+                    .Where(x => x.Key.Target == target.Key)
+                    .Where(x => IsMeaningfulScore(x.Value))
+                    .OrderByDescending(x => x.Value)
+                    .ThenBy(
+                        x => x.Key.Requirement.CanonicalTag.Name,
+                        StringComparer.OrdinalIgnoreCase)
+                    .Select(x => new DebugTagMatchOrigin(
+                        x.Key.Requirement,
+                        x.Value))
+                    .ToImmutableArray()))
+            .ToImmutableArray();
+    }
+
     private static bool IsMeaningfulScore(float score)
     {
         return MathF.Abs(score) >= 0.0001f;
@@ -1391,6 +1559,6 @@ internal static class ExperienceSelectionEngine
 
     private static class EmptyScoredTags
     {
-        public static readonly ScoredTags Instance = new([]);
+        public static readonly ScoredTags Instance = ScoredTags.Empty;
     }
 }
