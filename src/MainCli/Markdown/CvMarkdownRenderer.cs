@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using System.Globalization;
-using System.Text;
 using CodegenCS;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
@@ -18,15 +17,23 @@ internal static class CvMarkdownRenderer
     internal static void Render(
         CvDataModel model,
         CvMarkdownRenderMode mode,
+        IProgressReporter progress,
         ICodegenTextWriter writer)
     {
         ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(progress);
         ArgumentNullException.ThrowIfNull(writer);
         if (!Enum.IsDefined(mode))
         {
             throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported Markdown render mode.");
         }
 
+        var totalWorkUnits = GetWorkUnitCount(model);
+        var completedWorkUnits = 0;
+        progress.Report(new(
+            CompletedWorkUnits: completedWorkUnits,
+            TotalWorkUnits: totalWorkUnits,
+            Detail: "Creating Markdown files"));
         var blocks = new List<FormattableString>
         {
             $$"""
@@ -35,11 +42,13 @@ internal static class CvMarkdownRenderer
             {{Text(model.Profession.Value)}}
             """,
         };
+        ReportBlock("Creating Markdown files — document header");
 
         if (!model.CategorizedInfos.IsEmpty || !model.CategorizedInfoLists.IsEmpty)
         {
             blocks.Add(RenderMetadata(model));
         }
+        ReportBlock("Creating Markdown files — metadata");
         if (model.Summary is not null)
         {
             blocks.Add($$"""
@@ -48,20 +57,42 @@ internal static class CvMarkdownRenderer
                 {{model.Summary.ToMarkdownString()}}
                 """);
         }
+        ReportBlock("Creating Markdown files — summary");
 
-        blocks.AddRange(model.SectionOrder
-            .Where(section => !CvLatexFragmentRenderer.IsSectionEmpty(section, model))
-            .Select(section => RenderSection(section, model, mode)));
+        foreach (var section in model.SectionOrder)
+        {
+            if (!CvLatexFragmentRenderer.IsSectionEmpty(section, model))
+            {
+                blocks.Add(RenderSection(section, model, mode));
+            }
+            ReportBlock("Creating Markdown files — section");
+        }
 
         var footer = RenderFooter(model);
         if (footer is not null)
         {
             blocks.Add(footer);
         }
+        ReportBlock("Creating Markdown files — footer");
 
         FormattableString document =
             $"{blocks.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
         writer.WriteLine(document);
+
+        void ReportBlock(string detail)
+        {
+            completedWorkUnits++;
+            progress.Report(new(
+                CompletedWorkUnits: completedWorkUnits,
+                TotalWorkUnits: totalWorkUnits,
+                Detail: detail));
+        }
+    }
+
+    internal static int GetWorkUnitCount(CvDataModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        return checked(model.SectionOrder.Length + 5);
     }
 
     private static FormattableString RenderMetadata(CvDataModel model)
@@ -125,9 +156,22 @@ internal static class CvMarkdownRenderer
         Event @event,
         CvMarkdownRenderMode mode)
     {
+        return mode switch
+        {
+            CvMarkdownRenderMode.Clean => RenderCleanEvent(@event),
+            CvMarkdownRenderMode.Annotated => RenderAnnotatedEvent(@event),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "Unsupported Markdown render mode."),
+        };
+    }
+
+    private static FormattableString RenderCleanEvent(Event @event)
+    {
         var blocks = new List<FormattableString>
         {
-            $"### {AnnotationPrefix(mode, @event.DebugInfo)}{Text(@event.Title)}",
+            $"### {Text(@event.Title)}",
         };
 
         var place = @event.Place.IsPersonal
@@ -141,7 +185,7 @@ internal static class CvMarkdownRenderer
         }
 
         var bullets = @event.SubItems
-            .Select(item => RenderSubItem(item, mode))
+            .Select(RenderCleanSubItem)
             .ToList();
         if (!@event.Urls.IsEmpty)
         {
@@ -158,40 +202,58 @@ internal static class CvMarkdownRenderer
         return $"{blocks.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
     }
 
-    private static FormattableString RenderSubItem(
-        SubEvent item,
-        CvMarkdownRenderMode mode)
+    private static FormattableString RenderAnnotatedEvent(Event @event)
     {
-        var content =
-            $"{AnnotationPrefix(mode, item)}{item.Text.ToMarkdownString()}";
+        var blocks = new List<FormattableString>
+        {
+            $"### {Text(@event.Title)}",
+            $"{FormatDiagnosticDetails(FormatEventMetrics(@event.DebugInfo))}",
+        };
+
+        var place = @event.Place.IsPersonal
+            ? string.Empty
+            : $" · {Text(@event.Place.Name)}";
+        blocks.Add($"*{Text(@event.DateRange)}{place}*");
+
+        if (@event.Text is not null)
+        {
+            blocks.Add($"{@event.Text.ToMarkdownString()}");
+        }
+
+        var bullets = @event.SubItems
+            .Select(RenderAnnotatedSubItem)
+            .ToList();
+        if (!@event.Urls.IsEmpty)
+        {
+            var links = string.Join(
+                " | ",
+                @event.Urls.Select(static url => Autolink(url.Value)));
+            bullets.Add($"- **Links:** {links}");
+        }
+        if (bullets.Count > 0)
+        {
+            blocks.Add($"{bullets.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)}");
+        }
+
+        return $"{blocks.Render(RenderEnumerableOptions.LineBreaksWithSpacer)}";
+    }
+
+    private static FormattableString RenderCleanSubItem(SubEvent item)
+    {
+        var content = item.Text.ToMarkdownString();
         return $"- {content}";
     }
 
-    private static string AnnotationPrefix(
-        CvMarkdownRenderMode mode,
-        EventDebugInfo debugInfo) =>
-        mode switch
-        {
-            CvMarkdownRenderMode.Clean => string.Empty,
-            CvMarkdownRenderMode.Annotated => $"{ScoreAnnotation(debugInfo)} ",
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(mode),
-                mode,
-                "Unsupported Markdown render mode."),
-        };
-
-    private static string AnnotationPrefix(
-        CvMarkdownRenderMode mode,
-        SubEvent item) =>
-        mode switch
-        {
-            CvMarkdownRenderMode.Clean => string.Empty,
-            CvMarkdownRenderMode.Annotated => $"{ScoreAnnotation(item)} ",
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(mode),
-                mode,
-                "Unsupported Markdown render mode."),
-        };
+    private static FormattableString RenderAnnotatedSubItem(SubEvent item)
+    {
+        var content =
+            $"{FormatDiagnosticDetails(FormatBulletMetrics(item))}\n\n" +
+            item.Text.ToMarkdownString();
+        var listItem = "- " + IndentMultiline(
+            value: content,
+            indentation: "  ");
+        return $"{listItem}";
+    }
 
     private static FormattableString? RenderFooter(CvDataModel model)
     {
@@ -209,124 +271,128 @@ internal static class CvMarkdownRenderer
             : (FormattableString) $"{string.Join(" · ", links)}";
     }
 
-    private static string ScoreAnnotation(EventDebugInfo debugInfo)
+    private static string FormatEventMetrics(EventDebugInfo debugInfo)
     {
-        var annotations = new List<string>
+        var lines = new List<string>
         {
-            CodeSpan(
-                $"rank: {FormatScore(debugInfo.Score)}; " +
-                $"raw: {FormatScore(debugInfo.RawScore)}"),
+            $"rank: {FormatScore(debugInfo.Score)}",
+            $"raw: {FormatScore(debugInfo.RawScore)}",
         };
-        if (!debugInfo.RequirementCoverage.IsEmpty)
-        {
-            annotations.Add(CodeSpan(
-                $"coverage: {FormatCoverage(debugInfo.RequirementCoverage)}"));
-        }
-
-        if (!debugInfo.TagMatches.IsEmpty)
-        {
-            annotations.Add(CodeSpan(
-                $"matches: {FormatMatches(debugInfo.TagMatches)}"));
-        }
-
-        return string.Join(" ", annotations);
+        AppendCoverage(lines, debugInfo.RequirementCoverage);
+        AppendMatches(lines, debugInfo.TagMatches);
+        return string.Join("\n", lines);
     }
 
-    private static string ScoreAnnotation(SubEvent item)
+    private static string FormatBulletMetrics(SubEvent item)
     {
+        var lines = new List<string>();
         if (item.DebugMmrScoreBreakdown is not { } breakdown)
         {
-            return CodeSpan(
-                $"rank: {FormatScore(item.DebugScore)}; " +
-                $"raw: {FormatScore(item.DebugRawScore)}");
+            lines.Add($"rank: {FormatScore(item.DebugScore)}");
+            lines.Add($"raw: {FormatScore(item.DebugRawScore)}");
+        }
+        else
+        {
+            lines.Add($"rank: {FormatScore(breakdown.RawEquivalentRankScore)}");
+            lines.Add($"raw: {FormatScore(breakdown.RawRelevance)}");
+            lines.Add($"mmr: {FormatScore(breakdown.NormalizedMmrScore)}");
+            lines.Add("MMR terms:");
+            lines.Add(
+                $"  relevance: {FormatSignedScore(breakdown.WeightedRelevanceTerm)}");
+            lines.Add(
+                $"  similarity: {FormatSignedScore(-breakdown.WeightedSimilarityPenalty)}");
+            lines.Add(
+                $"  saturation: {FormatSignedScore(-breakdown.WeightedSaturationPenalty)}");
         }
 
-        var annotations = new List<string>
-        {
-            CodeSpan(
-                $"rank: {FormatScore(breakdown.RawEquivalentRankScore)}; " +
-                $"raw: {FormatScore(breakdown.RawRelevance)}; " +
-                $"mmr: {FormatScore(breakdown.NormalizedMmrScore)}"),
-            CodeSpan(
-                $"MMR terms: {FormatSignedScore(breakdown.WeightedRelevanceTerm)} relevance " +
-                $"{FormatSignedScore(-breakdown.WeightedSimilarityPenalty)} similarity " +
-                $"{FormatSignedScore(-breakdown.WeightedSaturationPenalty)} saturation"),
-        };
-        if (!item.DebugRequirementCoverage.IsEmpty)
-        {
-            annotations.Add(CodeSpan(
-                $"coverage: {FormatCoverage(item.DebugRequirementCoverage)}"));
-        }
-
-        if (!item.DebugTagMatches.IsEmpty)
-        {
-            annotations.Add(CodeSpan(
-                $"matches: {FormatMatches(item.DebugTagMatches)}"));
-        }
-
-        return string.Join(" ", annotations);
+        AppendCoverage(lines, item.DebugRequirementCoverage);
+        AppendMatches(lines, item.DebugTagMatches);
+        return string.Join("\n", lines);
     }
 
-    private static string FormatCoverage(
+    private static void AppendCoverage(
+        List<string> lines,
         ImmutableArray<DebugRequirementCoverage> coverage)
     {
-        return string.Join(
-            "; ",
-            coverage.Select(x =>
-                $"{FormatRequirementLabel(x.Requirement)}={FormatScore(x.Score)}"));
-    }
-
-    private static string FormatMatches(
-        ImmutableArray<DebugTagMatch> matches)
-    {
-        return string.Join(
-            "; ",
-            matches.Select(match =>
-            {
-                var value =
-                    $"{match.TargetTag.Name}={FormatScore(match.RawContribution)}";
-                if (match.Origins.IsEmpty)
-                {
-                    return value;
-                }
-
-                return value
-                       + " via "
-                       + string.Join(
-                           ", ",
-                           match.Origins.Select(origin =>
-                               $"{origin.Requirement.CanonicalTag.Name}=" +
-                               $"{FormatScore(origin.Contribution)}"));
-            }));
-    }
-
-    private static string FormatRequirementLabel(RequiredTagGroup requirement)
-    {
-        var configuredNames = requirement.ConfiguredTags
-            .Select(x => x.Tag.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (configuredNames.Length == 1
-            && string.Equals(
-                configuredNames[0],
-                requirement.CanonicalTag.Name,
-                StringComparison.OrdinalIgnoreCase))
+        if (coverage.IsEmpty)
         {
-            return requirement.CanonicalTag.Name;
+            return;
         }
 
-        return requirement.CanonicalTag.Name
-               + " [configured: "
-               + string.Join(", ", configuredNames)
-               + "]";
+        lines.Add("coverage:");
+        lines.AddRange(coverage.Select(x =>
+            $"  {FormatRequirementLabel(x.Requirement)}: {FormatScore(x.Score)}"));
     }
 
-    private static string CodeSpan(string value)
+    private static void AppendMatches(
+        List<string> lines,
+        ImmutableArray<DebugTagMatch> matches)
     {
-        var output = new StringBuilder(value.Length + 2);
-        MarkdownConverter.AppendMarkdownCodeSpan(output, value);
-        return output.ToString();
+        if (matches.IsEmpty)
+        {
+            return;
+        }
+
+        lines.Add("matches:");
+        foreach (var match in matches)
+        {
+            lines.Add($"  {match.TargetTag.Name}:");
+            lines.Add(
+                $"    raw contribution: {FormatScore(match.RawContribution)}");
+            if (match.Origins.IsEmpty)
+            {
+                continue;
+            }
+
+            var bestContribution = match.Origins.Max(static x => x.Contribution);
+            var bestOrigins = match.Origins
+                .Where(x => x.Contribution == bestContribution)
+                .ToImmutableArray();
+            var additionalOrigins = match.Origins
+                .Where(x => x.Contribution != bestContribution)
+                .ToImmutableArray();
+
+            lines.Add(bestOrigins.Length == 1
+                ? "    best requirement:"
+                : "    best requirements:");
+            lines.AddRange(bestOrigins.Select(origin =>
+                $"      {FormatRequirementLabel(origin.Requirement)}: " +
+                FormatScore(origin.Contribution)));
+
+            if (!additionalOrigins.IsEmpty)
+            {
+                lines.Add("    additional requirement coverage:");
+                lines.AddRange(additionalOrigins.Select(origin =>
+                    $"      {FormatRequirementLabel(origin.Requirement)}: " +
+                    FormatScore(origin.Contribution)));
+            }
+        }
     }
+
+    private static string FormatFencedBlock(string contents) =>
+        $"```text\n{contents}\n```";
+
+    private static string FormatDiagnosticDetails(string contents) =>
+        $"<details>\n<summary>Diagnostics</summary>\n\n" +
+        $"{FormatFencedBlock(contents)}\n</details>";
+
+    private static string IndentMultiline(
+        string value,
+        string indentation)
+    {
+        var lines = value
+            .ReplaceLineEndings("\n")
+            .Split('\n');
+        return string.Join(
+            "\n",
+            lines.Select((line, index) =>
+                index == 0 || line.Length == 0
+                    ? line
+                    : indentation + line));
+    }
+
+    private static string FormatRequirementLabel(RequiredTagGroup requirement) =>
+        requirement.ConfiguredTags[0].Tag.Name;
 
     private static string FormatScore(float value) =>
         value.ToString("0.###", CultureInfo.InvariantCulture);

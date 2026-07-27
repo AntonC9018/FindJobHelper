@@ -27,7 +27,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("first", (tag, 10)),
                 Item("second", (tag, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
         var budget = Assert.Single(result.Diagnostics.Budgets);
 
         Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
@@ -69,7 +69,7 @@ public sealed class ExperienceSearchTests
                 2024,
                 Item("project-a", (tagA, 9)),
                 Item("project-b", (tagB, 5))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "work-a" }, Texts(result.Get(WorkKey)));
         Assert.Equal(new[] { "project-b" }, Texts(result.Get(ProjectKey)));
@@ -114,7 +114,7 @@ public sealed class ExperienceSearchTests
                 2024,
                 Item("project-b", (tagB, 9)),
                 Item("project-c", (tagC, 8))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "work-a" }, Texts(result.Get(WorkKey)));
         Assert.Equal(
@@ -151,7 +151,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("first", (tagA, 10)),
                 Item("second", (tagB, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
         var budget = Assert.Single(result.Diagnostics.Budgets);
@@ -181,7 +181,7 @@ public sealed class ExperienceSearchTests
         var result = builder.Build().Run([
             Experience("first", ExperienceType.Job, 2025, Item("first", (tagA, 10))),
             Experience("second", ExperienceType.Job, 2024, Item("second", (tagB, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
     }
@@ -218,7 +218,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Project,
                 2024,
                 Item("weak", (tag, 1))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             new[] { "strongest", "second strongest" },
@@ -248,7 +248,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("seed", (tag, 10)),
                 Item("skipped", (tag, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "seed" }, Texts(result.Get(WorkKey)));
     }
@@ -275,7 +275,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("seed", (tag, 10)),
                 Item("negative", (tag, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "seed" }, Texts(result.Get(WorkKey)));
         var budget = Assert.Single(result.Diagnostics.Budgets);
@@ -310,7 +310,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("seed", (tag, 10)),
                 Item("minimum", (tag, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "seed", "minimum" }, Texts(result.Get(WorkKey)));
     }
@@ -343,7 +343,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("seed", (tag, 10)),
                 Item("rejected", (tag, 4))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "seed" }, Texts(result.Get(WorkKey)));
         var budget = Assert.Single(result.Diagnostics.Budgets);
@@ -398,7 +398,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("seed", (tag, 10)),
                 Item("minimum", (tag, 9))),
-        ]).Get(WorkKey);
+        ], NoOpProgressReporter.Instance).Get(WorkKey);
 
         Assert.Equal(new[] { "seed", "minimum" }, Texts(result));
     }
@@ -418,7 +418,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("first", (tag, 10)),
                 Item("second", (tag, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
         var budget = Assert.Single(result.Diagnostics.Budgets);
 
         Assert.Equal(new[] { "first", "second" }, Texts(result.Get(WorkKey)));
@@ -461,7 +461,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Project,
                 2024,
                 Item("project-a", (tag, 5))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "work-a" }, Texts(result.Get(WorkKey)));
         Assert.Empty(result.Get(ProjectKey));
@@ -497,7 +497,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Job,
                 2025,
                 sourceItem),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var @event = Assert.Single(result.Get(WorkKey));
         var subItem = Assert.Single(@event.SubItems);
@@ -546,7 +546,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("first", (tag, 10)),
                 Item("second", (tag, 9))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var subItems = Assert.Single(result.Get(WorkKey)).SubItems;
         Assert.Equal(2, subItems.Length);
@@ -606,7 +606,7 @@ public sealed class ExperienceSearchTests
                     options.TotalItemBudget = 3;
                     options.RecencyBoost = recencyBoost;
                 });
-            return builder.Build().Run([older, newer]);
+            return builder.Build().Run([older, newer], NoOpProgressReporter.Instance);
         }
     }
 
@@ -632,7 +632,7 @@ public sealed class ExperienceSearchTests
             Experience("oldest", ExperienceType.Job, 2019, Item("oldest", (tag, 10))),
             Experience("middle", ExperienceType.Job, 2024, Item("middle", (tag, 10))),
             Experience("newest", ExperienceType.Job, 2029, Item("newest", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var oldest = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "oldest");
         var middle = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "middle");
@@ -664,7 +664,7 @@ public sealed class ExperienceSearchTests
         var result = builder.Build().Run([
             Experience("first", ExperienceType.Job, 2024, Item("first", (tag, 10))),
             Experience("second", ExperienceType.Job, 2024, Item("second", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.All(result.Diagnostics.Items, item => Assert.Equal(10, item.DebugScore));
     }
@@ -687,7 +687,7 @@ public sealed class ExperienceSearchTests
         var result = builder.Build().Run([
             Experience("older", ExperienceType.Job, 2019, Item("eligible", (tag, 5))),
             Experience("newer", ExperienceType.Job, 2024, Item("below threshold", (tag, 4))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "eligible" }, Texts(result.Get(WorkKey)));
         Assert.Equal(5, Assert.Single(result.Diagnostics.Items).DebugScore);
@@ -724,7 +724,7 @@ public sealed class ExperienceSearchTests
             Experience("new work", ExperienceType.Job, 2009, Item("new work", (tag, 10))),
             Experience("old project", ExperienceType.Project, 2019, Item("old project", (tag, 10))),
             Experience("new project", ExperienceType.Project, 2020, Item("new project", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             10,
@@ -772,7 +772,8 @@ public sealed class ExperienceSearchTests
                     DateRange.Ongoing(new(2024, 6)),
                     Item("ongoing", (tag, 10))),
             ],
-            new DateOnly(2025, 7, 1));
+            new DateOnly(2025, 7, 1),
+            NoOpProgressReporter.Instance);
 
         Assert.Equal(
             10,
@@ -803,7 +804,7 @@ public sealed class ExperienceSearchTests
         var result = builder.Build().Run([
             Experience("older", ExperienceType.Job, 2019, Item("older", (tag, 10))),
             Experience("newer", ExperienceType.Job, 2024, Item("newer", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             15,
@@ -873,7 +874,7 @@ public sealed class ExperienceSearchTests
             olderMatchedJob,
             unmatchedProject,
             newestUnmatchedJob,
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var work = result.Get(WorkKey);
         Assert.Equal(
@@ -911,7 +912,7 @@ public sealed class ExperienceSearchTests
 
         var result = builder.Build().Run([
             Experience("work", ExperienceType.Job, 2025, Item("point", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var work = Assert.Single(result.Get(WorkKey));
         Assert.Empty(work.SubItems);
@@ -942,7 +943,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Job,
                 2025,
                 Item("work-a", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Empty(result.Get(ProjectKey));
     }
@@ -959,7 +960,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Project,
             opts => opts.TotalItemBudget = 1);
 
-        var result = builder.Build().Run([]);
+        var result = builder.Build().Run([], NoOpProgressReporter.Instance);
 
         Assert.Throws<KeyNotFoundException>(() => result.Get(new("Missing")));
     }
@@ -999,7 +1000,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Job,
                 2025,
                 Item("work-a", (tag, 10))),
-        ]));
+        ], NoOpProgressReporter.Instance));
 
         Assert.Contains(WorkKey.Value, exception.Message);
         Assert.Contains(ProjectKey.Value, exception.Message);
@@ -1030,7 +1031,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 dependent,
                 dependency),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
         Assert.Equal(
@@ -1063,7 +1064,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 dependent,
                 dependency),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
     }
@@ -1089,7 +1090,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 dependent,
                 dependency),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var budget = Assert.Single(result.Diagnostics.Budgets);
         Assert.Equal(0, budget.RequestedMinimum);
@@ -1122,7 +1123,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Job,
                 2024,
                 RequiredItem("other-list conditional", ItemRequirement.IfAny)),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var events = result.Get(WorkKey);
         Assert.Equal("matched", Assert.Single(events).Title.Value);
@@ -1153,7 +1154,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Job,
                 2025,
                 RequiredItem("conditional", ItemRequirement.IfAny)),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Empty(Assert.Single(result.Get(WorkKey)).SubItems);
         Assert.Empty(result.Diagnostics.Items);
@@ -1180,7 +1181,7 @@ public sealed class ExperienceSearchTests
                     "conditional match",
                     ItemRequirement.IfAny,
                     (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "conditional match" }, Texts(result.Get(WorkKey)));
         Assert.Equal(
@@ -1212,7 +1213,7 @@ public sealed class ExperienceSearchTests
                 RequiredItem(
                     "unmatched conditional",
                     ItemRequirement.IfAny)),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             new[] { "matched conditional", "unmatched conditional" },
@@ -1261,7 +1262,7 @@ public sealed class ExperienceSearchTests
                 first,
                 second,
                 Item("selected", (tag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         var texts = Texts(result.Get(WorkKey));
         Assert.Equal(4, texts.Length);
@@ -1304,7 +1305,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 RequiredItem("always", ItemRequirement.Always),
                 RequiredItem("conditional", ItemRequirement.IfAny)),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             new[] { "always", "conditional" },
@@ -1341,7 +1342,7 @@ public sealed class ExperienceSearchTests
                 ExperienceType.Job,
                 2025,
                 RequiredItem("always", ItemRequirement.Always)),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Empty(result.Get(WorkKey));
     }
@@ -1366,7 +1367,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 Item("selected", (matchingTag, 10)),
                 Item("ordinary thesis tag", (thesisTag, 10))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "selected" }, Texts(result.Get(WorkKey)));
     }
@@ -1400,7 +1401,7 @@ public sealed class ExperienceSearchTests
                     (repeatedTag, 10)),
                 Item("redundant", (repeatedTag, 9)),
                 Item("diverse", (diverseTag, 5))),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             new[] { "always", "diverse" },
@@ -1431,7 +1432,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 first,
                 second),
-        ]));
+        ], NoOpProgressReporter.Instance));
         Assert.Contains("Cycle detected in DependsOn", exception.Message);
     }
 
@@ -1458,7 +1459,7 @@ public sealed class ExperienceSearchTests
                 first,
                 second,
                 dependency),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(
             new[] { "dependency", "first", "second" },
@@ -1490,7 +1491,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 dependency,
                 dependent),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "dependency", "dependent" }, Texts(result.Get(WorkKey)));
     }
@@ -1516,7 +1517,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 ordered,
                 predecessor),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "ordered" }, Texts(result.Get(WorkKey)));
         Assert.Equal(SelectionItemReason.Direct, Assert.Single(result.Diagnostics.Items).Reason);
@@ -1544,7 +1545,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 ordered,
                 predecessor),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "predecessor", "ordered" }, Texts(result.Get(WorkKey)));
         Assert.All(
@@ -1575,7 +1576,7 @@ public sealed class ExperienceSearchTests
                 third,
                 second,
                 first),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "first", "second", "third" }, Texts(result.Get(WorkKey)));
     }
@@ -1607,7 +1608,7 @@ public sealed class ExperienceSearchTests
                 first,
                 second,
                 third),
-        ]);
+        ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "third", "first" }, Texts(result.Get(WorkKey)));
     }
@@ -1635,7 +1636,7 @@ public sealed class ExperienceSearchTests
                 2025,
                 first,
                 second),
-        ]));
+        ], NoOpProgressReporter.Instance));
 
         Assert.Contains("Cycle detected in ordering relationships", exception.Message);
     }
@@ -1663,9 +1664,138 @@ public sealed class ExperienceSearchTests
                 2025,
                 first,
                 second),
-        ]));
+        ], NoOpProgressReporter.Instance));
 
         Assert.Contains("Cycle detected in ordering relationships", exception.Message);
+    }
+
+    [Fact]
+    public void Search_ReportsScoringSelectionRequiredDependenciesAndAssembly()
+    {
+        var tag = new Tag("match");
+        var dependency = Item("dependency");
+        var candidate = ItemDependingOn(
+            "candidate",
+            [dependency],
+            (tag, 10));
+        var required = RequiredItem(
+            "required",
+            ItemRequirement.IfAny);
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(
+            WorkKey,
+            e => e.Type == ExperienceType.Job,
+            options => options.TotalItemBudget = 3);
+        var progress = new ProgressTestReporter();
+
+        var result = builder.Build().Run(
+            [
+                Experience(
+                    "work",
+                    ExperienceType.Job,
+                    2025,
+                    candidate,
+                    dependency,
+                    required),
+            ],
+            progress);
+
+        Assert.Equal(
+            new[] { "candidate", "dependency", "required" },
+            Texts(result.Get(WorkKey)).Order().ToArray());
+        Assert.Equal(new ProgressReport(7, 7, "Matching experiences"), progress.Last);
+        Assert.Contains(
+            progress.Reports,
+            static report => report.Detail?.Contains(
+                "scanned and scored",
+                StringComparison.Ordinal) == true);
+        Assert.Contains(
+            progress.Reports,
+            static report => report.Detail?.Contains(
+                "required or dependent",
+                StringComparison.Ordinal) == true);
+        Assert.Contains(
+            progress.Reports,
+            static report => report.Detail?.Contains(
+                "candidate selected",
+                StringComparison.Ordinal) == true);
+        Assert.True(IsMonotonic(progress.Reports));
+    }
+
+    [Fact]
+    public void Search_NoCandidatesAndRejectedCandidates_StillCompleteRealWork()
+    {
+        var tag = new Tag("match");
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            options =>
+            {
+                options.TotalItemBudget = 1;
+                options.ScoreLowerBound = 20;
+            });
+        var rejectedProgress = new ProgressTestReporter();
+
+        _ = builder.Build().Run(
+            [
+                Experience(
+                    "work",
+                    ExperienceType.Job,
+                    2025,
+                    Item("below threshold", (tag, 10))),
+            ],
+            rejectedProgress);
+
+        Assert.Equal(3, rejectedProgress.Last.CompletedWorkUnits);
+        Assert.Equal(3, rejectedProgress.Last.TotalWorkUnits);
+        Assert.Contains(
+            rejectedProgress.Reports,
+            static report => report.Detail?.Contains(
+                "rejected by score",
+                StringComparison.Ordinal) == true);
+
+        var emptyProgress = new ProgressTestReporter();
+        _ = builder.Build().Run([], emptyProgress);
+        Assert.Equal(new ProgressReport(1, 1, "Matching experiences"), emptyProgress.Last);
+    }
+
+    [Fact]
+    public void Search_RealAndNoOpProgressProduceIdenticalResults()
+    {
+        var tag = new Tag("match");
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            options => options.TotalItemBudget = 1);
+        var search = builder.Build();
+        var experiences = new[]
+        {
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                Item("first", (tag, 10)),
+                Item("second", (tag, 9))),
+        };
+
+        var withProgress = search.Run(
+            experiences,
+            new ProgressTestReporter());
+        var withNoOp = search.Run(
+            experiences,
+            NoOpProgressReporter.Instance);
+
+        Assert.Equal(
+            Texts(withNoOp.Get(WorkKey)),
+            Texts(withProgress.Get(WorkKey)));
+        Assert.Equal(
+            withNoOp.Diagnostics.Items.Select(static item => item.DebugScore),
+            withProgress.Diagnostics.Items.Select(static item => item.DebugScore));
+        Assert.Equal(
+            withNoOp.Diagnostics.Items.Select(static item => item.Reason),
+            withProgress.Diagnostics.Items.Select(static item => item.Reason));
     }
 
     private static SearchBuilder NewBuilder(WeightedTags tags)
@@ -1681,6 +1811,22 @@ public sealed class ExperienceSearchTests
             .SelectMany(e => e.SubItems)
             .Select(x => x.Text.ToString()!)
             .ToArray();
+    }
+
+    private static bool IsMonotonic(
+        IReadOnlyList<ProgressReport> reports)
+    {
+        double previous = 0;
+        foreach (var report in reports)
+        {
+            var current = ProgressMath.Fraction(report);
+            if (current < previous)
+            {
+                return false;
+            }
+            previous = current;
+        }
+        return true;
     }
 
     private static ExperienceList Experience(

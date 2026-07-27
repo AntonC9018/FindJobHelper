@@ -154,7 +154,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             eventBaseHeight: 5,
             sectionStartHeight: 5);
 
-        var result = WorkSearch(tag, maximum: 1).Run(database, policy);
+        var result = WorkSearch(tag, maximum: 1).Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(
             new[] { "later fit" },
@@ -182,7 +182,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             eventBaseHeight: 30,
             sectionStartHeight: 0);
 
-        _ = WorkSearch(tag, maximum: 0).Run(database, policy);
+        _ = WorkSearch(tag, maximum: 0).Run(database, policy, NoOpProgressReporter.Instance);
         var exception = Assert.Throws<CvPageLayoutUnderfillException>(
             policy.RequireCompletePageLayout);
 
@@ -212,7 +212,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             eventBaseHeight: 60,
             sectionStartHeight: 5);
 
-        _ = WorkSearch(tag, maximum: 0).Run(database, policy);
+        _ = WorkSearch(tag, maximum: 0).Run(database, policy, NoOpProgressReporter.Instance);
 
         policy.RequireCompletePageLayout();
     }
@@ -238,7 +238,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             eventBaseHeight: 30,
             sectionStartHeight: 5);
 
-        _ = WorkAndProjectSearch(tag).Run(database, policy);
+        _ = WorkAndProjectSearch(tag).Run(database, policy, NoOpProgressReporter.Instance);
 
         policy.RequireCompletePageLayout();
     }
@@ -263,7 +263,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             eventBaseHeight: 30,
             sectionStartHeight: 5);
 
-        _ = WorkSearch(tag, maximum: 0).Run(database, policy);
+        _ = WorkSearch(tag, maximum: 0).Run(database, policy, NoOpProgressReporter.Instance);
         var exception = Assert.Throws<CvPageLayoutUnderfillException>(
             policy.RequireCompletePageLayout);
 

@@ -25,7 +25,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [40, 10],
             (WorkKey, Section.WorkExperience));
 
-        var result = search.Run(database, policy);
+        var result = search.Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "short" }, Texts(result.Get(WorkKey)));
         Assert.Equal(30, policy.CurrentHeight.ScaledPoints);
@@ -61,7 +61,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [10, 11, 10],
             (WorkKey, Section.WorkExperience));
 
-        var result = builder.Build().Run(database, policy);
+        var result = builder.Build().Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "seed", "fitting" }, Texts(result.Get(WorkKey)));
         Assert.DoesNotContain("taller", Texts(result.Get(WorkKey)));
@@ -91,7 +91,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [itemHeight],
             (WorkKey, Section.WorkExperience));
 
-        var result = search.Run(database, policy);
+        var result = search.Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(expectedSelected, !result.Get(WorkKey).IsEmpty);
     }
@@ -112,7 +112,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [25, 10, 5],
             (WorkKey, Section.WorkExperience));
 
-        var result = search.Run(database, policy);
+        var result = search.Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "fallback" }, Texts(result.Get(WorkKey)));
     }
@@ -146,7 +146,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [10, 20, 5],
             (WorkKey, Section.WorkExperience));
 
-        var result = search.Run(database, policy);
+        var result = search.Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "fallback" }, Texts(result.Get(WorkKey)));
     }
@@ -173,7 +173,7 @@ public sealed class PageHeightSelectionTests
             (WorkKey, Section.WorkExperience));
 
         var exception = Assert.Throws<RequiredExperienceItemLayoutException>(() =>
-            search.Run(database, policy));
+            search.Run(database, policy, NoOpProgressReporter.Instance));
 
         Assert.Equal("required work", exception.ExperienceTitle);
         Assert.Equal("always", exception.ItemText);
@@ -201,7 +201,7 @@ public sealed class PageHeightSelectionTests
             (WorkKey, Section.WorkExperience),
             (ProjectsKey, Section.PersonalProjects));
 
-        var result = search.Run(database, policy);
+        var result = search.Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "minimum" }, Texts(result.Get(WorkKey)));
         Assert.Empty(result.Get(ProjectsKey));
@@ -221,7 +221,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [10, 10],
             (WorkKey, Section.WorkExperience));
 
-        var result = search.Run(database, policy);
+        var result = search.Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "newest", "older" }, result.Get(WorkKey).Select(static item => item.Title.Value));
         Assert.All(result.Get(WorkKey), static item => Assert.Empty(item.SubItems));
@@ -239,7 +239,7 @@ public sealed class PageHeightSelectionTests
             itemHeights: [10],
             (WorkKey, Section.WorkExperience));
 
-        var result = RequiredWorkHeadingsSearch(tag, maximum: 0).Run(database, policy);
+        var result = RequiredWorkHeadingsSearch(tag, maximum: 0).Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Empty(Assert.Single(result.Get(WorkKey)).SubItems);
         Assert.Equal(20, policy.CurrentHeight.ScaledPoints);
@@ -257,7 +257,7 @@ public sealed class PageHeightSelectionTests
             (WorkKey, Section.WorkExperience));
 
         var exception = Assert.Throws<RequiredExperienceHeadingLayoutException>(() =>
-            RequiredWorkHeadingsSearch(tag, maximum: 0).Run(database, policy));
+            RequiredWorkHeadingsSearch(tag, maximum: 0).Run(database, policy, NoOpProgressReporter.Instance));
 
         Assert.Contains("required job", exception.Message, StringComparison.Ordinal);
         Assert.Contains("one-page", exception.Message, StringComparison.Ordinal);
@@ -276,7 +276,7 @@ public sealed class PageHeightSelectionTests
             chromeHeights: [8],
             (WorkKey, Section.WorkExperience));
 
-        var result = RequiredWorkHeadingsSearch(tag, maximum: 1).Run(database, policy);
+        var result = RequiredWorkHeadingsSearch(tag, maximum: 1).Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "point" }, Texts(result.Get(WorkKey)));
         Assert.Equal(33, policy.CurrentHeight.ScaledPoints);
@@ -373,7 +373,7 @@ public sealed class PageHeightSelectionTests
             pageCount: CvPageCount.Exact(2),
             groups);
 
-        var result = SearchWithRequiredHeadings(tag).Run(database, policy);
+        var result = SearchWithRequiredHeadings(tag).Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.DoesNotContain("too tall", Texts(result.Get(WorkKey)));
         Assert.Equal(new[] { "later fit" }, Texts(result.Get(ProjectsKey)));
@@ -405,7 +405,7 @@ public sealed class PageHeightSelectionTests
             pageCount: CvPageCount.Unrestricted,
             groups);
 
-        var result = SearchWithRequiredHeadings(tag).Run(database, policy);
+        var result = SearchWithRequiredHeadings(tag).Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "third-page trigger" }, Texts(result.Get(WorkKey)));
         Assert.Equal(new[] { "also selected" }, Texts(result.Get(ProjectsKey)));
@@ -429,7 +429,7 @@ public sealed class PageHeightSelectionTests
             pageCount: CvPageCount.Unrestricted,
             [(WorkKey, Section.WorkExperience)]);
 
-        var result = Search(tag, (WorkKey, ExperienceType.Job, 0, 1)).Run(database, policy);
+        var result = Search(tag, (WorkKey, ExperienceType.Job, 0, 1)).Run(database, policy, NoOpProgressReporter.Instance);
 
         Assert.Empty(result.Get(WorkKey));
         Assert.Equal(1, policy.PredictedPageCount);
@@ -451,7 +451,7 @@ public sealed class PageHeightSelectionTests
             freshChromeHeight: 10,
             pageCount: CvPageCount.Exact(2),
             [(WorkKey, Section.WorkExperience)]);
-        _ = Search(tag, (WorkKey, ExperienceType.Job, 0, 1)).Run(database, policy);
+        _ = Search(tag, (WorkKey, ExperienceType.Job, 0, 1)).Run(database, policy, NoOpProgressReporter.Instance);
 
         var exception = Assert.Throws<PredictedPageCountMismatchException>(
             policy.RequireExactPageCount);

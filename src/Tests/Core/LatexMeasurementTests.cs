@@ -372,9 +372,21 @@ public sealed class LatexMeasurementTests
         var model = CreateEmptyModel();
         var runner = new RecordingRunner();
         var service = new LatexMeasurementService(fixture.CachePath, runner, ruleVersion: 17);
+        var coldProgress = new ProgressTestReporter();
+        var warmProgress = new ProgressTestReporter();
 
-        var cold = await service.MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None);
-        var warm = await service.MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None);
+        var cold = await service.MeasureAsync(
+            database,
+            model,
+            fixture.TemplatePath,
+            coldProgress,
+            CancellationToken.None);
+        var warm = await service.MeasureAsync(
+            database,
+            model,
+            fixture.TemplatePath,
+            warmProgress,
+            CancellationToken.None);
 
         Assert.Equal(1, runner.CallCount);
         Assert.Single(runner.Batches[0].Where(static request => request.CacheKey.Kind == LatexMeasurementKind.ExperienceItem));
@@ -391,6 +403,20 @@ public sealed class LatexMeasurementTests
         Assert.Equal(cold.DocumentHeader, warm.DocumentHeader);
         Assert.Equal(cold.DocumentFooter, warm.DocumentFooter);
         Assert.Equal(cold.ExperienceItems, warm.ExperienceItems);
+        var expectedWorkUnits = service.GetWorkUnitCount(database, model);
+        Assert.Equal(
+            new ProgressReport(
+                expectedWorkUnits,
+                expectedWorkUnits,
+                "Computing heights"),
+            coldProgress.Last);
+        Assert.Equal(
+            coldProgress.Last.CompletedWorkUnits,
+            warmProgress.Last.CompletedWorkUnits);
+        Assert.Equal(
+            expectedWorkUnits - 1,
+            warmProgress.Reports.Count(static report =>
+                report.Detail == "Computing heights — cached measurement"));
         Assert.Equal(cold.ExperienceHeadings, warm.ExperienceHeadings);
         Assert.Equal(cold.ExperienceChrome, warm.ExperienceChrome);
         Assert.Equal(cold.CurrentPageCompleteSections, warm.CurrentPageCompleteSections);
@@ -414,6 +440,7 @@ public sealed class LatexMeasurementTests
             database,
             model,
             fixture.TemplatePath,
+            NoOpProgressReporter.Instance,
             CancellationToken.None);
 
         Assert.Equal(
@@ -449,11 +476,11 @@ public sealed class LatexMeasurementTests
         var model = CreateEmptyModel();
         var firstRunner = new RecordingRunner();
         await new LatexMeasurementService(fixture.CachePath, firstRunner, 1)
-            .MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None);
+            .MeasureAsync(database, model, fixture.TemplatePath, NoOpProgressReporter.Instance, CancellationToken.None);
         var secondRunner = new RecordingRunner();
 
         await new LatexMeasurementService(fixture.CachePath, secondRunner, 2)
-            .MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None);
+            .MeasureAsync(database, model, fixture.TemplatePath, NoOpProgressReporter.Instance, CancellationToken.None);
 
         Assert.Equal(1, firstRunner.CallCount);
         Assert.Equal(1, secondRunner.CallCount);
@@ -467,14 +494,14 @@ public sealed class LatexMeasurementTests
         var model = CreateEmptyModel();
         var firstDatabase = CreateDatabase(CreateRichText(new PlainText { Text = "first" }));
         await new LatexMeasurementService(fixture.CachePath, new RecordingRunner(), 1)
-            .MeasureAsync(firstDatabase, model, fixture.TemplatePath, CancellationToken.None);
+            .MeasureAsync(firstDatabase, model, fixture.TemplatePath, NoOpProgressReporter.Instance, CancellationToken.None);
         var expandedDatabase = CreateDatabase(
             CreateRichText(new PlainText { Text = "first" }),
             CreateRichText(new PlainText { Text = "new" }));
         var partialRunner = new RecordingRunner();
 
         await new LatexMeasurementService(fixture.CachePath, partialRunner, 1)
-            .MeasureAsync(expandedDatabase, model, fixture.TemplatePath, CancellationToken.None);
+            .MeasureAsync(expandedDatabase, model, fixture.TemplatePath, NoOpProgressReporter.Instance, CancellationToken.None);
 
         var request = Assert.Single(Assert.Single(partialRunner.Batches));
         Assert.Equal(LatexMeasurementKind.ExperienceItem, request.CacheKey.Kind);
@@ -487,15 +514,24 @@ public sealed class LatexMeasurementTests
         var database = CreateDatabase(CreateRichText(new PlainText { Text = "item" }));
         var model = CreateEmptyModel();
         var failing = new ThrowingRunner();
+        var failedProgress = new ProgressTestReporter();
         await Assert.ThrowsAsync<CvMeasurementException>(() =>
             new LatexMeasurementService(fixture.CachePath, failing, 1)
-                .MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None));
+                .MeasureAsync(
+                    database,
+                    model,
+                    fixture.TemplatePath,
+                    failedProgress,
+                    CancellationToken.None));
         var retry = new RecordingRunner();
 
         await new LatexMeasurementService(fixture.CachePath, retry, 1)
-            .MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None);
+            .MeasureAsync(database, model, fixture.TemplatePath, NoOpProgressReporter.Instance, CancellationToken.None);
 
         Assert.Equal(failing.RequestCount, Assert.Single(retry.Batches).Count);
+        Assert.True(
+            failedProgress.Last.CompletedWorkUnits
+            < failedProgress.Last.TotalWorkUnits);
     }
 
     [Fact]
@@ -506,15 +542,24 @@ public sealed class LatexMeasurementTests
         var model = CreateEmptyModel();
         using var cancellation = new CancellationTokenSource();
         var cancellingRunner = new CancellingRunner(cancellation);
+        var cancelledProgress = new ProgressTestReporter();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             new LatexMeasurementService(fixture.CachePath, cancellingRunner, 1)
-                .MeasureAsync(database, model, fixture.TemplatePath, cancellation.Token));
+                .MeasureAsync(
+                    database,
+                    model,
+                    fixture.TemplatePath,
+                    cancelledProgress,
+                    cancellation.Token));
         var retry = new RecordingRunner();
 
         await new LatexMeasurementService(fixture.CachePath, retry, 1)
-            .MeasureAsync(database, model, fixture.TemplatePath, CancellationToken.None);
+            .MeasureAsync(database, model, fixture.TemplatePath, NoOpProgressReporter.Instance, CancellationToken.None);
 
         Assert.Equal(cancellingRunner.RequestCount, Assert.Single(retry.Batches).Count);
+        Assert.True(
+            cancelledProgress.Last.CompletedWorkUnits
+            < cancelledProgress.Last.TotalWorkUnits);
     }
 
     [Fact]
@@ -536,9 +581,9 @@ public sealed class LatexMeasurementTests
             .ToArray();
         var runner = new XeLatexMeasurementRunner();
 
-        var batch = await runner.MeasureAsync(templatePath, requests, CancellationToken.None);
-        var reversed = await runner.MeasureAsync(templatePath, requests.Reverse().ToArray(), CancellationToken.None);
-        var alone = await runner.MeasureAsync(templatePath, [requests[0]], CancellationToken.None);
+        var batch = await runner.MeasureAsync(templatePath, requests, NoOpProgressReporter.Instance, CancellationToken.None);
+        var reversed = await runner.MeasureAsync(templatePath, requests.Reverse().ToArray(), NoOpProgressReporter.Instance, CancellationToken.None);
+        var alone = await runner.MeasureAsync(templatePath, [requests[0]], NoOpProgressReporter.Instance, CancellationToken.None);
 
         foreach (var request in requests)
         {
@@ -648,7 +693,7 @@ public sealed class LatexMeasurementTests
         };
         var runner = new XeLatexMeasurementRunner();
 
-        var measured = await runner.MeasureAsync(ProductionTemplatePath, requests, CancellationToken.None);
+        var measured = await runner.MeasureAsync(ProductionTemplatePath, requests, NoOpProgressReporter.Instance, CancellationToken.None);
 
         var eventComponents = measured[new(1)].ScaledPoints
             + measured[new(2)].ScaledPoints
@@ -715,6 +760,8 @@ public sealed class LatexMeasurementTests
         {
             var shortModel = CreateEmptyModel();
             shortModel.SectionOrder = [];
+            var shortTexProgress = new ProgressTestReporter();
+            var shortPdfProgress = new ProgressTestReporter();
             await CvTemplate.Generate(new()
             {
                 ConfigFilePath = ProductionTemplatePath,
@@ -722,7 +769,7 @@ public sealed class LatexMeasurementTests
                 Model = shortModel,
                 CancellationToken = CancellationToken.None,
                 PageCount = CvPageCount.OnePage,
-            });
+            }, new(shortTexProgress, shortPdfProgress));
 
             var twoPageModel = CreateEmptyModel();
             twoPageModel.SectionOrder =
@@ -732,6 +779,8 @@ public sealed class LatexMeasurementTests
             ];
             twoPageModel.WorkExperiences = CreateRenderedEvents("Work", 12);
             twoPageModel.PersonalProjects = CreateRenderedEvents("Project", 12);
+            var twoPageTexProgress = new ProgressTestReporter();
+            var twoPagePdfProgress = new ProgressTestReporter();
             await CvTemplate.Generate(new()
             {
                 ConfigFilePath = ProductionTemplatePath,
@@ -739,10 +788,20 @@ public sealed class LatexMeasurementTests
                 Model = twoPageModel,
                 CancellationToken = CancellationToken.None,
                 PageCount = CvPageCount.Exact(2),
-            });
+            }, new(twoPageTexProgress, twoPagePdfProgress));
 
             Assert.Equal(1, ReadPageCount(shortDirectory));
             Assert.Equal(2, ReadPageCount(twoPageDirectory));
+            AssertExpectedPdfProgress(shortPdfProgress);
+            AssertExpectedPdfProgress(twoPagePdfProgress);
+            AssertExpectedLatexmkPasses(shortDirectory);
+            AssertExpectedLatexmkPasses(twoPageDirectory);
+            Assert.Equal(
+                shortTexProgress.Last.TotalWorkUnits,
+                shortTexProgress.Last.CompletedWorkUnits);
+            Assert.Equal(
+                twoPageTexProgress.Last.TotalWorkUnits,
+                twoPageTexProgress.Last.CompletedWorkUnits);
             Assert.Empty(await ReadPdfFooters(shortDirectory));
 
             var twoPageFooters = await ReadPdfFooters(twoPageDirectory);
@@ -786,6 +845,8 @@ public sealed class LatexMeasurementTests
                 new(4, 4, [Section.PersonalProjects]),
             ]);
             model.SectionOrder = layout.SectionOrder;
+            var texProgress = new ProgressTestReporter();
+            var pdfProgress = new ProgressTestReporter();
 
             await CvTemplate.Generate(new()
             {
@@ -795,9 +856,14 @@ public sealed class LatexMeasurementTests
                 CancellationToken = CancellationToken.None,
                 PageCount = CvPageCount.Exact(layout.PageCount),
                 PageLayout = layout,
-            });
+            }, new(texProgress, pdfProgress));
 
             Assert.Equal(4, ReadPageCount(outputDirectory));
+            AssertExpectedPdfProgress(pdfProgress);
+            AssertExpectedLatexmkPasses(outputDirectory);
+            Assert.Equal(
+                CvTemplate.GetTexWorkUnitCount(model, layout),
+                texProgress.Last.CompletedWorkUnits);
             AssertFooterLayout(
                 await ReadPdfFooters(outputDirectory),
                 expectedPageCount: 4);
@@ -839,6 +905,8 @@ public sealed class LatexMeasurementTests
             var model = CreateEmptyModel();
             model.SectionOrder = [Section.WorkExperience];
             model.WorkExperiences = CreateRenderedEvents("Oversized", 24);
+            var texProgress = new ProgressTestReporter();
+            var pdfProgress = new ProgressTestReporter();
 
             var exception = await Assert.ThrowsAsync<CvSectionPageOverflowException>(() =>
                 CvTemplate.Generate(new()
@@ -847,10 +915,16 @@ public sealed class LatexMeasurementTests
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,
-                }));
+                }, new(texProgress, pdfProgress)));
 
             Assert.Contains("WorkExperience", exception.Message, StringComparison.Ordinal);
             Assert.Contains("single page", exception.Message, StringComparison.Ordinal);
+            Assert.Equal(
+                texProgress.Last.TotalWorkUnits,
+                texProgress.Last.CompletedWorkUnits);
+            Assert.True(
+                pdfProgress.Last.CompletedWorkUnits
+                < pdfProgress.Last.TotalWorkUnits);
             var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
             Assert.Contains(CvLatexErrors.SectionPageOverflowMarker, log, StringComparison.Ordinal);
         }
@@ -903,7 +977,7 @@ public sealed class LatexMeasurementTests
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.OnePage,
                     PageLayout = layout,
-                }));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
 
             Assert.Equal("WorkExperience", exception.SectionLabel);
             Assert.Equal("Indivisible oversized job", exception.EventLabel);
@@ -943,7 +1017,7 @@ public sealed class LatexMeasurementTests
                     Model = onePageModel,
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.Exact(2),
-                }));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
             Assert.Equal(
                 "Configured pageCount 2, but the rendered PDF contains 1 pages",
                 tooFew.Message);
@@ -964,7 +1038,7 @@ public sealed class LatexMeasurementTests
                     Model = twoPageModel,
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.OnePage,
-                }));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
             Assert.Equal(
                 "Configured pageCount 1, but the rendered PDF contains 2 pages",
                 tooMany.Message);
@@ -1072,7 +1146,7 @@ public sealed class LatexMeasurementTests
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,
-                }));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
 
             Assert.Equal(CvLatexErrors.MetadataLeftOverflowMessage, exception.Message);
         }
@@ -1100,6 +1174,49 @@ public sealed class LatexMeasurementTests
                 "second",
                 LatexMeasurementMode.FlowBlock),
         ];
+    }
+
+    private static void AssertExpectedPdfProgress(
+        ProgressTestReporter progress)
+    {
+        Assert.Contains(
+            progress.Reports,
+            static report =>
+                report.CompletedWorkUnits == 1
+                && report.TotalWorkUnits
+                == CvTemplate.ExpectedPdfWorkUnitCount);
+        Assert.Contains(
+            progress.Reports,
+            static report =>
+                report.CompletedWorkUnits == 2
+                && report.TotalWorkUnits
+                == CvTemplate.ExpectedPdfWorkUnitCount);
+        Assert.Equal(
+            CvTemplate.ExpectedPdfWorkUnitCount,
+            progress.Last.CompletedWorkUnits);
+        Assert.DoesNotContain(
+            progress.Reports,
+            static report => report.Detail?.Contains(
+                "taking longer than expected",
+                StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static void AssertExpectedLatexmkPasses(string outputDirectory)
+    {
+        var parser = new LatexmkProgressParser(
+            NoOpProgressReporter.Instance);
+        foreach (var line in File.ReadLines(
+                     Path.Combine(outputDirectory, "log-stdout.txt")))
+        {
+            parser.ParseLine(line);
+        }
+
+        Assert.Equal(
+            CvTemplate.ExpectedXeLatexPassCount,
+            parser.StartedXeLatexPassCount);
+        Assert.Equal(
+            CvTemplate.ExpectedPdfConversionPassCount,
+            parser.StartedPdfConversionPassCount);
     }
 
     private static LatexMeasurementRequest Request(
@@ -1268,15 +1385,21 @@ public sealed class LatexMeasurementTests
         public Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
+            IProgressReporter progress,
             CancellationToken cancellationToken)
         {
             _ = templatePath;
             cancellationToken.ThrowIfCancellationRequested();
+            progress.Report(new(0, requests.Count));
             CallCount++;
             Batches.Add(requests.ToArray());
             IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> result = requests.ToDictionary(
                 static request => request.CorrelationId,
                 static request => new LatexHeight(10_000 + request.CorrelationId.Value));
+            for (var i = 0; i < requests.Count; i++)
+            {
+                progress.Report(new(i + 1, requests.Count));
+            }
             return Task.FromResult(result);
         }
     }
@@ -1288,10 +1411,12 @@ public sealed class LatexMeasurementTests
         public Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
+            IProgressReporter progress,
             CancellationToken cancellationToken)
         {
             _ = templatePath;
             _ = cancellationToken;
+            progress.Report(new(0, requests.Count));
             RequestCount = requests.Count;
             throw new CvMeasurementException("simulated compilation failure");
         }
@@ -1304,14 +1429,20 @@ public sealed class LatexMeasurementTests
         public Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
+            IProgressReporter progress,
             CancellationToken cancellationToken)
         {
             _ = templatePath;
             cancellationToken.ThrowIfCancellationRequested();
+            progress.Report(new(0, requests.Count));
             RequestCount = requests.Count;
             IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> result = requests.ToDictionary(
                 static request => request.CorrelationId,
                 static request => new LatexHeight(42));
+            for (var i = 0; i < requests.Count; i++)
+            {
+                progress.Report(new(i + 1, requests.Count));
+            }
             cancellation.Cancel();
             return Task.FromResult(result);
         }

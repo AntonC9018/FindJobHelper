@@ -118,7 +118,9 @@ public sealed class SomeTests
                 options.ScoreLowerBound = 0.0f;
             });
 
-        var ev = searchBuilder.Build().Run(db.Experiences).Get(workKey);
+        var ev = searchBuilder.Build()
+            .Run(db.Experiences, NoOpProgressReporter.Instance)
+            .Get(workKey);
         var settings = new VerifySettings();
         settings.IgnoreMember<EventDebugInfo>(x => x.RawScore);
         settings.IgnoreMember<EventDebugInfo>(x => x.RequirementCoverage);

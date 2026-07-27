@@ -322,7 +322,9 @@ public sealed class CvSelectionConfigurationTests
         var database = ExperienceDatabaseFactory.Create(tags);
         var configured = configuration.BuildSearch(tagsDatabase);
 
-        var result = configured.Search.Run(database.Experiences);
+        var result = configured.Search.Run(
+            database.Experiences,
+            NoOpProgressReporter.Instance);
 
         var expectedTitles = database.Experiences
             .Where(static experience => experience.Type == ExperienceType.Job)
@@ -351,7 +353,9 @@ public sealed class CvSelectionConfigurationTests
         var database = ExperienceDatabaseFactory.Create(tags);
         var configured = configuration.BuildSearch(tagsDatabase);
 
-        var result = configured.Search.Run(database.Experiences);
+        var result = configured.Search.Run(
+            database.Experiences,
+            NoOpProgressReporter.Instance);
 
         var work = result.Get(configured.Sections.WorkKey);
         var expectedHeadingCount = database.Experiences.Count(
@@ -523,7 +527,9 @@ public sealed class CvSelectionConfigurationTests
         var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
         var database = ExperienceDatabaseFactory.Create(tags);
         var configured = configuration.BuildSearch(tagsDatabase);
-        var result = configured.Search.Run(database.Experiences);
+        var result = configured.Search.Run(
+            database.Experiences,
+            NoOpProgressReporter.Instance);
         var educationBudget = Assert.Single(
             result.Diagnostics.Budgets,
             budget => budget.Section == configured.Sections.EducationKey);

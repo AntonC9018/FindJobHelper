@@ -406,7 +406,7 @@ public sealed class ExperienceListSorterTests
                 options.TotalItemBudget = budget;
                 options.ScoreLowerBound = scoreLowerBound;
             });
-        var events = builder.Build().Run([list]).Get(key);
+        var events = builder.Build().Run([list], NoOpProgressReporter.Instance).Get(key);
 
         return Assert.Single(events)
             .SubItems

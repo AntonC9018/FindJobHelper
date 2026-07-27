@@ -6,4 +6,8 @@
     <ItemGroup>
         <None Include="data\**\*.*" CopyToOutputDirectory="Always" />
     </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Spectre.Console.Testing" Version="0.57.2" />
+    </ItemGroup>
 </Project>

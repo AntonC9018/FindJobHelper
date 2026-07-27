@@ -13,7 +13,23 @@ Builds **reliable systems** with [`.NET`](<https://dot.net/>)\.
 
 ## Education
 
-### `rank: 5; raw: 5` `coverage: Education=5` `matches: Education=5 via Education=5` BSc Computer Science
+### BSc Computer Science
+
+<details>
+<summary>Diagnostics</summary>
+
+```text
+rank: 5
+raw: 5
+coverage:
+  Education: 5
+matches:
+  Education:
+    raw contribution: 5
+    best requirement:
+      Education: 5
+```
+</details>
 
 *2018 \- 2022 · University*
 
@@ -26,13 +42,70 @@ Completed with distinction\.
 
 ## Work Experience
 
-### `rank: -2.34; raw: 12.85` `coverage: .NET [configured: C#, .NET]=9.38; Playwright=4.23` `matches: Unity=8.62 via .NET=8.62; Tooling Development=4.23 via Playwright=4.23` Backend Developer
+### Backend Developer
+
+<details>
+<summary>Diagnostics</summary>
+
+```text
+rank: -2.34
+raw: 12.85
+coverage:
+  C#: 9.38
+  Playwright: 4.23
+matches:
+  Unity:
+    raw contribution: 8.62
+    best requirement:
+      C#: 8.62
+    additional requirement coverage:
+      Playwright: 4.23
+  Tooling Development:
+    raw contribution: 4.23
+    best requirements:
+      Playwright: 4.23
+      C#: 4.23
+  Source Generation:
+    raw contribution: 2
+```
+</details>
 
 *2022 \- current*
 
 Owned *backend delivery*\.
 
-- `rank: -2.34; raw: 12.85; mmr: -0.056` `MMR terms: +0.214 relevance -0.071 similarity -0.199 saturation` `coverage: .NET [configured: C#, .NET]=9.38; Playwright=4.23` `matches: Unity=8.62 via .NET=8.62; Tooling Development=4.23 via Playwright=4.23` `ASP.NET Core` feature
+- <details>
+  <summary>Diagnostics</summary>
+
+  ```text
+  rank: -2.34
+  raw: 12.85
+  mmr: -0.056
+  MMR terms:
+    relevance: +0.214
+    similarity: -0.071
+    saturation: -0.199
+  coverage:
+    C#: 9.38
+    Playwright: 4.23
+  matches:
+    Unity:
+      raw contribution: 8.62
+      best requirement:
+        C#: 8.62
+      additional requirement coverage:
+        Playwright: 4.23
+    Tooling Development:
+      raw contribution: 4.23
+      best requirements:
+        Playwright: 4.23
+        C#: 4.23
+    Source Generation:
+      raw contribution: 2
+  ```
+  </details>
+
+  `ASP.NET Core` feature
   with a [**design note**](<https://example.test/details_(one)?x=1&y=2>)
 - **Links:** <https://event.test/demo_(one)?x=1&y=2>
 

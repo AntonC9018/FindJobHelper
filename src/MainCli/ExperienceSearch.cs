@@ -252,39 +252,60 @@ public sealed class ExperienceSearch
         _groups = groups;
     }
 
-    public SearchResult Run(IEnumerable<ExperienceList> experiences)
+    public SearchResult Run(
+        IEnumerable<ExperienceList> experiences,
+        IProgressReporter progress)
     {
         ArgumentNullException.ThrowIfNull(experiences);
-        return Run(experiences, DateOnly.FromDateTime(DateTime.Today));
+        ArgumentNullException.ThrowIfNull(progress);
+        return Run(
+            experiences,
+            DateOnly.FromDateTime(DateTime.Today),
+            progress);
     }
 
     internal SearchResult Run(
         IEnumerable<ExperienceList> experiences,
-        DateOnly currentDate)
+        DateOnly currentDate,
+        IProgressReporter progress)
     {
         ArgumentNullException.ThrowIfNull(experiences);
+        ArgumentNullException.ThrowIfNull(progress);
         return ExperienceSelectionEngine.Select(
             experiences,
             _tags,
             _mmr,
             _groups,
             UnlimitedSelectionAdmissionPolicy.Instance,
-            currentDate);
+            currentDate,
+            progress);
     }
 
     internal SearchResult Run(
         ExperienceDatabase database,
-        ISelectionAdmissionPolicy admissionPolicy)
+        ISelectionAdmissionPolicy admissionPolicy,
+        IProgressReporter progress)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(admissionPolicy);
+        ArgumentNullException.ThrowIfNull(progress);
         return ExperienceSelectionEngine.Select(
             database.Experiences,
             _tags,
             _mmr,
             _groups,
             admissionPolicy,
-            DateOnly.FromDateTime(DateTime.Today));
+            DateOnly.FromDateTime(DateTime.Today),
+            progress);
+    }
+
+    internal int GetWorkUnitCount(ExperienceDatabase database)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+
+        var itemCount = database.Experiences.Sum(
+            static experience => experience.Items.Length);
+        return checked(itemCount * 2 + 1);
     }
 }
 
@@ -465,21 +486,29 @@ internal static class ExperienceSelectionEngine
         MmrOptions mmr,
         ImmutableArray<ExperienceSelectionGroup> groups,
         ISelectionAdmissionPolicy admissionPolicy,
-        DateOnly currentDate)
+        DateOnly currentDate,
+        IProgressReporter progress)
     {
+        ArgumentNullException.ThrowIfNull(lists);
         ArgumentNullException.ThrowIfNull(tags);
         ArgumentNullException.ThrowIfNull(mmr);
         ArgumentNullException.ThrowIfNull(admissionPolicy);
+        ArgumentNullException.ThrowIfNull(progress);
 
         mmr.Validate();
 
-        var groupedLists = lists
+        var materializedLists = lists.ToList();
+        var progressTracker = new SelectionProgressTracker(
+            materializedLists.Sum(static list => list.Items.Length),
+            progress);
+        var groupedLists = materializedLists
             .OrderByDescending(x => x.DateRange, DateRangeComparer.ByEnd)
             .Select((list, listIndex) => CreateScoredList(
                 list,
                 listIndex,
                 FindGroup(list, groups),
-                tags))
+                tags,
+                progressTracker))
             .Where(x => x is not null)
             .Select(x => x!)
             .ToList();
@@ -529,7 +558,7 @@ internal static class ExperienceSelectionEngine
 
         if (candidates.Count == 0 && alwaysCandidates.Count == 0)
         {
-            return context.Output();
+            return CompleteOutput();
         }
 
         var ranker = new MmrRanker(
@@ -611,7 +640,16 @@ internal static class ExperienceSelectionEngine
             FillMinimums();
         }
 
-        return context.Output();
+        return CompleteOutput();
+
+        SearchResult CompleteOutput()
+        {
+            progressTracker.ResolveRemaining(
+                capacityWasFilled: !context.HasRemainingBudget);
+            var output = context.Output();
+            progressTracker.CompleteAssembly();
+            return output;
+        }
 
         void FillMinimums()
         {
@@ -638,11 +676,11 @@ internal static class ExperienceSelectionEngine
             SelectionItemReason reason = SelectionItemReason.Direct,
             bool allowExceedingBudget = false)
         {
-            return context.TryAdd(
+            var accepted = context.TryAdd(
                 candidate,
                 reason,
                 allowExceedingBudget,
-                added =>
+                (added, addedReason) =>
                 {
                     if (context.Scores.TryGetValue(added, out var matches))
                     {
@@ -650,7 +688,22 @@ internal static class ExperienceSelectionEngine
                             matches,
                             candidate.RecencyMultiplier);
                     }
+                    progressTracker.ItemResolved(
+                        added,
+                        addedReason is SelectionItemReason.Dependency
+                            or SelectionItemReason.RequiredAlways
+                            or SelectionItemReason.RequiredIfAny
+                            ? "Matching experiences — required or dependent item resolved"
+                            : "Matching experiences — candidate selected");
                 });
+            if (!accepted)
+            {
+                progressTracker.ItemResolved(
+                    candidate.Item,
+                    "Matching experiences — candidate rejected");
+            }
+
+            return accepted;
         }
     }
 
@@ -712,17 +765,41 @@ internal static class ExperienceSelectionEngine
         ExperienceList list,
         int listIndex,
         ExperienceSelectionGroup? group,
-        WeightedTags tags)
+        WeightedTags tags,
+        SelectionProgressTracker progress)
     {
         if (group is null)
         {
+            foreach (var item in list.Items)
+            {
+                progress.ItemScanned(item);
+                progress.ItemResolved(
+                    item,
+                    "Matching experiences — item is outside configured sections");
+            }
             return null;
         }
 
-        var scoredItems = list.Items
-            .Select(i => (Item: i, Matches: tags.Match(i.Tags)))
-            .Where(i => !i.Matches.IsEmpty)
-            .Where(i => i.Matches.Sum >= group.Options.ScoreLowerBound)
+        var scoredItems = new List<(
+            ExperienceListItem Item,
+            ScoredTags Matches)>();
+        foreach (var item in list.Items)
+        {
+            var matches = tags.Match(item.Tags);
+            progress.ItemScanned(item);
+            if (matches.IsEmpty
+                || matches.Sum < group.Options.ScoreLowerBound)
+            {
+                progress.ItemResolved(
+                    item,
+                    "Matching experiences — candidate rejected by score");
+                continue;
+            }
+
+            scoredItems.Add((item, matches));
+        }
+
+        scoredItems = scoredItems
             .OrderByDescending(i => i.Matches.Sum)
             .ThenByDescending(i => i.Matches.Count)
             .ThenByDescending(i => i.Item.Tags.Length)
@@ -764,6 +841,88 @@ internal static class ExperienceSelectionEngine
         ExperienceList List,
         List<(ExperienceListItem Item, ScoredTags Matches)> ScoredItems,
         int ListIndex);
+
+    private sealed class SelectionProgressTracker
+    {
+        private readonly int _itemCount;
+        private readonly int _totalWorkUnits;
+        private readonly IProgressReporter _progress;
+        private readonly HashSet<ExperienceListItem> _resolved =
+            new(ItemReferenceComparer.Instance);
+        private int _scannedCount;
+        private int _resolvedCount;
+
+        public SelectionProgressTracker(
+            int itemCount,
+            IProgressReporter progress)
+        {
+            if (itemCount < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(itemCount));
+            }
+
+            ArgumentNullException.ThrowIfNull(progress);
+            _itemCount = itemCount;
+            _totalWorkUnits = checked(itemCount * 2 + 1);
+            _progress = progress;
+            Report("Matching experiences");
+        }
+
+        public void ItemScanned(ExperienceListItem item)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+            _scannedCount++;
+            Report("Matching experiences — item scanned and scored");
+        }
+
+        public void ItemResolved(
+            ExperienceListItem item,
+            string detail)
+        {
+            ArgumentNullException.ThrowIfNull(item);
+            ArgumentException.ThrowIfNullOrWhiteSpace(detail);
+            if (!_resolved.Add(item))
+            {
+                Report(detail);
+                return;
+            }
+
+            _resolvedCount++;
+            Report(detail);
+        }
+
+        public void ResolveRemaining(bool capacityWasFilled)
+        {
+            if (_resolvedCount >= _itemCount)
+            {
+                return;
+            }
+
+            _resolvedCount = _itemCount;
+            Report(
+                capacityWasFilled
+                    ? "Matching experiences — candidates skipped after capacity was filled"
+                    : "Matching experiences — remaining candidate work credited");
+        }
+
+        public void CompleteAssembly()
+        {
+            _scannedCount = _itemCount;
+            _resolvedCount = _itemCount;
+            _progress.Report(new(
+                CompletedWorkUnits: _totalWorkUnits,
+                TotalWorkUnits: _totalWorkUnits,
+                Detail: "Matching experiences"));
+        }
+
+        private void Report(string detail)
+        {
+            _progress.Report(new(
+                CompletedWorkUnits: _scannedCount + _resolvedCount,
+                TotalWorkUnits: _totalWorkUnits,
+                Detail: detail));
+        }
+    }
 
     private readonly record struct MmrCandidate(
         ExperienceSelectionGroup Group,
@@ -1128,7 +1287,7 @@ internal static class ExperienceSelectionEngine
             MmrCandidate candidate,
             SelectionItemReason reason = SelectionItemReason.Direct,
             bool allowExceedingBudget = false,
-            Action<ExperienceListItem>? onAdded = null)
+            Action<ExperienceListItem, SelectionItemReason>? onAdded = null)
         {
             if (Added.Contains(candidate.Item))
             {
@@ -1195,7 +1354,7 @@ internal static class ExperienceSelectionEngine
                     DependencyTargets.TryAdd(item, candidate.Item);
                 }
 
-                onAdded?.Invoke(item);
+                onAdded?.Invoke(item, pending.Reason);
             }
 
             _remainingMaximumBudgets[candidate.Group.Key] -= _temp.Count;

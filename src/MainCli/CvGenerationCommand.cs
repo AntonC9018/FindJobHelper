@@ -132,30 +132,165 @@ public sealed class CvGenerationCommand
         };
 
         var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
-        var measurementSnapshot = await measurementService.MeasureAsync(
+        var progressPlan = CreateProgressPlan(
+            artifactPlan,
+            measurementService,
             experienceDatabase,
+            searchConfiguration.Search,
             currentModel,
-            templatePath,
-            cancellationToken);
-        var admissionPolicy = new PageLayoutSelectionAdmissionPolicy(
-            experienceDatabase,
-            measurementSnapshot,
-            searchConfiguration.Sections,
-            searchConfiguration.SectionOrder,
-            searchConfiguration.PageCount,
             searchConfiguration.PageLayout);
-        var searchResult = searchConfiguration.Search.Run(experienceDatabase, admissionPolicy);
-        if (searchConfiguration.PageLayout is null)
+        var progressDisplay = CvGenerationProgressDisplay.CreateDefault();
+        var publishedArtifactPaths = await progressDisplay.RunAsync(
+            progressPlan,
+            async progress =>
+            {
+                progress.BeginTask(CvGenerationTask.ComputingHeights);
+                var measurementSnapshot = await measurementService.MeasureAsync(
+                    experienceDatabase,
+                    currentModel,
+                    templatePath,
+                    progress.Reporter(CvGenerationTask.ComputingHeights),
+                    cancellationToken);
+                var admissionPolicy = new PageLayoutSelectionAdmissionPolicy(
+                    experienceDatabase,
+                    measurementSnapshot,
+                    searchConfiguration.Sections,
+                    searchConfiguration.SectionOrder,
+                    searchConfiguration.PageCount,
+                    searchConfiguration.PageLayout);
+                progress.BeginTask(CvGenerationTask.MatchingExperiences);
+                var searchResult = searchConfiguration.Search.Run(
+                    experienceDatabase,
+                    admissionPolicy,
+                    progress.Reporter(CvGenerationTask.MatchingExperiences));
+                if (searchConfiguration.PageLayout is null)
+                {
+                    admissionPolicy.RequireExactPageCount();
+                }
+                else
+                {
+                    admissionPolicy.RequireCompletePageLayout();
+                }
+
+                searchConfiguration.Sections.Apply(searchResult, currentModel);
+                return await GenerateAndPublishArtifactsAsync(
+                    artifactPlan,
+                    currentModel,
+                    templatePath,
+                    fullOutputDirectory,
+                    searchConfiguration.PageCount,
+                    searchConfiguration.PageLayout,
+                    progress,
+                    cancellationToken);
+            },
+            cancellationToken);
+
+        foreach (var artifact in artifactPlan.Artifacts)
         {
-            admissionPolicy.RequireExactPageCount();
+            Console.WriteLine(
+                $"Generated '{publishedArtifactPaths[artifact.Kind]}'.");
+        }
+
+        if (openInOs)
+        {
+            ExplorerHelper.OpenFolderAndSelectFile(
+                publishedArtifactPaths[artifactPlan.OpenTarget]);
+        }
+
+        return ExitCodes.Success;
+    }
+
+    private static async Task<string> StageMarkdownAsync(
+        CvDataModel model,
+        CvMarkdownRenderMode renderMode,
+        string fileName,
+        string stagingDirectory,
+        IProgressReporter progress,
+        CancellationToken cancellationToken)
+    {
+        var stagedArtifactPath = Path.Combine(stagingDirectory, fileName);
+        using var writer = new CodegenTextWriter
+        {
+            NewLine = "\n",
+            PreserveNonWhitespaceIndentBehavior =
+                CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
+        };
+        CvMarkdownRenderer.Render(model, renderMode, progress, writer);
+        await File.WriteAllTextAsync(
+            stagedArtifactPath,
+            writer.ToString(),
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            cancellationToken);
+        var workUnits = CvMarkdownRenderer.GetWorkUnitCount(model);
+        progress.Report(new(
+            CompletedWorkUnits: workUnits,
+            TotalWorkUnits: workUnits,
+            Detail: "Creating Markdown files"));
+        return stagedArtifactPath;
+    }
+
+    private static CvGenerationProgressPlan CreateProgressPlan(
+        CvArtifactPlan artifactPlan,
+        LatexMeasurementService measurementService,
+        ExperienceDatabase experienceDatabase,
+        ExperienceSearch search,
+        CvDataModel model,
+        CvPageLayout? pageLayout)
+    {
+        var tasks = new List<CvGenerationProgressTask>
+        {
+            new(
+                CvGenerationTask.ComputingHeights,
+                "Computing heights",
+                measurementService.GetWorkUnitCount(
+                    experienceDatabase,
+                    model)),
+            new(
+                CvGenerationTask.MatchingExperiences,
+                "Matching experiences",
+                search.GetWorkUnitCount(experienceDatabase)),
+        };
+
+        if (artifactPlan.Artifacts.Any(
+                static artifact => artifact.Kind == CvArtifactKind.Pdf))
+        {
+            tasks.Add(new(
+                CvGenerationTask.CreatingTexFile,
+                "Creating TeX file",
+                CvTemplate.GetTexWorkUnitCount(model, pageLayout)));
+            tasks.Add(new(
+                CvGenerationTask.RenderingPdf,
+                "Rendering PDF",
+                CvTemplate.ExpectedPdfWorkUnitCount));
         }
         else
         {
-            admissionPolicy.RequireCompletePageLayout();
+            var markdownFileCount = artifactPlan.Artifacts.Count(
+                static artifact => artifact.Kind
+                    is CvArtifactKind.CleanMarkdown
+                    or CvArtifactKind.AnnotatedMarkdown);
+            tasks.Add(new(
+                CvGenerationTask.CreatingMarkdownFiles,
+                "Creating Markdown files",
+                checked(
+                    CvMarkdownRenderer.GetWorkUnitCount(model)
+                    * markdownFileCount)));
         }
 
-        searchConfiguration.Sections.Apply(searchResult, currentModel);
+        return new(tasks);
+    }
 
+    private static async Task<Dictionary<CvArtifactKind, string>>
+        GenerateAndPublishArtifactsAsync(
+            CvArtifactPlan artifactPlan,
+            CvDataModel model,
+            string templatePath,
+            string outputDirectory,
+            CvPageCount pageCount,
+            CvPageLayout? pageLayout,
+            CvGenerationProgressContext progress,
+            CancellationToken cancellationToken)
+    {
         var stagingDirectory = Path.Combine(
             Path.GetTempPath(),
             $"FindJobHelper-{Guid.NewGuid():N}");
@@ -164,42 +299,67 @@ public sealed class CvGenerationCommand
         try
         {
             var stagedArtifactPaths =
-                new Dictionary<CvArtifactKind, string>(artifactPlan.Artifacts.Length);
+                new Dictionary<CvArtifactKind, string>(
+                    artifactPlan.Artifacts.Length);
+            var markdownFileCount = artifactPlan.Artifacts.Count(
+                static artifact => artifact.Kind
+                    is CvArtifactKind.CleanMarkdown
+                    or CvArtifactKind.AnnotatedMarkdown);
+            var markdownWorkUnits = CvMarkdownRenderer.GetWorkUnitCount(model);
+            var allMarkdownWorkUnits = checked(
+                markdownWorkUnits * markdownFileCount);
+            var markdownFileIndex = 0;
+
             foreach (var artifact in artifactPlan.Artifacts)
             {
                 switch (artifact.Kind)
                 {
                     case CvArtifactKind.Pdf:
-                        var artifacts = await CvTemplate.Generate(new()
-                        {
-                            Model = currentModel,
-                            CancellationToken = cancellationToken,
-                            ConfigFilePath = templatePath,
-                            OutputDirectory = stagingDirectory,
-                            PageCount = searchConfiguration.PageCount,
-                            PageLayout = searchConfiguration.PageLayout,
-                        });
-                        stagedArtifactPaths.Add(artifact.Kind, artifacts.PdfPath);
+                        progress.BeginTask(CvGenerationTask.CreatingTexFile);
+                        var artifacts = await CvTemplate.Generate(
+                            new()
+                            {
+                                Model = model,
+                                CancellationToken = cancellationToken,
+                                ConfigFilePath = templatePath,
+                                OutputDirectory = stagingDirectory,
+                                PageCount = pageCount,
+                                PageLayout = pageLayout,
+                            },
+                            new(
+                                progress.Reporter(
+                                    CvGenerationTask.CreatingTexFile),
+                                progress.Reporter(
+                                    CvGenerationTask.RenderingPdf)));
+                        stagedArtifactPaths.Add(
+                            artifact.Kind,
+                            artifacts.PdfPath);
                         break;
                     case CvArtifactKind.CleanMarkdown:
-                        stagedArtifactPaths.Add(
-                            artifact.Kind,
-                            await StageMarkdownAsync(
-                                currentModel,
-                                CvMarkdownRenderMode.Clean,
-                                artifact.FileName,
-                                stagingDirectory,
-                                cancellationToken));
-                        break;
                     case CvArtifactKind.AnnotatedMarkdown:
+                        if (markdownFileIndex == 0)
+                        {
+                            progress.BeginTask(
+                                CvGenerationTask.CreatingMarkdownFiles);
+                        }
+                        var markdownProgress = new ProgressRangeReporter(
+                            progress.Reporter(
+                                CvGenerationTask.CreatingMarkdownFiles),
+                            offset: markdownFileIndex * markdownWorkUnits,
+                            length: markdownWorkUnits,
+                            targetTotal: allMarkdownWorkUnits);
                         stagedArtifactPaths.Add(
                             artifact.Kind,
                             await StageMarkdownAsync(
-                                currentModel,
-                                CvMarkdownRenderMode.Annotated,
+                                model,
+                                artifact.Kind == CvArtifactKind.CleanMarkdown
+                                    ? CvMarkdownRenderMode.Clean
+                                    : CvMarkdownRenderMode.Annotated,
                                 artifact.FileName,
                                 stagingDirectory,
+                                markdownProgress,
                                 cancellationToken));
+                        markdownFileIndex++;
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(
@@ -209,29 +369,25 @@ public sealed class CvGenerationCommand
                 }
             }
 
-            Directory.CreateDirectory(fullOutputDirectory);
+            Directory.CreateDirectory(outputDirectory);
             var publishedArtifactPaths =
-                new Dictionary<CvArtifactKind, string>(artifactPlan.Artifacts.Length);
+                new Dictionary<CvArtifactKind, string>(
+                    artifactPlan.Artifacts.Length);
             foreach (var artifact in artifactPlan.Artifacts)
             {
                 var publishedArtifactPath = Path.Combine(
-                    fullOutputDirectory,
+                    outputDirectory,
                     artifact.FileName);
                 File.Move(
                     stagedArtifactPaths[artifact.Kind],
                     publishedArtifactPath,
                     overwrite: true);
-                publishedArtifactPaths.Add(artifact.Kind, publishedArtifactPath);
-                Console.WriteLine($"Generated '{publishedArtifactPath}'.");
+                publishedArtifactPaths.Add(
+                    artifact.Kind,
+                    publishedArtifactPath);
             }
 
-            if (openInOs)
-            {
-                ExplorerHelper.OpenFolderAndSelectFile(
-                    publishedArtifactPaths[artifactPlan.OpenTarget]);
-            }
-
-            return ExitCodes.Success;
+            return publishedArtifactPaths;
         }
         finally
         {
@@ -249,29 +405,6 @@ public sealed class CvGenerationCommand
                     $"Failed to clean temporary CV generation directory '{stagingDirectory}': {ex.Message}");
             }
         }
-    }
-
-    private static async Task<string> StageMarkdownAsync(
-        CvDataModel model,
-        CvMarkdownRenderMode renderMode,
-        string fileName,
-        string stagingDirectory,
-        CancellationToken cancellationToken)
-    {
-        var stagedArtifactPath = Path.Combine(stagingDirectory, fileName);
-        using var writer = new CodegenTextWriter
-        {
-            NewLine = "\n",
-            PreserveNonWhitespaceIndentBehavior =
-                CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
-        };
-        CvMarkdownRenderer.Render(model, renderMode, writer);
-        await File.WriteAllTextAsync(
-            stagedArtifactPath,
-            writer.ToString(),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            cancellationToken);
-        return stagedArtifactPath;
     }
 
     private static ImmutableArray<CategorizedInfoList> CreateMetadataLists(

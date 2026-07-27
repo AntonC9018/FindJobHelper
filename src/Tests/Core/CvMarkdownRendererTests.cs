@@ -28,8 +28,46 @@ public sealed class CvMarkdownRendererTests
         var markdown = Render(CreateModel(), CvMarkdownRenderMode.Annotated);
 
         AssertMarkdownShape(markdown);
-        Assert.Contains("`rank:", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "<details>\n<summary>Diagnostics</summary>\n\n```text\nrank:",
+            markdown,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "- <details>\n  <summary>Diagnostics</summary>\n\n  ```text\n  rank:",
+            markdown,
+            StringComparison.Ordinal);
         Assert.Contains("MMR terms:", markdown, StringComparison.Ordinal);
+        Assert.Contains("coverage:\n  C#: 9.38", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("[configured:", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            """
+            matches:
+              Unity:
+                raw contribution: 8.62
+                best requirement:
+                  C#: 8.62
+                additional requirement coverage:
+                  Playwright: 4.23
+              Tooling Development:
+                raw contribution: 4.23
+                best requirements:
+                  Playwright: 4.23
+                  C#: 4.23
+              Source Generation:
+                raw contribution: 2
+            """.ReplaceLineEndings("\n"),
+            markdown,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            """
+              ```
+              </details>
+
+              `ASP.NET Core` feature
+              with a [**design note**](<https://example.test/details_(one)?x=1&y=2>)
+            """.ReplaceLineEndings("\n"),
+            markdown,
+            StringComparison.Ordinal);
 
         await Verify(markdown);
     }
@@ -41,12 +79,89 @@ public sealed class CvMarkdownRendererTests
 
         AssertMarkdownShape(markdown);
         Assert.DoesNotContain("`rank:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("<details>", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("```text", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("raw:", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("coverage:", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("matches:", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("MMR terms:", markdown, StringComparison.Ordinal);
 
         await Verify(markdown);
+    }
+
+    [Fact]
+    public void Render_UsesFirstConfiguredAliasEvenWhenLaterAliasHasHigherWeight()
+    {
+        var markdown = Render(CreateModel(), CvMarkdownRenderMode.Annotated);
+
+        Assert.Contains("coverage:\n  C#: 9.38", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("coverage:\n  .NET:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("[configured:", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_AnnotatedSubItemWithoutMmrBreakdownOmitsOptionalDiagnostics()
+    {
+        var model = CreateModel();
+        var @event = model.WorkExperiences[0];
+        @event.DebugInfo = new()
+        {
+            Score = 2,
+            RawScore = 3,
+        };
+        @event.SubItems =
+        [
+            new(
+                debugScore: 1.23456f,
+                text: new PlainText
+                {
+                    Text = "First line\nsecond line",
+                }),
+        ];
+        @event.Urls = [];
+        model.WorkExperiences = [@event];
+        model.Educations = [];
+        model.Languages = [];
+        model.SectionOrder = [Section.WorkExperience];
+
+        var markdown = Render(model, CvMarkdownRenderMode.Annotated);
+
+        AssertMarkdownShape(markdown);
+        Assert.Contains(
+            """
+            ### Backend Developer
+
+            <details>
+            <summary>Diagnostics</summary>
+
+            ```text
+            rank: 2
+            raw: 3
+            ```
+            </details>
+            """.ReplaceLineEndings("\n"),
+            markdown,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            """
+            - <details>
+              <summary>Diagnostics</summary>
+
+              ```text
+              rank: 1.235
+              raw: 1.235
+              ```
+              </details>
+
+              First line
+              second line
+            """.ReplaceLineEndings("\n"),
+            markdown,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("mmr:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("MMR terms:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("coverage:", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("matches:", markdown, StringComparison.Ordinal);
     }
 
     private static void AssertMarkdownShape(string markdown)
@@ -100,11 +215,21 @@ public sealed class CvMarkdownRendererTests
                 new DebugTagMatch(
                     new("Unity"),
                     8.62f,
-                    [new(dotnetRequirement, 8.62f)]),
+                    [
+                        new(dotnetRequirement, 8.62f),
+                        new(playwrightRequirement, 4.23f),
+                    ]),
                 new DebugTagMatch(
                     new("Tooling Development"),
                     4.23f,
-                    [new(playwrightRequirement, 4.23f)]),
+                    [
+                        new(playwrightRequirement, 4.23f),
+                        new(dotnetRequirement, 4.23f),
+                    ]),
+                new DebugTagMatch(
+                    new("Source Generation"),
+                    2,
+                    []),
             }.ToImmutableArray();
         return new CvDataModel
         {
@@ -239,7 +364,11 @@ public sealed class CvMarkdownRendererTests
             PreserveNonWhitespaceIndentBehavior =
                 CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
         };
-        CvMarkdownRenderer.Render(model, mode, writer);
+        CvMarkdownRenderer.Render(
+            model,
+            mode,
+            NoOpProgressReporter.Instance,
+            writer);
         return writer.ToString();
     }
 }

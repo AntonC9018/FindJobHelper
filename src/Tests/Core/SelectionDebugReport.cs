@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
 using MainCli;
 
 namespace FindJobHelper.Core.Tests;
@@ -30,7 +31,9 @@ internal static class SelectionDebugReport
                 builder.Mmr(preset.Options);
                 ConfigureCliLikeSections(builder);
 
-                var result = builder.Build().Run(db.Experiences);
+                var result = builder.Build().Run(
+                    db.Experiences,
+                    NoOpProgressReporter.Instance);
                 runs.Add(new(
                     scenario.Name,
                     preset.Name,

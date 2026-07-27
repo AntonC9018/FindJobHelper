@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using CliWrap;
-using CliWrap.Buffered;
 
 namespace FindJobHelper.CVGeneration;
 
@@ -16,6 +15,7 @@ internal interface ILatexMeasurementRunner
     Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
+        IProgressReporter progress,
         CancellationToken cancellationToken);
 }
 
@@ -24,8 +24,14 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
     public async Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
+        IProgressReporter progress,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(progress);
+        progress.Report(new(
+            CompletedWorkUnits: 0,
+            TotalWorkUnits: requests.Count,
+            Detail: "Computing heights — running XeLaTeX measurements"));
         if (requests.Count == 0)
         {
             return new Dictionary<MeasurementCorrelationId, LatexHeight>();
@@ -46,6 +52,11 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
                 cancellationToken);
 
+            var standardOutput = new StringBuilder();
+            var standardError = new StringBuilder();
+            var progressParser = new LatexMeasurementCompletionParser(
+                requests,
+                progress);
             var result = await Cli.Wrap("xelatex")
                 .WithArguments([
                     "-interaction=nonstopmode",
@@ -55,17 +66,21 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 ])
                 .WithWorkingDirectory(workingDirectory)
                 .WithValidation(CommandResultValidation.None)
-                .ExecuteBufferedAsync(cancellationToken);
+                .WithStandardOutputPipe(PipeTarget.Merge(
+                    PipeTarget.ToStringBuilder(standardOutput),
+                    PipeTarget.ToDelegate(progressParser.ParseLine)))
+                .WithStandardErrorPipe(PipeTarget.ToStringBuilder(standardError))
+                .ExecuteAsync(cancellationToken);
             if (!result.IsSuccess)
             {
                 if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(
-                        $"{result.StandardError}{Environment.NewLine}{result.StandardOutput}"))
+                        $"{standardError}{Environment.NewLine}{standardOutput}"))
                 {
                     throw new CvMetadataOverflowException();
                 }
 
                 throw new CvMeasurementException(
-                    $"XeLaTeX height measurement failed with exit code {result.ExitCode}: {result.StandardError}{Environment.NewLine}{result.StandardOutput}");
+                    $"XeLaTeX height measurement failed with exit code {result.ExitCode}: {standardError}{Environment.NewLine}{standardOutput}");
             }
 
             var resultPath = Path.Combine(workingDirectory, resultFileName);
@@ -76,7 +91,9 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             }
 
             var lines = await File.ReadAllLinesAsync(resultPath, cancellationToken);
-            return LatexMeasurementResultParser.ParseAndValidate(lines, requests);
+            var parsed = LatexMeasurementResultParser.ParseAndValidate(lines, requests);
+            progressParser.CompleteMissingMeasurements();
+            return parsed;
         }
         finally
         {
@@ -87,6 +104,84 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             catch (DirectoryNotFoundException)
             {
             }
+        }
+    }
+}
+
+internal sealed class LatexMeasurementCompletionParser
+{
+    private const string CompletionMarker = "FJH_MEASUREMENT_COMPLETED:";
+
+    private readonly object _sync = new();
+    private readonly IReadOnlyList<LatexMeasurementRequest> _requests;
+    private readonly HashSet<MeasurementCorrelationId> _expected;
+    private readonly HashSet<MeasurementCorrelationId> _completed = [];
+    private readonly IProgressReporter _progress;
+
+    public LatexMeasurementCompletionParser(
+        IReadOnlyList<LatexMeasurementRequest> requests,
+        IProgressReporter progress)
+    {
+        ArgumentNullException.ThrowIfNull(requests);
+        ArgumentNullException.ThrowIfNull(progress);
+
+        _requests = requests;
+        _expected = requests
+            .Select(static request => request.CorrelationId)
+            .ToHashSet();
+        _progress = progress;
+    }
+
+    public void ParseLine(string line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+
+        var markerIndex = line.IndexOf(
+            CompletionMarker,
+            StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return;
+        }
+
+        var tokenStart = markerIndex + CompletionMarker.Length;
+        var token = line.AsSpan(tokenStart).Trim();
+        if (token.Length != 9
+            || token[0] != 'M'
+            || !int.TryParse(
+                token[1..],
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var value))
+        {
+            return;
+        }
+
+        Complete(new(value));
+    }
+
+    public void CompleteMissingMeasurements()
+    {
+        foreach (var request in _requests)
+        {
+            Complete(request.CorrelationId);
+        }
+    }
+
+    private void Complete(MeasurementCorrelationId correlationId)
+    {
+        lock (_sync)
+        {
+            if (!_expected.Contains(correlationId)
+                || !_completed.Add(correlationId))
+            {
+                return;
+            }
+
+            _progress.Report(new(
+                CompletedWorkUnits: _completed.Count,
+                TotalWorkUnits: _requests.Count,
+                Detail: "Computing heights — XeLaTeX measurement completed"));
         }
     }
 }
@@ -124,6 +219,7 @@ internal static class LatexMeasurementDocument
                     \dimen0=\dimexpr\pagetotal-\fjhmeasurementpagetotal\relax
                     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}
                     \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
+                    \typeout{FJH_MEASUREMENT_COMPLETED:{{request.CorrelationId}}}
                     \endgroup
                     \clearpage
                     """);
@@ -155,6 +251,7 @@ internal static class LatexMeasurementDocument
                 \ifnum\value{page}=\fjhmeasurementpage\else\errmessage{FJH measurement changed page counter}\fi
                 \ifdim\pagetotal=\fjhmeasurementpagetotal\else\errmessage{FJH measurement changed pagetotal}\fi
                 \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
+                \typeout{FJH_MEASUREMENT_COMPLETED:{{request.CorrelationId}}}
                 \endgroup
                 """);
         }

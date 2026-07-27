@@ -37,10 +37,12 @@ public sealed class LatexMeasurementService
         ExperienceDatabase database,
         CvDataModel currentModel,
         string templatePath,
+        IProgressReporter progress,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(currentModel);
+        ArgumentNullException.ThrowIfNull(progress);
         ArgumentException.ThrowIfNullOrWhiteSpace(templatePath);
         if (!File.Exists(templatePath))
         {
@@ -50,12 +52,28 @@ public sealed class LatexMeasurementService
         cancellationToken.ThrowIfCancellationRequested();
         var measuredSections = currentModel.SectionOrder.Distinct().ToArray();
         var graph = BuildRequestGraph(database, currentModel, measuredSections);
+        var totalWorkUnits = graph.WorkItems.Count + 1;
+        progress.Report(new(
+            CompletedWorkUnits: 0,
+            TotalWorkUnits: totalWorkUnits,
+            Detail: "Computing heights"));
         await _cache.InitializeAsync(cancellationToken);
         var hits = await _cache.LoadAsync(graph.WorkItems.Keys.ToArray(), cancellationToken);
 
-        foreach (var (key, height) in hits)
+        var completedWorkUnits = 0;
+        foreach (var workItem in graph.WorkItems.Values)
         {
-            graph.Populate(graph.WorkItems[key].Destinations, height);
+            if (!hits.TryGetValue(workItem.Key, out var height))
+            {
+                continue;
+            }
+
+            graph.Populate(workItem.Destinations, height);
+            completedWorkUnits++;
+            progress.Report(new(
+                CompletedWorkUnits: completedWorkUnits,
+                TotalWorkUnits: totalWorkUnits,
+                Detail: "Computing heights — cached measurement"));
         }
 
         var misses = graph.WorkItems.Values
@@ -76,6 +94,11 @@ public sealed class LatexMeasurementService
             var measured = await _runner.MeasureAsync(
                 Path.GetFullPath(templatePath),
                 requests,
+                new ProgressRangeReporter(
+                    progress,
+                    offset: completedWorkUnits,
+                    length: requests.Length,
+                    targetTotal: totalWorkUnits),
                 cancellationToken);
             ValidateRunnerResults(requests, measured);
             cancellationToken.ThrowIfCancellationRequested();
@@ -95,7 +118,7 @@ public sealed class LatexMeasurementService
         }
 
         graph.VerifyComplete(database, measuredSections);
-        return CvMeasurementSnapshot.CreateFrozen(
+        var snapshot = CvMeasurementSnapshot.CreateFrozen(
             experienceItems: graph.ExperienceItems,
             experienceHeadings: graph.ExperienceHeadings,
             experienceChrome: graph.ExperienceChrome,
@@ -111,6 +134,25 @@ public sealed class LatexMeasurementService
             documentHeader: graph.DocumentHeader!.Value,
             documentFooter: graph.DocumentFooter!.Value,
             usablePageHeight: graph.UsablePageHeight!.Value);
+        progress.Report(new(
+            CompletedWorkUnits: totalWorkUnits,
+            TotalWorkUnits: totalWorkUnits,
+            Detail: "Computing heights"));
+        return snapshot;
+    }
+
+    internal int GetWorkUnitCount(
+        ExperienceDatabase database,
+        CvDataModel currentModel)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(currentModel);
+
+        var measuredSections = currentModel.SectionOrder.Distinct().ToArray();
+        return checked(
+            BuildRequestGraph(database, currentModel, measuredSections)
+                .WorkItems.Count
+            + 1);
     }
 
     private RequestGraph BuildRequestGraph(

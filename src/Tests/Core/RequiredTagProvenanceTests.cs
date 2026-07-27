@@ -465,7 +465,7 @@ public sealed class RequiredTagProvenanceTests
                 Type = ExperienceType.Job,
                 Items = items.ToImmutableArray(),
             },
-        ]);
+        ], NoOpProgressReporter.Instance);
     }
 
     private static SelectionItemTrace Trace(

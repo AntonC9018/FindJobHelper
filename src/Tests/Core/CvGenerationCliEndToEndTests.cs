@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json.Nodes;
 using FindJobHelper.CVGeneration;
 using MainCli;
@@ -71,6 +72,24 @@ public sealed class CvGenerationCliEndToEndTests
                 "--debug");
 
             AssertSuccessful(result);
+            AssertProgressTaskSequence(
+                result.StandardOutput,
+                "Computing heights",
+                "Matching experiences",
+                "Creating Markdown files");
+            Assert.DoesNotContain(
+                "Creating TeX file",
+                result.StandardOutput,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "Rendering PDF",
+                result.StandardOutput,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Progress: 100% — Creating Markdown files",
+                result.StandardOutput,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain('\u001b', result.StandardOutput);
 
             var files = GetFileNames(outputDirectory);
             Assert.Equal(2, files.Length);
@@ -107,10 +126,17 @@ public sealed class CvGenerationCliEndToEndTests
                 Assert.DoesNotContain(@"\cvevent", markdown, StringComparison.Ordinal);
             }
 
-            Assert.DoesNotContain("`rank:", cleanMarkdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("<details>", cleanMarkdown, StringComparison.Ordinal);
             Assert.DoesNotContain("MMR terms:", cleanMarkdown, StringComparison.Ordinal);
-            Assert.Contains("`rank:", debugMarkdown, StringComparison.Ordinal);
-            Assert.Contains("- `rank:", debugMarkdown, StringComparison.Ordinal);
+            Assert.Contains(
+                "<details>\n<summary>Diagnostics</summary>\n\n```text\nrank:",
+                debugMarkdown,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "- <details>\n  <summary>Diagnostics</summary>\n\n  ```text\n  rank:",
+                debugMarkdown,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("[configured:", debugMarkdown, StringComparison.Ordinal);
 
             var cleanMessageIndex = result.StandardOutput.IndexOf(
                 $"Generated '{cleanMarkdownPath}'.",
@@ -147,6 +173,11 @@ public sealed class CvGenerationCliEndToEndTests
                 "mD");
 
             AssertSuccessful(result);
+            AssertProgressTaskSequence(
+                result.StandardOutput,
+                "Computing heights",
+                "Matching experiences",
+                "Creating Markdown files");
 
             var markdownFile = Assert.Single(GetFileNames(outputDirectory));
             Assert.Equal("CurmanchiiAnton.md", markdownFile);
@@ -160,7 +191,7 @@ public sealed class CvGenerationCliEndToEndTests
                 StringComparison.Ordinal);
             Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
             Assert.Contains("## Work Experience", markdown, StringComparison.Ordinal);
-            Assert.DoesNotContain("`rank:", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("<details>", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain("raw:", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain("coverage:", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain("matches:", markdown, StringComparison.Ordinal);
@@ -230,6 +261,20 @@ public sealed class CvGenerationCliEndToEndTests
                 "TeX");
 
             AssertSuccessful(result);
+            AssertProgressTaskSequence(
+                result.StandardOutput,
+                "Computing heights",
+                "Matching experiences",
+                "Creating TeX file",
+                "Rendering PDF");
+            Assert.DoesNotContain(
+                "Creating Markdown files",
+                result.StandardOutput,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Progress: 100% — Rendering PDF",
+                result.StandardOutput,
+                StringComparison.Ordinal);
 
             var pdfFile = Assert.Single(GetFileNames(outputDirectory));
             Assert.Equal("CurmanchiiAnton.pdf", pdfFile);
@@ -444,6 +489,24 @@ public sealed class CvGenerationCliEndToEndTests
             $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
     }
 
+    private static void AssertProgressTaskSequence(
+        string output,
+        params string[] tasks)
+    {
+        var previousIndex = -1;
+        foreach (var task in tasks)
+        {
+            var index = output.IndexOf(
+                $" — {task}",
+                previousIndex + 1,
+                StringComparison.Ordinal);
+            Assert.True(
+                index > previousIndex,
+                $"Progress task '{task}' was missing or out of order.{Environment.NewLine}{output}");
+            previousIndex = index;
+        }
+    }
+
     private static string[] GetFileNames(string directory) =>
         Directory.GetFiles(directory)
             .Select(Path.GetFileName)
@@ -471,6 +534,8 @@ public sealed class CvGenerationCliEndToEndTests
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         startInfo.ArgumentList.Add(typeof(CvTemplate).Assembly.Location);
         foreach (var argument in arguments)

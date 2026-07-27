@@ -59,6 +59,28 @@ same selected CV model. Sensitive phone information remains blurred in both file
 | `--output-format md` | `CurmanchiiAnton.md` | Clean Markdown |
 | `--debug`, with either output format | `CurmanchiiAnton.md`, `CurmanchiiAnton-debug.md` | Debug Markdown |
 
+### Generation progress
+
+In an interactive terminal, generation keeps two live rows visible: `Overall` shows
+work-unit-weighted progress for the complete run, while `Current task` shows the active
+operation. The applicable operations are computing heights, matching experiences,
+creating the TeX source and rendering the PDF, or creating the planned Markdown files.
+The completed 100% display remains visible after generation.
+
+When standard output is redirected or the console is non-interactive, the CLI emits
+plain line-oriented status instead of progress-bar or ANSI animation. It writes on
+every task transition, warning, failure, and final completion, plus a heartbeat every
+five seconds even if progress has not changed:
+
+```text
+Progress: 42% — Rendering PDF
+```
+
+PDF generation estimates two XeLaTeX passes and one PDF conversion pass. `latexmk` may
+legitimately require more; the CLI keeps rendering, holds the percentage at the last
+expected milestone, and displays a “taking longer than expected” detail. Progress
+behavior is automatic and adds no command-line flags.
+
 ## Configuration
 
 Comments and trailing commas are allowed, but unknown properties are rejected.
