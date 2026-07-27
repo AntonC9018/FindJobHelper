@@ -261,7 +261,7 @@ public sealed class CvGenerationCommand
             tasks.Add(new(
                 CvGenerationTask.RenderingPdf,
                 "Rendering PDF",
-                CvTemplate.ExpectedPdfWorkUnitCount));
+                CvTemplate.EstimatedPdfWorkUnitCount));
         }
         else
         {

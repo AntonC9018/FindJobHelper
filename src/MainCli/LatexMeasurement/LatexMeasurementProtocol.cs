@@ -110,8 +110,6 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
 
 internal sealed class LatexMeasurementCompletionParser
 {
-    private const string CompletionMarker = "FJH_MEASUREMENT_COMPLETED:";
-
     private readonly object _sync = new();
     private readonly IReadOnlyList<LatexMeasurementRequest> _requests;
     private readonly HashSet<MeasurementCorrelationId> _expected;
@@ -136,28 +134,15 @@ internal sealed class LatexMeasurementCompletionParser
     {
         ArgumentNullException.ThrowIfNull(line);
 
-        var markerIndex = line.IndexOf(
-            CompletionMarker,
-            StringComparison.Ordinal);
-        if (markerIndex < 0)
+        if (!LatexProgressMarkerProtocol.TryParse(line, out var marker)
+            || marker.Event != LatexProgressMarkerEvent.Completed
+            || marker.Id.Category
+                != LatexProgressMarkerCategory.Measurement)
         {
             return;
         }
 
-        var tokenStart = markerIndex + CompletionMarker.Length;
-        var token = line.AsSpan(tokenStart).Trim();
-        if (token.Length != 9
-            || token[0] != 'M'
-            || !int.TryParse(
-                token[1..],
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var value))
-        {
-            return;
-        }
-
-        Complete(new(value));
+        Complete(new(marker.Id.Value));
     }
 
     public void CompleteMissingMeasurements()
@@ -219,7 +204,9 @@ internal static class LatexMeasurementDocument
                     \dimen0=\dimexpr\pagetotal-\fjhmeasurementpagetotal\relax
                     \setbox\cvmeasurementbox=\vbox to \dimen0{\vfil}
                     \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
-                    \typeout{FJH_MEASUREMENT_COMPLETED:{{request.CorrelationId}}}
+                    {{LatexProgressMarkerProtocol.RenderTypeout(
+                        LatexProgressMarkerEvent.Completed,
+                        request.CorrelationId.ProgressMarkerId)}}
                     \endgroup
                     \clearpage
                     """);
@@ -251,7 +238,9 @@ internal static class LatexMeasurementDocument
                 \ifnum\value{page}=\fjhmeasurementpage\else\errmessage{FJH measurement changed page counter}\fi
                 \ifdim\pagetotal=\fjhmeasurementpagetotal\else\errmessage{FJH measurement changed pagetotal}\fi
                 \immediate\write\fjhmeasurementresults{FJH1|corr={{request.CorrelationId}}|rule={{request.CacheKey.RuleVersion.ToString(CultureInfo.InvariantCulture)}}|kind={{request.CacheKey.Kind}}|sha256={{request.CacheKey.ContentHash}}|height-sp=\number\dimexpr\ht\cvmeasurementbox+\dp\cvmeasurementbox\relax}
-                \typeout{FJH_MEASUREMENT_COMPLETED:{{request.CorrelationId}}}
+                {{LatexProgressMarkerProtocol.RenderTypeout(
+                    LatexProgressMarkerEvent.Completed,
+                    request.CorrelationId.ProgressMarkerId)}}
                 \endgroup
                 """);
         }
@@ -340,14 +329,15 @@ internal static class LatexMeasurementResultParser
 
     private static MeasurementCorrelationId ParseCorrelation(string value, string line)
     {
-        if (value.Length != 9
-            || value[0] != 'M'
-            || !int.TryParse(value.AsSpan(1), NumberStyles.None, CultureInfo.InvariantCulture, out var id)
-            || id <= 0)
+        if (!LatexProgressMarkerId.TryParse(
+                value.AsSpan(),
+                out var markerId)
+            || markerId.Category
+                != LatexProgressMarkerCategory.Measurement)
         {
             throw new CvMeasurementException($"Malformed correlation token in '{line}'.");
         }
-        return new(id);
+        return new(markerId.Value);
     }
 
     private static void RequireKeys(

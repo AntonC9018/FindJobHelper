@@ -7,16 +7,23 @@ internal sealed partial class LatexmkProgressParser
 {
     private readonly object _sync = new();
     private readonly IProgressReporter _progress;
+    private readonly LatexRenderProgressPlan _renderProgressPlan;
     private readonly HashSet<int> _startedXeLatexPasses = [];
     private readonly HashSet<int> _completedXeLatexPasses = [];
     private readonly HashSet<int> _startedPdfConversionPasses = [];
+    private readonly HashSet<CompletedRenderBullet> _completedRenderBullets = [];
     private int? _activeXeLatexPass;
+    private LatexRenderBullet? _activeRenderBullet;
     private string? _overrunDetail;
 
-    public LatexmkProgressParser(IProgressReporter progress)
+    public LatexmkProgressParser(
+        IProgressReporter progress,
+        LatexRenderProgressPlan? renderProgressPlan = null)
     {
         ArgumentNullException.ThrowIfNull(progress);
         _progress = progress;
+        _renderProgressPlan =
+            renderProgressPlan ?? LatexRenderProgressPlan.Empty;
         Report();
     }
 
@@ -61,6 +68,7 @@ internal sealed partial class LatexmkProgressParser
                 {
                     case "xelatex":
                         _activeXeLatexPass = passNumber;
+                        _activeRenderBullet = null;
                         _startedXeLatexPasses.Add(passNumber);
                         if (passNumber > CvTemplate.ExpectedXeLatexPassCount)
                         {
@@ -72,6 +80,7 @@ internal sealed partial class LatexmkProgressParser
                         Report();
                         return;
                     case "xdvipdfmx":
+                        _activeRenderBullet = null;
                         _startedPdfConversionPasses.Add(passNumber);
                         if (passNumber
                             > CvTemplate.ExpectedPdfConversionPassCount)
@@ -86,13 +95,34 @@ internal sealed partial class LatexmkProgressParser
                 }
             }
 
+            if (_activeXeLatexPass is { } markerPass
+                && LatexProgressMarkerProtocol.TryParse(
+                    line,
+                    out var marker)
+                && _renderProgressPlan.TryGetBullet(
+                    marker.Id,
+                    out var bullet))
+            {
+                _activeRenderBullet = bullet;
+                if (marker.Event == LatexProgressMarkerEvent.Completed)
+                {
+                    _completedRenderBullets.Add(new(
+                        markerPass,
+                        marker.Id));
+                }
+                Report();
+                return;
+            }
+
             if (_activeXeLatexPass is { } activePass
                 && line.Contains(
                     "Output written on main.xdv",
                     StringComparison.Ordinal)
                 && _completedXeLatexPasses.Add(activePass))
             {
+                CompleteMissingBullets(activePass);
                 _activeXeLatexPass = null;
+                _activeRenderBullet = null;
                 Report();
             }
         }
@@ -102,10 +132,12 @@ internal sealed partial class LatexmkProgressParser
     {
         lock (_sync)
         {
+            var totalWorkUnits = CvTemplate.GetPdfWorkUnitCount(
+                _renderProgressPlan.Bullets.Length);
             _progress.Report(new(
-                CompletedWorkUnits: CvTemplate.ExpectedPdfWorkUnitCount,
-                TotalWorkUnits: CvTemplate.ExpectedPdfWorkUnitCount,
-                Detail: _overrunDetail ?? "Rendering PDF"));
+                CompletedWorkUnits: totalWorkUnits,
+                TotalWorkUnits: totalWorkUnits,
+                Detail: CurrentDetail()));
         }
     }
 
@@ -114,11 +146,51 @@ internal sealed partial class LatexmkProgressParser
         var completedExpectedPasses = _completedXeLatexPasses.Count(
             static pass =>
                 pass <= CvTemplate.ExpectedXeLatexPassCount);
+        var completedExpectedBullets = _completedRenderBullets.Count(
+            static completion =>
+                completion.Pass <= CvTemplate.ExpectedXeLatexPassCount);
+        var totalWorkUnits = CvTemplate.GetPdfWorkUnitCount(
+            _renderProgressPlan.Bullets.Length);
         _progress.Report(new(
-            CompletedWorkUnits: completedExpectedPasses,
-            TotalWorkUnits: CvTemplate.ExpectedPdfWorkUnitCount,
-            Detail: _overrunDetail ?? "Rendering PDF"));
+            CompletedWorkUnits:
+                completedExpectedPasses + completedExpectedBullets,
+            TotalWorkUnits: totalWorkUnits,
+            Detail: CurrentDetail()));
     }
+
+    private void CompleteMissingBullets(int pass)
+    {
+        foreach (var bullet in _renderProgressPlan.Bullets)
+        {
+            _completedRenderBullets.Add(new(
+                pass,
+                bullet.MarkerId));
+        }
+    }
+
+    private string CurrentDetail()
+    {
+        var baseDetail = _overrunDetail ?? "Rendering PDF";
+        if (_activeXeLatexPass is not { } pass
+            || _activeRenderBullet is not { } bullet)
+        {
+            return baseDetail;
+        }
+
+        var passDetail = pass <= CvTemplate.ExpectedXeLatexPassCount
+            ? $"{pass.ToString(CultureInfo.InvariantCulture)}/{CvTemplate.ExpectedXeLatexPassCount.ToString(CultureInfo.InvariantCulture)}"
+            : pass.ToString(CultureInfo.InvariantCulture);
+        return $"{baseDetail} — XeLaTeX {passDetail} — " +
+            $"{bullet.Section} / {bullet.ExperienceTitle} — " +
+            $"bullet {bullet.ItemNumber.ToString(CultureInfo.InvariantCulture)}/" +
+            $"{bullet.ItemCount.ToString(CultureInfo.InvariantCulture)} " +
+            $"({bullet.MarkerId.Value.ToString(CultureInfo.InvariantCulture)}/" +
+            $"{_renderProgressPlan.Bullets.Length.ToString(CultureInfo.InvariantCulture)} overall)";
+    }
+
+    private readonly record struct CompletedRenderBullet(
+        int Pass,
+        LatexProgressMarkerId MarkerId);
 
     [GeneratedRegex(
         @"Run number (?<number>\d+) of rule '(?<rule>xelatex|xdvipdfmx)'",

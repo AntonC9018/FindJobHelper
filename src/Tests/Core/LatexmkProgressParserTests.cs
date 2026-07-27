@@ -102,4 +102,102 @@ public sealed class LatexmkProgressParserTests
         Assert.Equal(1, progress.Last.CompletedWorkUnits);
         Assert.Equal(3, progress.Last.TotalWorkUnits);
     }
+
+    [Fact]
+    public void BulletMarkers_ReportCurrentBulletAndCreditEachBulletOncePerPass()
+    {
+        var progress = new ProgressTestReporter();
+        var plan = CreateTwoBulletPlan();
+        var parser = new LatexmkProgressParser(progress, plan);
+
+        parser.ParseLine("Run number 1 of rule 'xelatex'");
+        parser.ParseLine(MarkerLine(
+            LatexProgressMarkerEvent.Started,
+            bulletNumber: 1));
+        Assert.Equal(0, progress.Last.CompletedWorkUnits);
+        Assert.Equal(7, progress.Last.TotalWorkUnits);
+        Assert.Equal(
+            "Rendering PDF — XeLaTeX 1/2 — Work Experience / Example — " +
+            "bullet 1/2 (1/2 overall)",
+            progress.Last.Detail);
+
+        var firstCompletion = MarkerLine(
+            LatexProgressMarkerEvent.Completed,
+            bulletNumber: 1);
+        parser.ParseLine(firstCompletion);
+        parser.ParseLine(firstCompletion);
+        Assert.Equal(1, progress.Last.CompletedWorkUnits);
+
+        parser.ParseLine(MarkerLine(
+            LatexProgressMarkerEvent.Started,
+            bulletNumber: 2));
+        parser.ParseLine(MarkerLine(
+            LatexProgressMarkerEvent.Completed,
+            bulletNumber: 2));
+        Assert.Equal(2, progress.Last.CompletedWorkUnits);
+        parser.ParseLine("Output written on main.xdv");
+        Assert.Equal(3, progress.Last.CompletedWorkUnits);
+
+        parser.ParseLine("Run number 2 of rule 'xelatex'");
+        parser.ParseLine(firstCompletion);
+        Assert.Equal(4, progress.Last.CompletedWorkUnits);
+        parser.ParseLine(MarkerLine(
+            LatexProgressMarkerEvent.Completed,
+            bulletNumber: 2));
+        Assert.Equal(5, progress.Last.CompletedWorkUnits);
+        parser.ParseLine("Output written on main.xdv");
+        Assert.Equal(6, progress.Last.CompletedWorkUnits);
+
+        parser.ParseLine("Run number 1 of rule 'xdvipdfmx'");
+        parser.CompleteConversionAndValidation();
+        Assert.Equal(new ProgressReport(7, 7, "Rendering PDF"), progress.Last);
+    }
+
+    [Fact]
+    public void PassCompletion_CreditsMarkersMissingFromForwardedOutput()
+    {
+        var progress = new ProgressTestReporter();
+        var parser = new LatexmkProgressParser(
+            progress,
+            CreateTwoBulletPlan());
+
+        parser.ParseLine("Run number 1 of rule 'xelatex'");
+        parser.ParseLine("Output written on main.xdv");
+
+        Assert.Equal(3, progress.Last.CompletedWorkUnits);
+        Assert.Equal(7, progress.Last.TotalWorkUnits);
+    }
+
+    private static LatexRenderProgressPlan CreateTwoBulletPlan()
+    {
+        return new([
+            new(
+                new(
+                    LatexProgressMarkerCategory.RenderBullet,
+                    1),
+                "Work Experience",
+                "Example",
+                1,
+                2),
+            new(
+                new(
+                    LatexProgressMarkerCategory.RenderBullet,
+                    2),
+                "Work Experience",
+                "Example",
+                2,
+                2),
+        ]);
+    }
+
+    private static string MarkerLine(
+        LatexProgressMarkerEvent markerEvent,
+        int bulletNumber)
+    {
+        return LatexProgressMarkerProtocol.FormatLogLine(
+            markerEvent,
+            new(
+                LatexProgressMarkerCategory.RenderBullet,
+                bulletNumber));
+    }
 }

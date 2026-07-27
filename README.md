@@ -76,10 +76,13 @@ five seconds even if progress has not changed:
 Progress: 42% — Rendering PDF
 ```
 
-PDF generation estimates two XeLaTeX passes and one PDF conversion pass. `latexmk` may
-legitimately require more; the CLI keeps rendering, holds the percentage at the last
-expected milestone, and displays a “taking longer than expected” detail. Progress
-behavior is automatic and adds no command-line flags.
+PDF generation estimates two XeLaTeX passes and one PDF conversion pass. During each
+expected XeLaTeX pass, generated progress markers report the experience title and
+bullet being processed. The markers are logical bullet milestones: repeated processing
+of the same bullet for current-page and fresh-page layout candidates is counted once per
+pass. `latexmk` may legitimately require more passes; the CLI keeps rendering, holds the
+percentage at the last expected milestone, and displays a “taking longer than expected”
+detail. Progress behavior is automatic and adds no command-line flags.
 
 ## Configuration
 

@@ -140,6 +140,10 @@ public sealed class LatexMeasurementTests
                 requests));
         Assert.Throws<CvMeasurementException>(() =>
             LatexMeasurementResultParser.ParseAndValidate(
+                [lines[0].Replace("corr=M00000002", "corr=B00000002"), lines[1]],
+                requests));
+        Assert.Throws<CvMeasurementException>(() =>
+            LatexMeasurementResultParser.ParseAndValidate(
                 [lines[0].Replace("kind=SectionChrome", "kind=DocumentChrome"), lines[1]],
                 requests));
     }
@@ -158,6 +162,14 @@ public sealed class LatexMeasurementTests
         Assert.DoesNotContain(@"\pagegoal", source);
         Assert.DoesNotContain(@"\newpage", source);
         Assert.DoesNotContain(@"\usebox", source);
+        Assert.Contains(
+            "FJH_PROGRESS_COMPLETED:M00000001",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "FJH_MEASUREMENT_COMPLETED:",
+            source,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("enumitem", source);
         Assert.DoesNotContain("geometry", source);
         Assert.DoesNotContain("setmainfont", source);
@@ -792,8 +804,12 @@ public sealed class LatexMeasurementTests
 
             Assert.Equal(1, ReadPageCount(shortDirectory));
             Assert.Equal(2, ReadPageCount(twoPageDirectory));
-            AssertExpectedPdfProgress(shortPdfProgress);
-            AssertExpectedPdfProgress(twoPagePdfProgress);
+            AssertExpectedPdfProgress(
+                shortPdfProgress,
+                expectedBulletCount: 0);
+            AssertExpectedPdfProgress(
+                twoPagePdfProgress,
+                expectedBulletCount: 24);
             AssertExpectedLatexmkPasses(shortDirectory);
             AssertExpectedLatexmkPasses(twoPageDirectory);
             Assert.Equal(
@@ -859,7 +875,9 @@ public sealed class LatexMeasurementTests
             }, new(texProgress, pdfProgress));
 
             Assert.Equal(4, ReadPageCount(outputDirectory));
-            AssertExpectedPdfProgress(pdfProgress);
+            AssertExpectedPdfProgress(
+                pdfProgress,
+                expectedBulletCount: 23);
             AssertExpectedLatexmkPasses(outputDirectory);
             Assert.Equal(
                 CvTemplate.GetTexWorkUnitCount(model, layout),
@@ -1177,23 +1195,37 @@ public sealed class LatexMeasurementTests
     }
 
     private static void AssertExpectedPdfProgress(
-        ProgressTestReporter progress)
+        ProgressTestReporter progress,
+        int expectedBulletCount)
     {
+        var expectedWorkUnitCount =
+            CvTemplate.GetPdfWorkUnitCount(expectedBulletCount);
         Assert.Contains(
             progress.Reports,
-            static report =>
+            report =>
                 report.CompletedWorkUnits == 1
                 && report.TotalWorkUnits
-                == CvTemplate.ExpectedPdfWorkUnitCount);
+                == expectedWorkUnitCount);
         Assert.Contains(
             progress.Reports,
-            static report =>
-                report.CompletedWorkUnits == 2
+            report =>
+                report.CompletedWorkUnits == expectedWorkUnitCount - 1
                 && report.TotalWorkUnits
-                == CvTemplate.ExpectedPdfWorkUnitCount);
+                == expectedWorkUnitCount);
         Assert.Equal(
-            CvTemplate.ExpectedPdfWorkUnitCount,
+            expectedWorkUnitCount,
             progress.Last.CompletedWorkUnits);
+        Assert.Equal(
+            expectedWorkUnitCount,
+            progress.Last.TotalWorkUnits);
+        if (expectedBulletCount > 0)
+        {
+            Assert.Contains(
+                progress.Reports,
+                static report => report.Detail?.Contains(
+                    "bullet",
+                    StringComparison.OrdinalIgnoreCase) == true);
+        }
         Assert.DoesNotContain(
             progress.Reports,
             static report => report.Detail?.Contains(

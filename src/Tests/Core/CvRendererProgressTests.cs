@@ -1,4 +1,5 @@
 using CodegenCS;
+using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core.Tests;
@@ -95,6 +96,57 @@ public sealed class CvRendererProgressTests
 
         Assert.Equal(6, CvTemplate.GetTexWorkUnitCount(model, layout: null));
         Assert.Equal(6, CvTemplate.GetTexWorkUnitCount(model, explicitLayout));
+    }
+
+    [Fact]
+    public void ProductionEventRendering_RegistersMarkersAroundEveryExperienceBullet()
+    {
+        var @event = new Event
+        {
+            Title = "Marker example",
+            Place = Place.Personal,
+            DateRange = DateRange.Completed(new(2024), new(2025)),
+            SubItems =
+            [
+                new(0, new PlainText { Text = "First bullet" }),
+                new(0, new PlainText { Text = "Second bullet" }),
+            ],
+        };
+        var builder = new LatexRenderProgressBuilder();
+
+        var rendered = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderEvent(
+                @event,
+                "Work Experience",
+                builder));
+        var plan = builder.Build();
+
+        Assert.Equal(2, plan.Bullets.Length);
+        foreach (var bullet in plan.Bullets)
+        {
+            Assert.Contains(
+                LatexProgressMarkerProtocol.RenderTypeout(
+                    LatexProgressMarkerEvent.Started,
+                    bullet.MarkerId),
+                rendered,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                LatexProgressMarkerProtocol.RenderTypeout(
+                    LatexProgressMarkerEvent.Completed,
+                    bullet.MarkerId),
+                rendered,
+                StringComparison.Ordinal);
+        }
+        Assert.Equal(
+            7,
+            CvTemplate.GetPdfWorkUnitCount(plan.Bullets.Length));
+
+        var measurementFragment = CvLatexFragmentRenderer.Materialize(
+            CvLatexFragmentRenderer.RenderEvent(@event));
+        Assert.DoesNotContain(
+            "FJH_PROGRESS_",
+            measurementFragment,
+            StringComparison.Ordinal);
     }
 
     private static CvDataModel CreateEmptyModel() => new()

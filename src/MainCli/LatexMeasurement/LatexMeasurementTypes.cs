@@ -207,7 +207,11 @@ public sealed record CvMeasurementSnapshot
 
 internal readonly record struct MeasurementCorrelationId(int Value)
 {
-    public override string ToString() => $"M{Value:D8}";
+    public LatexProgressMarkerId ProgressMarkerId => new(
+        LatexProgressMarkerCategory.Measurement,
+        Value);
+
+    public override string ToString() => ProgressMarkerId.ToString();
 }
 
 internal enum LatexMeasurementKind

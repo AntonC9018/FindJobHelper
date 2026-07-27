@@ -182,7 +182,7 @@ public static class CvTemplate
 
     public const int ExpectedXeLatexPassCount = 2;
     public const int ExpectedPdfConversionPassCount = 1;
-    internal const int ExpectedPdfWorkUnitCount =
+    internal const int EstimatedPdfWorkUnitCount =
         ExpectedXeLatexPassCount + ExpectedPdfConversionPassCount;
 
     public static async Task<GeneratedCvArtifacts> Generate(
@@ -196,14 +196,16 @@ public static class CvTemplate
         var outputDirectory = new DirectoryInfo(p.OutputDirectory);
         outputDirectory.Create();
 
-        GenerateSource(p, outputDirectory, progress.Tex);
+        var renderProgressPlan =
+            GenerateSource(p, outputDirectory, progress.Tex);
         return await CompileAsync(
             p,
             outputDirectory,
-            progress.Pdf);
+            progress.Pdf,
+            renderProgressPlan);
     }
 
-    private static void GenerateSource(
+    private static LatexRenderProgressPlan GenerateSource(
         GenerateParams p,
         DirectoryInfo outputDirectory,
         IProgressReporter progress)
@@ -221,12 +223,20 @@ public static class CvTemplate
         writer.CurlyBracesStyle = CodegenTextWriter.CurlyBracesStyleType.C;
         writer.PreserveNonWhitespaceIndentBehavior = CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreserveAnything;
 
+        var renderProgress = new LatexRenderProgressBuilder();
         var documentHeader =
             CvLatexFragmentRenderer.RenderDocumentHeader(p.Model);
         ReportTexProgress("Creating TeX file — document header");
         var sections = p.PageLayout is null
-            ? RenderLegacySections(p.Model, ReportSection)
-            : RenderExplicitLayout(p.Model, p.PageLayout, ReportSection);
+            ? RenderLegacySections(
+                p.Model,
+                ReportSection,
+                renderProgress)
+            : RenderExplicitLayout(
+                p.Model,
+                p.PageLayout,
+                ReportSection,
+                renderProgress);
         var documentFooter = CvLatexFragmentRenderer.RenderDocumentFooter(p.Model);
         FormattableString footerMarker = p.PageLayout is null
             ? FormattableStringFactory.Create(string.Empty)
@@ -258,6 +268,7 @@ public static class CvTemplate
 
         codegenContext.SaveToFolder(outputDirectory.FullName);
         ReportTexProgress("Creating TeX file");
+        return renderProgress.Build();
 
         void ReportSection()
         {
@@ -277,9 +288,12 @@ public static class CvTemplate
     private static async Task<GeneratedCvArtifacts> CompileAsync(
         GenerateParams p,
         DirectoryInfo outputDirectory,
-        IProgressReporter progress)
+        IProgressReporter progress,
+        LatexRenderProgressPlan renderProgressPlan)
     {
-        var latexmkProgress = new LatexmkProgressParser(progress);
+        var latexmkProgress = new LatexmkProgressParser(
+            progress,
+            renderProgressPlan);
         var latexmk = Cli.Wrap("latexmk");
         latexmk = latexmk.WithArguments(["-xelatex", LatexFileName]);
 
@@ -375,16 +389,35 @@ public static class CvTemplate
         return checked(sectionOccurrences + 3);
     }
 
+    internal static int GetPdfWorkUnitCount(int bulletCount)
+    {
+        if (bulletCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(bulletCount),
+                bulletCount,
+                "The rendered bullet count cannot be negative.");
+        }
+
+        return checked(
+            ExpectedXeLatexPassCount * (bulletCount + 1)
+            + ExpectedPdfConversionPassCount);
+    }
+
     private static IEnumerable<FormattableString> RenderLegacySections(
         CvDataModel model,
-        Action sectionRendered)
+        Action sectionRendered,
+        LatexRenderProgressBuilder progress)
     {
         foreach (var section in model.SectionOrder)
         {
             var rendered = model.DispatchSection(
                 section,
                 renderLanguages: Languages,
-                renderEvents: events => Events(section, events));
+                renderEvents: events => Events(
+                    section,
+                    events,
+                    progress));
             sectionRendered();
             yield return rendered;
         }
@@ -393,7 +426,8 @@ public static class CvTemplate
     private static IEnumerable<FormattableString> RenderExplicitLayout(
         CvDataModel model,
         CvPageLayout layout,
-        Action sectionRendered)
+        Action sectionRendered,
+        LatexRenderProgressBuilder progress)
     {
         for (var blockIndex = 0; blockIndex < layout.Blocks.Length; blockIndex++)
         {
@@ -408,7 +442,10 @@ public static class CvTemplate
             foreach (var section in layout.Blocks[blockIndex].Sections)
             {
                 var rendered =
-                    CvLatexFragmentRenderer.RenderExplicitSection(section, model);
+                    CvLatexFragmentRenderer.RenderExplicitSection(
+                        section,
+                        model,
+                        progress);
                 sectionRendered();
                 yield return rendered;
             }
@@ -499,11 +536,13 @@ public static class CvTemplate
 
     private static FormattableString Events(
         Section section,
-        ImmutableArray<Event> events)
+        ImmutableArray<Event> events,
+        LatexRenderProgressBuilder progress)
     {
         var inner = CvLatexFragmentRenderer.RenderEventsSectionInner(
             events,
-            section.ToDisplayString());
+            section.ToDisplayString(),
+            progress);
         var wrapped = CvLatexFragmentRenderer.RenderProductionSection(section, inner);
         return $"{wrapped}";
     }

@@ -40,7 +40,8 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderExplicitSection(
         Section section,
-        CvDataModel model)
+        CvDataModel model,
+        LatexRenderProgressBuilder? progress = null)
     {
         return model.DispatchSection(
             section,
@@ -57,7 +58,10 @@ internal static class CvLatexFragmentRenderer
                         body: inner,
                         suffix: Literal(@"\cvexplicitsectionend"));
             },
-            renderEvents: events => RenderExplicitEventsSection(section, events));
+            renderEvents: events => RenderExplicitEventsSection(
+                section,
+                events,
+                progress));
     }
 
     private static FormattableString RenderProductionSection(
@@ -98,14 +102,16 @@ internal static class CvLatexFragmentRenderer
 
     public static FormattableString RenderEventsSectionInner(
         ImmutableArray<Event> events,
-        string sectionName)
+        string sectionName,
+        LatexRenderProgressBuilder? progress = null)
     {
         if (events.IsEmpty)
         {
             return Empty;
         }
 
-        var renderedEvents = events.Select(RenderEvent);
+        var renderedEvents = events.Select(
+            @event => RenderEvent(@event, sectionName, progress));
         return $$"""
             \cvsection{ {{LatexConverter.ToLatexString(sectionName)}} }
 
@@ -115,7 +121,8 @@ internal static class CvLatexFragmentRenderer
 
     private static FormattableString RenderExplicitEventsSection(
         Section section,
-        ImmutableArray<Event> events)
+        ImmutableArray<Event> events,
+        LatexRenderProgressBuilder? progress)
     {
         if (events.IsEmpty)
         {
@@ -141,7 +148,10 @@ internal static class CvLatexFragmentRenderer
                 (index + 1).ToString(CultureInfo.InvariantCulture),
                 currentPrefix,
                 freshPrefix,
-                RenderEvent(events[index]),
+                RenderEvent(
+                    events[index],
+                    section.ToDisplayString(),
+                    progress),
                 suffix));
         }
 
@@ -166,12 +176,29 @@ internal static class CvLatexFragmentRenderer
             \end{cvexplicitunit}
             """;
 
-    public static FormattableString RenderEvent(Event @event)
+    public static FormattableString RenderEvent(
+        Event @event,
+        string? sectionName = null,
+        LatexRenderProgressBuilder? progress = null)
     {
         var itemFragments = new List<FormattableString>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
-        foreach (var item in @event.SubItems)
+        for (var index = 0; index < @event.SubItems.Length; index++)
         {
-            itemFragments.Add(RenderEventItem(RenderRichText(item.Text)));
+            var renderedItem = RenderEventItem(
+                RenderRichText(@event.SubItems[index].Text));
+            if (progress is not null)
+            {
+                var requiredSectionName = sectionName
+                    ?? throw new InvalidOperationException(
+                        "A section name is required when rendering bullet progress markers.");
+                renderedItem = progress.WrapBullet(
+                    section: requiredSectionName,
+                    experienceTitle: @event.Title.Value,
+                    itemNumber: index + 1,
+                    itemCount: @event.SubItems.Length,
+                    renderedBullet: renderedItem);
+            }
+            itemFragments.Add(renderedItem);
         }
 
         if (!@event.Urls.IsEmpty)
