@@ -6,51 +6,103 @@ namespace FindJobHelper.Core.Tests;
 public sealed class ProgressReportingTests
 {
     [Fact]
-    public void WeightedAggregation_ClampsAndRemainsMonotonic()
+    public void EqualShareAggregation_CompletedModuleContributesOneShare()
     {
-        var plan = new CvGenerationProgressPlan([
-            new(CvGenerationTask.ComputingHeights, "Computing heights", 1),
-            new(CvGenerationTask.MatchingExperiences, "Matching experiences", 3),
-        ]);
-        var aggregator = new WeightedProgressAggregator(plan);
+        var aggregator = new EqualShareProgressAggregator(CreatePdfPlan());
 
-        var heights = aggregator.Update(
-            CvGenerationTask.ComputingHeights,
-            new(CompletedWorkUnits: 150, TotalWorkUnits: 100));
-        var regressedHeights = aggregator.Update(
-            CvGenerationTask.ComputingHeights,
-            new(CompletedWorkUnits: -20, TotalWorkUnits: 100));
-        var matching = aggregator.Update(
-            CvGenerationTask.MatchingExperiences,
-            new(CompletedWorkUnits: 1, TotalWorkUnits: 2));
-        var regressedMatching = aggregator.Update(
-            CvGenerationTask.MatchingExperiences,
-            new(CompletedWorkUnits: 0, TotalWorkUnits: 2));
+        var update = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: 1, TotalWorkUnits: 1));
 
-        Assert.Equal(100, heights.TaskPercentage);
-        Assert.Equal(25, heights.OverallPercentage);
-        Assert.Equal(100, regressedHeights.TaskPercentage);
-        Assert.Equal(25, regressedHeights.OverallPercentage);
-        Assert.Equal(50, matching.TaskPercentage);
-        Assert.Equal(62.5, matching.OverallPercentage);
-        Assert.Equal(50, regressedMatching.TaskPercentage);
-        Assert.Equal(62.5, regressedMatching.OverallPercentage);
+        Assert.Equal(100, update.ModulePercentage);
+        Assert.Equal(25, update.OverallPercentage);
     }
 
     [Fact]
-    public void WeightedAggregation_ZeroWorkCompletesWithoutDivisionByZero()
+    public void EqualShareAggregation_HalfCompleteModuleContributesHalfItsShare()
     {
-        var plan = new CvGenerationProgressPlan([
-            new(CvGenerationTask.ComputingHeights, "Computing heights", 0),
-        ]);
-        var aggregator = new WeightedProgressAggregator(plan);
+        var aggregator = new EqualShareProgressAggregator(CreatePdfPlan());
 
         var update = aggregator.Update(
-            CvGenerationTask.ComputingHeights,
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: 1, TotalWorkUnits: 2));
+
+        Assert.Equal(50, update.ModulePercentage);
+        Assert.Equal(12.5, update.OverallPercentage);
+    }
+
+    [Fact]
+    public void EqualShareAggregation_CombinesCompletedAndPartialModules()
+    {
+        var aggregator = new EqualShareProgressAggregator(CreatePdfPlan());
+
+        aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: 1, TotalWorkUnits: 1));
+        aggregator.Update(
+            CvGenerationModule.MatchingExperiences,
+            new(CompletedWorkUnits: 1, TotalWorkUnits: 1));
+        var update = aggregator.Update(
+            CvGenerationModule.CreatingTexFile,
+            new(CompletedWorkUnits: 1, TotalWorkUnits: 2));
+
+        Assert.Equal(50, update.ModulePercentage);
+        Assert.Equal(62.5, update.OverallPercentage);
+    }
+
+    [Fact]
+    public void EqualShareAggregation_ClampsAndRemainsMonotonic()
+    {
+        var aggregator = new EqualShareProgressAggregator(CreatePdfPlan());
+
+        var negative = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: -20, TotalWorkUnits: 100));
+        var half = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: 50, TotalWorkUnits: 100));
+        var regressive = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: 25, TotalWorkUnits: 100));
+        var nonFiniteCompleted = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(
+                CompletedWorkUnits: double.PositiveInfinity,
+                TotalWorkUnits: 100));
+        var excessive = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(CompletedWorkUnits: 150, TotalWorkUnits: 100));
+        var nonFiniteTotal = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
+            new(
+                CompletedWorkUnits: 1,
+                TotalWorkUnits: double.NaN));
+
+        Assert.Equal(0, negative.ModulePercentage);
+        Assert.Equal(0, negative.OverallPercentage);
+        Assert.Equal(50, half.ModulePercentage);
+        Assert.Equal(12.5, half.OverallPercentage);
+        Assert.Equal(50, regressive.ModulePercentage);
+        Assert.Equal(12.5, regressive.OverallPercentage);
+        Assert.Equal(50, nonFiniteCompleted.ModulePercentage);
+        Assert.Equal(12.5, nonFiniteCompleted.OverallPercentage);
+        Assert.Equal(100, excessive.ModulePercentage);
+        Assert.Equal(25, excessive.OverallPercentage);
+        Assert.Equal(100, nonFiniteTotal.ModulePercentage);
+        Assert.Equal(25, nonFiniteTotal.OverallPercentage);
+    }
+
+    [Fact]
+    public void EqualShareAggregation_ZeroTotalCompletesOnlyItsModuleShare()
+    {
+        var aggregator = new EqualShareProgressAggregator(CreatePdfPlan());
+
+        var update = aggregator.Update(
+            CvGenerationModule.ComputingHeights,
             new(CompletedWorkUnits: 0, TotalWorkUnits: 0));
 
-        Assert.Equal(100, update.TaskPercentage);
-        Assert.Equal(100, update.OverallPercentage);
+        Assert.Equal(100, update.ModulePercentage);
+        Assert.Equal(25, update.OverallPercentage);
     }
 
     [Theory]
@@ -107,6 +159,22 @@ public sealed class ProgressReportingTests
 
         NoOpProgressReporter.Instance.Report(new(1, 1, "done"));
     }
+
+    private static CvGenerationProgressPlan CreatePdfPlan() =>
+        new([
+            new(
+                CvGenerationModule.ComputingHeights,
+                "Computing heights"),
+            new(
+                CvGenerationModule.MatchingExperiences,
+                "Matching experiences"),
+            new(
+                CvGenerationModule.CreatingTexFile,
+                "Creating TeX file"),
+            new(
+                CvGenerationModule.RenderingPdf,
+                "Rendering PDF"),
+        ]);
 
     private static void AssertProgressParameter(
         Type type,

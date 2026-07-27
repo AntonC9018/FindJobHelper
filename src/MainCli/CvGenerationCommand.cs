@@ -132,24 +132,18 @@ public sealed class CvGenerationCommand
         };
 
         var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
-        var progressPlan = CreateProgressPlan(
-            artifactPlan,
-            measurementService,
-            experienceDatabase,
-            searchConfiguration.Search,
-            currentModel,
-            searchConfiguration.PageLayout);
+        var progressPlan = CreateProgressPlan(artifactPlan);
         var progressDisplay = CvGenerationProgressDisplay.CreateDefault();
         var publishedArtifactPaths = await progressDisplay.RunAsync(
             progressPlan,
             async progress =>
             {
-                progress.BeginTask(CvGenerationTask.ComputingHeights);
+                progress.BeginModule(CvGenerationModule.ComputingHeights);
                 var measurementSnapshot = await measurementService.MeasureAsync(
                     experienceDatabase,
                     currentModel,
                     templatePath,
-                    progress.Reporter(CvGenerationTask.ComputingHeights),
+                    progress.Reporter(CvGenerationModule.ComputingHeights),
                     cancellationToken);
                 var admissionPolicy = new PageLayoutSelectionAdmissionPolicy(
                     experienceDatabase,
@@ -158,11 +152,11 @@ public sealed class CvGenerationCommand
                     searchConfiguration.SectionOrder,
                     searchConfiguration.PageCount,
                     searchConfiguration.PageLayout);
-                progress.BeginTask(CvGenerationTask.MatchingExperiences);
+                progress.BeginModule(CvGenerationModule.MatchingExperiences);
                 var searchResult = searchConfiguration.Search.Run(
                     experienceDatabase,
                     admissionPolicy,
-                    progress.Reporter(CvGenerationTask.MatchingExperiences));
+                    progress.Reporter(CvGenerationModule.MatchingExperiences));
                 if (searchConfiguration.PageLayout is null)
                 {
                     admissionPolicy.RequireExactPageCount();
@@ -230,54 +224,36 @@ public sealed class CvGenerationCommand
     }
 
     private static CvGenerationProgressPlan CreateProgressPlan(
-        CvArtifactPlan artifactPlan,
-        LatexMeasurementService measurementService,
-        ExperienceDatabase experienceDatabase,
-        ExperienceSearch search,
-        CvDataModel model,
-        CvPageLayout? pageLayout)
+        CvArtifactPlan artifactPlan)
     {
-        var tasks = new List<CvGenerationProgressTask>
+        var modules = new List<CvGenerationProgressModule>
         {
             new(
-                CvGenerationTask.ComputingHeights,
-                "Computing heights",
-                measurementService.GetWorkUnitCount(
-                    experienceDatabase,
-                    model)),
+                CvGenerationModule.ComputingHeights,
+                "Computing heights"),
             new(
-                CvGenerationTask.MatchingExperiences,
-                "Matching experiences",
-                search.GetWorkUnitCount(experienceDatabase)),
+                CvGenerationModule.MatchingExperiences,
+                "Matching experiences"),
         };
 
         if (artifactPlan.Artifacts.Any(
                 static artifact => artifact.Kind == CvArtifactKind.Pdf))
         {
-            tasks.Add(new(
-                CvGenerationTask.CreatingTexFile,
-                "Creating TeX file",
-                CvTemplate.GetTexWorkUnitCount(model, pageLayout)));
-            tasks.Add(new(
-                CvGenerationTask.RenderingPdf,
-                "Rendering PDF",
-                CvTemplate.EstimatedPdfWorkUnitCount));
+            modules.Add(new(
+                CvGenerationModule.CreatingTexFile,
+                "Creating TeX file"));
+            modules.Add(new(
+                CvGenerationModule.RenderingPdf,
+                "Rendering PDF"));
         }
         else
         {
-            var markdownFileCount = artifactPlan.Artifacts.Count(
-                static artifact => artifact.Kind
-                    is CvArtifactKind.CleanMarkdown
-                    or CvArtifactKind.AnnotatedMarkdown);
-            tasks.Add(new(
-                CvGenerationTask.CreatingMarkdownFiles,
-                "Creating Markdown files",
-                checked(
-                    CvMarkdownRenderer.GetWorkUnitCount(model)
-                    * markdownFileCount)));
+            modules.Add(new(
+                CvGenerationModule.CreatingMarkdownFiles,
+                "Creating Markdown files"));
         }
 
-        return new(tasks);
+        return new(modules);
     }
 
     private static async Task<Dictionary<CvArtifactKind, string>>
@@ -315,7 +291,8 @@ public sealed class CvGenerationCommand
                 switch (artifact.Kind)
                 {
                     case CvArtifactKind.Pdf:
-                        progress.BeginTask(CvGenerationTask.CreatingTexFile);
+                        progress.BeginModule(
+                            CvGenerationModule.CreatingTexFile);
                         var artifacts = await CvTemplate.Generate(
                             new()
                             {
@@ -328,9 +305,9 @@ public sealed class CvGenerationCommand
                             },
                             new(
                                 progress.Reporter(
-                                    CvGenerationTask.CreatingTexFile),
+                                    CvGenerationModule.CreatingTexFile),
                                 progress.Reporter(
-                                    CvGenerationTask.RenderingPdf)));
+                                    CvGenerationModule.RenderingPdf)));
                         stagedArtifactPaths.Add(
                             artifact.Kind,
                             artifacts.PdfPath);
@@ -339,12 +316,12 @@ public sealed class CvGenerationCommand
                     case CvArtifactKind.AnnotatedMarkdown:
                         if (markdownFileIndex == 0)
                         {
-                            progress.BeginTask(
-                                CvGenerationTask.CreatingMarkdownFiles);
+                            progress.BeginModule(
+                                CvGenerationModule.CreatingMarkdownFiles);
                         }
                         var markdownProgress = new ProgressRangeReporter(
                             progress.Reporter(
-                                CvGenerationTask.CreatingMarkdownFiles),
+                                CvGenerationModule.CreatingMarkdownFiles),
                             offset: markdownFileIndex * markdownWorkUnits,
                             length: markdownWorkUnits,
                             targetTotal: allMarkdownWorkUnits);

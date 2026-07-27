@@ -12,19 +12,23 @@ public sealed class CvGenerationProgressDisplayTests
         console.Interactive().Width(120);
         var display = new InteractiveCvGenerationProgressDisplay(console);
         var plan = new CvGenerationProgressPlan([
-            new(CvGenerationTask.ComputingHeights, "Computing heights", 1),
-            new(CvGenerationTask.MatchingExperiences, "Matching experiences", 1),
+            new(
+                CvGenerationModule.ComputingHeights,
+                "Computing heights"),
+            new(
+                CvGenerationModule.MatchingExperiences,
+                "Matching experiences"),
         ]);
 
         await display.RunAsync(
             plan,
             context =>
             {
-                context.BeginTask(CvGenerationTask.ComputingHeights);
-                context.Reporter(CvGenerationTask.ComputingHeights)
+                context.BeginModule(CvGenerationModule.ComputingHeights);
+                context.Reporter(CvGenerationModule.ComputingHeights)
                     .Report(new(1, 1));
-                context.BeginTask(CvGenerationTask.MatchingExperiences);
-                context.Reporter(CvGenerationTask.MatchingExperiences)
+                context.BeginModule(CvGenerationModule.MatchingExperiences);
+                context.Reporter(CvGenerationModule.MatchingExperiences)
                     .Report(new(1, 1));
                 return Task.FromResult(0);
             },
@@ -67,6 +71,23 @@ public sealed class CvGenerationProgressDisplayTests
     }
 
     [Fact]
+    public void ProgressContext_KeepsCurrentModuleLocalAndScalesOverall()
+    {
+        var sink = new RecordingProgressSink();
+        var context = new CvGenerationProgressContext(
+            CreatePdfPlan(),
+            sink);
+
+        context.BeginModule(CvGenerationModule.ComputingHeights);
+        context.Reporter(CvGenerationModule.ComputingHeights)
+            .Report(new(CompletedWorkUnits: 1, TotalWorkUnits: 2));
+
+        Assert.Equal(50, sink.Last.ModulePercentage);
+        Assert.Equal(12.5, sink.Last.OverallPercentage);
+        Assert.Equal(CvProgressDisplayEvent.Progress, sink.LastEvent);
+    }
+
+    [Fact]
     public async Task RedirectedDisplay_EmitsRepeatedHeartbeatsTransitionsWarningsAndFinalCompletion()
     {
         var output = new StringWriter
@@ -79,7 +100,7 @@ public sealed class CvGenerationProgressDisplayTests
             time,
             TimeSpan.FromSeconds(5));
         var plan = new CvGenerationProgressPlan([
-            new(CvGenerationTask.RenderingPdf, "Rendering PDF", 100),
+            new(CvGenerationModule.RenderingPdf, "Rendering PDF"),
         ]);
         var started = new TaskCompletionSource<CvGenerationProgressContext>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -90,8 +111,8 @@ public sealed class CvGenerationProgressDisplayTests
             plan,
             async context =>
             {
-                context.BeginTask(CvGenerationTask.RenderingPdf);
-                context.Reporter(CvGenerationTask.RenderingPdf)
+                context.BeginModule(CvGenerationModule.RenderingPdf);
+                context.Reporter(CvGenerationModule.RenderingPdf)
                     .Report(new(42, 100));
                 started.SetResult(context);
                 await release.Task;
@@ -112,9 +133,9 @@ public sealed class CvGenerationProgressDisplayTests
         const string warning =
             "Rendering PDF — taking longer than expected: " +
             "XeLaTeX pass 3; expected 2";
-        context.Reporter(CvGenerationTask.RenderingPdf)
+        context.Reporter(CvGenerationModule.RenderingPdf)
             .Report(new(42, 100, warning));
-        context.Reporter(CvGenerationTask.RenderingPdf)
+        context.Reporter(CvGenerationModule.RenderingPdf)
             .Report(new(100, 100, warning));
         release.SetResult();
         await run;
@@ -147,24 +168,24 @@ public sealed class CvGenerationProgressDisplayTests
         var display = new RedirectedCvGenerationProgressDisplay(
             output,
             heartbeatInterval: TimeSpan.FromSeconds(5));
-        var plan = new CvGenerationProgressPlan([
-            new(CvGenerationTask.MatchingExperiences, "Matching experiences", 10),
-        ]);
+        var plan = CreatePdfPlan();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             display.RunAsync<int>(
                 plan,
                 context =>
                 {
-                    context.BeginTask(CvGenerationTask.MatchingExperiences);
-                    context.Reporter(CvGenerationTask.MatchingExperiences)
+                    context.BeginModule(
+                        CvGenerationModule.ComputingHeights);
+                    context.Reporter(
+                            CvGenerationModule.ComputingHeights)
                         .Report(new(3, 10));
                     throw new InvalidOperationException("simulated failure");
                 },
                 CancellationToken.None));
 
         Assert.Contains(
-            "Progress: 30% — Matching experiences — failed",
+            "Progress: 8% — Computing heights — failed",
             output.ToString(),
             StringComparison.Ordinal);
         Assert.DoesNotContain(
@@ -181,15 +202,19 @@ public sealed class CvGenerationProgressDisplayTests
             output,
             heartbeatInterval: TimeSpan.FromSeconds(5));
         var plan = new CvGenerationProgressPlan([
-            new(CvGenerationTask.MatchingExperiences, "Matching experiences", 10),
+            new(
+                CvGenerationModule.MatchingExperiences,
+                "Matching experiences"),
         ]);
 
         await display.RunAsync(
             plan,
             context =>
             {
-                context.BeginTask(CvGenerationTask.MatchingExperiences);
-                context.Reporter(CvGenerationTask.MatchingExperiences)
+                context.BeginModule(
+                    CvGenerationModule.MatchingExperiences);
+                context.Reporter(
+                        CvGenerationModule.MatchingExperiences)
                     .Report(new(3, 10, "Matching experiences — assembly"));
                 return Task.FromResult(0);
             },
@@ -201,6 +226,22 @@ public sealed class CvGenerationProgressDisplayTests
             output.ToString(),
             StringComparison.Ordinal);
     }
+
+    private static CvGenerationProgressPlan CreatePdfPlan() =>
+        new([
+            new(
+                CvGenerationModule.ComputingHeights,
+                "Computing heights"),
+            new(
+                CvGenerationModule.MatchingExperiences,
+                "Matching experiences"),
+            new(
+                CvGenerationModule.CreatingTexFile,
+                "Creating TeX file"),
+            new(
+                CvGenerationModule.RenderingPdf,
+                "Rendering PDF"),
+        ]);
 
     private static string[] Lines(StringWriter writer) =>
         writer.ToString().Split(
@@ -215,6 +256,21 @@ public sealed class CvGenerationProgressDisplayTests
         }
 
         Assert.True(condition());
+    }
+
+    private sealed class RecordingProgressSink : ICvProgressSink
+    {
+        public CvProgressDisplayState Last { get; private set; }
+
+        public CvProgressDisplayEvent LastEvent { get; private set; }
+
+        public void Update(
+            CvProgressDisplayState state,
+            CvProgressDisplayEvent displayEvent)
+        {
+            Last = state;
+            LastEvent = displayEvent;
+        }
     }
 
     private sealed class ManualTimeProvider : TimeProvider

@@ -62,18 +62,31 @@ same selected CV model. Sensitive phone information remains blurred in both file
 ### Generation progress
 
 In an interactive terminal, generation keeps two live rows visible: `Overall` shows
-work-unit-weighted progress for the complete run, while `Current task` shows the active
-operation. The applicable operations are computing heights, matching experiences,
-creating the TeX source and rendering the PDF, or creating the planned Markdown files.
-The completed 100% display remains visible after generation.
+equal-share progress across the modules applicable to the run, while `Current task`
+shows the active module's local progress from 0–100%.
+
+| PDF module | Overall range |
+| --- | ---: |
+| Computing heights | 0–25% |
+| Matching experiences | 25–50% |
+| Creating TeX file | 50–75% |
+| Rendering PDF | 75–100% |
+
+Markdown and debug runs use three equal modules: computing heights, matching
+experiences, and creating Markdown files. Each contributes one third of overall
+progress. The two Markdown files in a debug run share the single Markdown creation
+module. For example, 50% local progress in the first PDF module appears as 50% in
+`Current task` and 12.5% in `Overall`. The completed 100% display remains visible
+after generation.
 
 When standard output is redirected or the console is non-interactive, the CLI emits
 plain line-oriented status instead of progress-bar or ANSI animation. It writes on
-every task transition, warning, failure, and final completion, plus a heartbeat every
-five seconds even if progress has not changed:
+every module transition, warning, failure, and final completion, plus a heartbeat
+every five seconds even if progress has not changed. The percentage is the scaled
+overall progress:
 
 ```text
-Progress: 42% — Rendering PDF
+Progress: 75% — Rendering PDF
 ```
 
 PDF generation estimates two XeLaTeX passes and one PDF conversion pass. During each

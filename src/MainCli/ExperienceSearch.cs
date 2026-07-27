@@ -298,15 +298,6 @@ public sealed class ExperienceSearch
             DateOnly.FromDateTime(DateTime.Today),
             progress);
     }
-
-    internal int GetWorkUnitCount(ExperienceDatabase database)
-    {
-        ArgumentNullException.ThrowIfNull(database);
-
-        var itemCount = database.Experiences.Sum(
-            static experience => experience.Items.Length);
-        return checked(itemCount * 2 + 1);
-    }
 }
 
 public sealed class SearchResult

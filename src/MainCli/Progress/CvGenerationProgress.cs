@@ -4,7 +4,7 @@ using Spectre.Console.Rendering;
 
 namespace FindJobHelper.CVGeneration;
 
-internal enum CvGenerationTask
+internal enum CvGenerationModule
 {
     ComputingHeights,
     MatchingExperiences,
@@ -13,69 +13,62 @@ internal enum CvGenerationTask
     CreatingMarkdownFiles,
 }
 
-internal readonly record struct CvGenerationProgressTask(
-    CvGenerationTask Task,
-    string Description,
-    double WorkUnits);
+internal readonly record struct CvGenerationProgressModule(
+    CvGenerationModule Module,
+    string Description);
 
 internal sealed class CvGenerationProgressPlan
 {
-    private readonly ImmutableDictionary<CvGenerationTask, CvGenerationProgressTask> _tasks;
+    private readonly ImmutableDictionary<
+        CvGenerationModule,
+        CvGenerationProgressModule> _modules;
 
     public CvGenerationProgressPlan(
-        IEnumerable<CvGenerationProgressTask> tasks)
+        IEnumerable<CvGenerationProgressModule> modules)
     {
-        ArgumentNullException.ThrowIfNull(tasks);
+        ArgumentNullException.ThrowIfNull(modules);
 
-        var ordered = tasks.ToImmutableArray();
+        var ordered = modules.ToImmutableArray();
         if (ordered.IsEmpty)
         {
             throw new ArgumentException(
-                "At least one CV generation progress task is required.",
-                nameof(tasks));
-        }
-        if (ordered.Any(static task =>
-                !double.IsFinite(task.WorkUnits) || task.WorkUnits < 0))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(tasks),
-                "CV generation task weights must be finite and non-negative.");
+                "At least one CV generation progress module is required.",
+                nameof(modules));
         }
 
-        OrderedTasks = ordered;
-        _tasks = ordered.ToImmutableDictionary(static task => task.Task);
+        OrderedModules = ordered;
+        _modules = ordered.ToImmutableDictionary(
+            static module => module.Module);
     }
 
-    public ImmutableArray<CvGenerationProgressTask> OrderedTasks { get; }
+    public ImmutableArray<CvGenerationProgressModule> OrderedModules { get; }
 
-    public CvGenerationProgressTask Get(CvGenerationTask task) =>
-        _tasks.TryGetValue(task, out var definition)
+    public CvGenerationProgressModule Get(CvGenerationModule module) =>
+        _modules.TryGetValue(module, out var definition)
             ? definition
             : throw new InvalidOperationException(
-                $"Progress task '{task}' is not applicable to this generation.");
+                $"Progress module '{module}' is not applicable to this generation.");
 }
 
-internal readonly record struct WeightedProgressUpdate(
-    double TaskPercentage,
+internal readonly record struct EqualShareProgressUpdate(
+    double ModulePercentage,
     double OverallPercentage,
     string? Detail);
 
-internal sealed class WeightedProgressAggregator
+internal sealed class EqualShareProgressAggregator
 {
     private readonly object _sync = new();
-    private readonly ImmutableDictionary<CvGenerationTask, double> _weights;
-    private readonly Dictionary<CvGenerationTask, double> _fractions = new();
-    private readonly double _totalWeight;
+    private readonly ImmutableHashSet<CvGenerationModule> _modules;
+    private readonly Dictionary<CvGenerationModule, double> _fractions = new();
     private double _overallFraction;
 
-    public WeightedProgressAggregator(CvGenerationProgressPlan plan)
+    public EqualShareProgressAggregator(CvGenerationProgressPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        _weights = plan.OrderedTasks.ToImmutableDictionary(
-            static task => task.Task,
-            static task => task.WorkUnits);
-        _totalWeight = _weights.Values.Sum();
+        _modules = plan.OrderedModules
+            .Select(static module => module.Module)
+            .ToImmutableHashSet();
     }
 
     public double OverallPercentage
@@ -89,34 +82,35 @@ internal sealed class WeightedProgressAggregator
         }
     }
 
-    public WeightedProgressUpdate Update(
-        CvGenerationTask task,
+    public EqualShareProgressUpdate Update(
+        CvGenerationModule module,
         ProgressReport report)
     {
         lock (_sync)
         {
-            if (!_weights.ContainsKey(task))
+            if (!_modules.Contains(module))
             {
                 throw new InvalidOperationException(
-                    $"Progress task '{task}' is not part of the generation plan.");
+                    $"Progress module '{module}' is not part of the generation plan.");
             }
 
+            var reportedFraction = Math.Clamp(
+                ProgressMath.Fraction(report),
+                0,
+                1);
             var fraction = Math.Max(
-                _fractions.GetValueOrDefault(task),
-                ProgressMath.Fraction(report));
-            _fractions[task] = fraction;
+                _fractions.GetValueOrDefault(module),
+                reportedFraction);
+            _fractions[module] = fraction;
 
-            var calculatedOverall = _totalWeight <= 0
-                ? 1
-                : _weights.Sum(pair =>
-                    pair.Value * _fractions.GetValueOrDefault(pair.Key))
-                  / _totalWeight;
+            var calculatedOverall =
+                _fractions.Values.Sum() / _modules.Count;
             _overallFraction = Math.Max(
                 _overallFraction,
                 Math.Clamp(calculatedOverall, 0, 1));
 
             return new(
-                TaskPercentage: fraction * 100,
+                ModulePercentage: fraction * 100,
                 OverallPercentage: _overallFraction * 100,
                 Detail: report.Detail);
         }
@@ -126,17 +120,17 @@ internal sealed class WeightedProgressAggregator
 internal enum CvProgressDisplayEvent
 {
     Progress,
-    TaskTransition,
+    ModuleTransition,
     Warning,
-    TaskCompletion,
+    ModuleCompletion,
     Failure,
     FinalCompletion,
 }
 
 internal readonly record struct CvProgressDisplayState(
-    string TaskDescription,
+    string ModuleDescription,
     string DisplayDescription,
-    double TaskPercentage,
+    double ModulePercentage,
     double OverallPercentage);
 
 internal interface ICvProgressSink
@@ -150,10 +144,10 @@ internal sealed class CvGenerationProgressContext
 {
     private readonly object _sync = new();
     private readonly CvGenerationProgressPlan _plan;
-    private readonly WeightedProgressAggregator _aggregator;
+    private readonly EqualShareProgressAggregator _aggregator;
     private readonly ICvProgressSink _sink;
-    private readonly Dictionary<CvGenerationTask, IProgressReporter> _reporters = new();
-    private CvGenerationTask? _currentTask;
+    private readonly Dictionary<CvGenerationModule, IProgressReporter> _reporters = new();
+    private CvGenerationModule? _currentModule;
     private CvProgressDisplayState _lastState;
     private bool _failed;
     private bool _finished;
@@ -168,29 +162,31 @@ internal sealed class CvGenerationProgressContext
         _plan = plan;
         _sink = sink;
         _aggregator = new(plan);
-        foreach (var task in plan.OrderedTasks)
+        foreach (var module in plan.OrderedModules)
         {
-            _reporters.Add(task.Task, new TaskReporter(this, task.Task));
+            _reporters.Add(
+                module.Module,
+                new ModuleReporter(this, module.Module));
         }
     }
 
-    public IProgressReporter Reporter(CvGenerationTask task)
+    public IProgressReporter Reporter(CvGenerationModule module)
     {
         lock (_sync)
         {
-            return _reporters.TryGetValue(task, out var reporter)
+            return _reporters.TryGetValue(module, out var reporter)
                 ? reporter
                 : throw new InvalidOperationException(
-                    $"Progress task '{task}' is not applicable to this generation.");
+                    $"Progress module '{module}' is not applicable to this generation.");
         }
     }
 
-    public void BeginTask(CvGenerationTask task)
+    public void BeginModule(CvGenerationModule module)
     {
         lock (_sync)
         {
             ThrowIfFinished();
-            BeginTaskCore(task);
+            BeginModuleCore(module);
         }
     }
 
@@ -202,7 +198,7 @@ internal sealed class CvGenerationProgressContext
             _finished = true;
             _lastState = _lastState with
             {
-                TaskPercentage = 100,
+                ModulePercentage = 100,
                 OverallPercentage = 100,
             };
             _sink.Update(_lastState, CvProgressDisplayEvent.FinalCompletion);
@@ -224,47 +220,47 @@ internal sealed class CvGenerationProgressContext
     }
 
     private void Report(
-        CvGenerationTask task,
+        CvGenerationModule module,
         ProgressReport report)
     {
         lock (_sync)
         {
             ThrowIfFinished();
-            if (_currentTask != task)
+            if (_currentModule != module)
             {
-                BeginTaskCore(task);
+                BeginModuleCore(module);
             }
 
-            var definition = _plan.Get(task);
-            var update = _aggregator.Update(task, report);
+            var definition = _plan.Get(module);
+            var update = _aggregator.Update(module, report);
             var displayDescription = string.IsNullOrWhiteSpace(update.Detail)
                 ? definition.Description
                 : update.Detail;
             _lastState = new(
-                TaskDescription: definition.Description,
+                ModuleDescription: definition.Description,
                 DisplayDescription: displayDescription!,
-                TaskPercentage: update.TaskPercentage,
+                ModulePercentage: update.ModulePercentage,
                 OverallPercentage: update.OverallPercentage);
 
             var displayEvent = IsWarning(update.Detail)
                 ? CvProgressDisplayEvent.Warning
-                : update.TaskPercentage >= 100
-                    ? CvProgressDisplayEvent.TaskCompletion
+                : update.ModulePercentage >= 100
+                    ? CvProgressDisplayEvent.ModuleCompletion
                     : CvProgressDisplayEvent.Progress;
             _sink.Update(_lastState, displayEvent);
         }
     }
 
-    private void BeginTaskCore(CvGenerationTask task)
+    private void BeginModuleCore(CvGenerationModule module)
     {
-        var definition = _plan.Get(task);
-        _currentTask = task;
+        var definition = _plan.Get(module);
+        _currentModule = module;
         _lastState = new(
-            TaskDescription: definition.Description,
+            ModuleDescription: definition.Description,
             DisplayDescription: definition.Description,
-            TaskPercentage: 0,
+            ModulePercentage: 0,
             OverallPercentage: _aggregator.OverallPercentage);
-        _sink.Update(_lastState, CvProgressDisplayEvent.TaskTransition);
+        _sink.Update(_lastState, CvProgressDisplayEvent.ModuleTransition);
     }
 
     private void ThrowIfFinished()
@@ -281,11 +277,12 @@ internal sealed class CvGenerationProgressContext
             "taking longer than expected",
             StringComparison.OrdinalIgnoreCase) == true;
 
-    private sealed class TaskReporter(
+    private sealed class ModuleReporter(
         CvGenerationProgressContext owner,
-        CvGenerationTask task) : IProgressReporter
+        CvGenerationModule module) : IProgressReporter
     {
-        public void Report(ProgressReport report) => owner.Report(task, report);
+        public void Report(ProgressReport report) =>
+            owner.Report(module, report);
     }
 }
 
@@ -384,7 +381,7 @@ internal sealed class InteractiveCvGenerationProgressDisplay(
             lock (_sync)
             {
                 overall.Value = Math.Clamp(state.OverallPercentage, 0, 100);
-                current.Value = Math.Clamp(state.TaskPercentage, 0, 100);
+                current.Value = Math.Clamp(state.ModulePercentage, 0, 100);
                 current.Description =
                     $"Current task: {Markup.Escape(state.DisplayDescription)}";
                 context.Refresh();
@@ -479,7 +476,7 @@ internal sealed class RedirectedCvGenerationProgressDisplay(
                 _state = state;
                 switch (displayEvent)
                 {
-                    case CvProgressDisplayEvent.TaskTransition:
+                    case CvProgressDisplayEvent.ModuleTransition:
                     case CvProgressDisplayEvent.Failure:
                     case CvProgressDisplayEvent.FinalCompletion:
                         Write(state, displayEvent);
@@ -495,7 +492,7 @@ internal sealed class RedirectedCvGenerationProgressDisplay(
                         }
                         break;
                     case CvProgressDisplayEvent.Progress:
-                    case CvProgressDisplayEvent.TaskCompletion:
+                    case CvProgressDisplayEvent.ModuleCompletion:
                         break;
                     default:
                         throw new ArgumentOutOfRangeException(

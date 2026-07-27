@@ -72,11 +72,12 @@ public sealed class CvGenerationCliEndToEndTests
                 "--debug");
 
             AssertSuccessful(result);
-            AssertProgressTaskSequence(
+            AssertProgressModuleTransitions(
                 result.StandardOutput,
-                "Computing heights",
-                "Matching experiences",
-                "Creating Markdown files");
+                (0, "Computing heights"),
+                (33, "Matching experiences"),
+                (67, "Creating Markdown files"),
+                (100, "Creating Markdown files"));
             Assert.DoesNotContain(
                 "Creating TeX file",
                 result.StandardOutput,
@@ -173,11 +174,12 @@ public sealed class CvGenerationCliEndToEndTests
                 "mD");
 
             AssertSuccessful(result);
-            AssertProgressTaskSequence(
+            AssertProgressModuleTransitions(
                 result.StandardOutput,
-                "Computing heights",
-                "Matching experiences",
-                "Creating Markdown files");
+                (0, "Computing heights"),
+                (33, "Matching experiences"),
+                (67, "Creating Markdown files"),
+                (100, "Creating Markdown files"));
 
             var markdownFile = Assert.Single(GetFileNames(outputDirectory));
             Assert.Equal("CurmanchiiAnton.md", markdownFile);
@@ -261,12 +263,13 @@ public sealed class CvGenerationCliEndToEndTests
                 "TeX");
 
             AssertSuccessful(result);
-            AssertProgressTaskSequence(
+            AssertProgressModuleTransitions(
                 result.StandardOutput,
-                "Computing heights",
-                "Matching experiences",
-                "Creating TeX file",
-                "Rendering PDF");
+                (0, "Computing heights"),
+                (25, "Matching experiences"),
+                (50, "Creating TeX file"),
+                (75, "Rendering PDF"),
+                (100, "Rendering PDF"));
             Assert.DoesNotContain(
                 "Creating Markdown files",
                 result.StandardOutput,
@@ -489,20 +492,21 @@ public sealed class CvGenerationCliEndToEndTests
             $"CLI exited with {result.ExitCode}.{Environment.NewLine}stdout:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}stderr:{Environment.NewLine}{result.StandardError}");
     }
 
-    private static void AssertProgressTaskSequence(
+    private static void AssertProgressModuleTransitions(
         string output,
-        params string[] tasks)
+        params (int Percentage, string Module)[] transitions)
     {
         var previousIndex = -1;
-        foreach (var task in tasks)
+        foreach (var (percentage, module) in transitions)
         {
+            var expected = $"Progress: {percentage}% — {module}";
             var index = output.IndexOf(
-                $" — {task}",
+                expected,
                 previousIndex + 1,
                 StringComparison.Ordinal);
             Assert.True(
                 index > previousIndex,
-                $"Progress task '{task}' was missing or out of order.{Environment.NewLine}{output}");
+                $"Progress transition '{expected}' was missing or out of order.{Environment.NewLine}{output}");
             previousIndex = index;
         }
     }

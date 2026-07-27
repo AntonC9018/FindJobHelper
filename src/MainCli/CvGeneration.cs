@@ -182,8 +182,6 @@ public static class CvTemplate
 
     public const int ExpectedXeLatexPassCount = 2;
     public const int ExpectedPdfConversionPassCount = 1;
-    internal const int EstimatedPdfWorkUnitCount =
-        ExpectedXeLatexPassCount + ExpectedPdfConversionPassCount;
 
     public static async Task<GeneratedCvArtifacts> Generate(
         GenerateParams p,
