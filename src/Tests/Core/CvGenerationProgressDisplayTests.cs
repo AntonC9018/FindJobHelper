@@ -59,6 +59,11 @@ public sealed class CvGenerationProgressDisplayTests
             "100%",
             renderedLines[currentDescriptionLine - 1],
             StringComparison.Ordinal);
+        Assert.Equal(
+            renderedLines[overallDescriptionLine - 1]
+                .Count(static character => character == '━'),
+            renderedLines[currentDescriptionLine - 1]
+                .Count(static character => character == '━'));
     }
 
     [Fact]

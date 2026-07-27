@@ -352,8 +352,11 @@ internal sealed class InteractiveCvGenerationProgressDisplay(
 
     private sealed class StackedProgressColumn : ProgressColumn
     {
+        private const int Width = 50;
         private readonly ProgressBarColumn _progressBar = new();
         private readonly PercentageColumn _percentage = new();
+
+        public override int? GetColumnWidth(RenderOptions options) => Width;
 
         public override IRenderable Render(
             RenderOptions options,
