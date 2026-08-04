@@ -6,6 +6,23 @@ namespace FindJobHelper.Core.Tests;
 public sealed class ExperienceItemBuilderTests
 {
     [Fact]
+    public void Builder_RejectsDuplicateExclusionMembers()
+    {
+        var databaseBuilder = new ExperienceDatabaseBuilder();
+        var place = databaseBuilder.Place("test");
+        var exception = Assert.Throws<InvalidOperationException>(() => databaseBuilder.Job(experience =>
+        {
+            experience.Title("job");
+            experience.Place(place);
+            experience.DateRange(DateRange.Completed(new(2024), new(2025)));
+            var item = experience.Item(x => x.Text($"item"));
+            experience.DoNotIncludeTogether([item, item]);
+        }));
+
+        Assert.Contains("duplicate", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Builder_NamedGroupsReuseHandlesAndPreserveFlatDeclarationOrder()
     {
         var databaseBuilder = new ExperienceDatabaseBuilder();

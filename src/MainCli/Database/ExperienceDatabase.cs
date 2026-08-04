@@ -75,6 +75,12 @@ public sealed class ExperienceItemGroup
     public required ImmutableArray<ExperienceListItem> Items { get; init; }
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class ExperienceItemExclusionSet
+{
+    public required ImmutableArray<ExperienceListItem> Items { get; init; }
+}
+
 public sealed record class MmrOptions(
     float RelevanceWeight,
     int SaturationQuota,
@@ -289,7 +295,7 @@ public static class ExperienceListSorter
         this ExperienceList list,
         IEnumerable<ExperienceListItem> selectedItems)
     {
-        list.ValidateItemGroups();
+        list.ValidateItemConfiguration();
         var selected = selectedItems.ToList();
         var comparer = System.Collections.Generic.ReferenceEqualityComparer.Instance;
         var selectedSet = new HashSet<ExperienceListItem>(selected, comparer);
@@ -504,9 +510,11 @@ public sealed class ExperienceList
     public required ImmutableArray<ExperienceListItem> Items { get; init; }
     public ImmutableArray<ExperienceItemGroup> ItemGroups { get; init; } =
         ImmutableArray<ExperienceItemGroup>.Empty;
+    public ImmutableArray<ExperienceItemExclusionSet> ItemExclusionSets { get; init; } =
+        ImmutableArray<ExperienceItemExclusionSet>.Empty;
     public ImmutableArray<RegularString> Urls { get; init; } = ImmutableArray<RegularString>.Empty;
 
-    internal void ValidateItemGroups()
+    internal void ValidateItemConfiguration()
     {
         var comparer = System.Collections.Generic.ReferenceEqualityComparer.Instance;
         var items = new HashSet<ExperienceListItem>(Items, comparer);
@@ -538,6 +546,71 @@ public sealed class ExperienceList
                 {
                     throw new InvalidOperationException(
                         "An experience item cannot belong to more than one named group.");
+                }
+            }
+        }
+
+
+        foreach (var item in Items)
+        {
+            if (item is null)
+            {
+                throw new InvalidOperationException("An experience list cannot contain a null item.");
+            }
+
+            ValidateReferences(item.DependsOn, "dependency");
+            ValidateReferences(item.Order.After, "ordering");
+        }
+
+        var exclusionSets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var exclusionSet in ItemExclusionSets)
+        {
+            if (exclusionSet is null)
+            {
+                throw new InvalidOperationException("An experience item exclusion set cannot be null.");
+            }
+
+            var members = new HashSet<ExperienceListItem>(comparer);
+            foreach (var item in exclusionSet.Items)
+            {
+                if (item is null)
+                {
+                    throw new InvalidOperationException("An experience item exclusion set cannot contain a null item.");
+                }
+                if (!items.Contains(item))
+                {
+                    throw new InvalidOperationException(
+                        "An experience item exclusion set contains an item that does not belong to its experience list.");
+                }
+                if (!members.Add(item))
+                {
+                    throw new InvalidOperationException(
+                        "An experience item exclusion set cannot contain duplicate items.");
+                }
+            }
+
+            if (members.Count < 2)
+            {
+                throw new InvalidOperationException(
+                    "An experience item exclusion set must contain at least two distinct items.");
+            }
+
+            var key = string.Join(",", members.Select(item => Items.IndexOf(item)).Order());
+            if (!exclusionSets.Add(key))
+            {
+                throw new InvalidOperationException(
+                    "Duplicate experience item exclusion sets are not allowed, regardless of member order.");
+            }
+        }
+
+        void ValidateReferences(ImmutableArray<ExperienceListItem> references, string relationship)
+        {
+            foreach (var referencedItem in references)
+            {
+                if (referencedItem is null || !items.Contains(referencedItem))
+                {
+                    throw new InvalidOperationException(
+                        $"An experience item {relationship} references an item that does not belong to its experience list.");
                 }
             }
         }
@@ -758,6 +831,7 @@ public sealed class ExperienceListBuilder
     private readonly List<ExperienceItemBuilder> _itemBuilders = new();
     private readonly Dictionary<string, ExperienceItemGroupBuilder> _groups =
         new(StringComparer.Ordinal);
+    private readonly List<ExperienceItemBuilder[]> _exclusionSets = new();
     private readonly ImmutableArray<RegularString>.Builder _urls = ImmutableArray.CreateBuilder<RegularString>();
     private IRichTextNode? _description;
 
@@ -833,6 +907,22 @@ public sealed class ExperienceListBuilder
         return group;
     }
 
+    public void DoNotIncludeTogether(ReadOnlySpan<ExperienceItemBuilder> items)
+    {
+        if (items.Length < 2)
+        {
+            throw new ArgumentException(
+                "An exclusion set must contain at least two distinct items.", nameof(items));
+        }
+
+        var copy = items.ToArray();
+        if (copy.Any(static item => item is null))
+        {
+            throw new ArgumentNullException(nameof(items), "An exclusion set cannot contain null item handles.");
+        }
+        _exclusionSets.Add(copy);
+    }
+
     public void Url(string url)
     {
         _urls.Add(new RegularString(url));
@@ -866,6 +956,14 @@ public sealed class ExperienceListBuilder
         }
 
         var itemGroups = _groups.Values.Select(group => group.Build(builtItems)).ToImmutableArray();
+        var itemExclusionSets = _exclusionSets.Select(set => new ExperienceItemExclusionSet
+        {
+            Items = set.Select(builder => builtItems.TryGetValue(builder, out var item)
+                ? item
+                : throw new InvalidOperationException(
+                    "An exclusion set contains an item handle that does not belong to its experience list."))
+                .ToImmutableArray(),
+        }).ToImmutableArray();
 
         var result = new ExperienceList
         {
@@ -876,9 +974,10 @@ public sealed class ExperienceListBuilder
             Description = _description,
             Items = [.. builtItems.Values],
             ItemGroups = itemGroups,
+            ItemExclusionSets = itemExclusionSets,
             Urls = _urls.DrainToImmutable(),
         };
-        result.ValidateItemGroups();
+        result.ValidateItemConfiguration();
         return result;
     }
 }
@@ -1312,7 +1411,7 @@ public static class ExperienceDatabaseSerializer
         {
             foreach (var experience in db.Experiences)
             {
-                experience.ValidateItemGroups();
+                experience.ValidateItemConfiguration();
             }
             await JsonSerializer.SerializeAsync(
                 options: Options,
@@ -1334,7 +1433,7 @@ public static class ExperienceDatabaseSerializer
         }
         foreach (var experience in ret.Experiences)
         {
-            experience.ValidateItemGroups();
+            experience.ValidateItemConfiguration();
         }
         return ret;
     }

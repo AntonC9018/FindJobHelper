@@ -515,6 +515,10 @@ internal static class ExperienceSelectionEngine
         mmr.Validate();
 
         var materializedLists = lists.ToList();
+        foreach (var list in materializedLists)
+        {
+            list.ValidateItemConfiguration();
+        }
         var progressTracker = new SelectionProgressTracker(
             materializedLists.Sum(static list => list.Items.Length),
             progress);
@@ -1381,6 +1385,31 @@ internal static class ExperienceSelectionEngine
             if (_temp.Count == 0)
             {
                 return false;
+            }
+
+
+            var closure = new HashSet<ExperienceListItem>(
+                _temp.Select(static pending => pending.Item),
+                ItemReferenceComparer.Instance);
+            foreach (var exclusionSet in candidate.List.ItemExclusionSets)
+            {
+                var closureMembers = exclusionSet.Items.Count(closure.Contains);
+                if (closureMembers > 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Selection closure for experience '{candidate.List.Title.Value}' contains mutually exclusive items.");
+                }
+
+                if (closureMembers == 1 && exclusionSet.Items.Any(Added.Contains))
+                {
+                    if (reason == SelectionItemReason.RequiredAlways)
+                    {
+                        throw new InvalidOperationException(
+                            $"Experience '{candidate.List.Title.Value}' has mutually exclusive Required().Always() items that both require selection.");
+                    }
+
+                    return false;
+                }
             }
 
             var pendingItems = _temp.Select(static pending => pending.Item).ToArray();

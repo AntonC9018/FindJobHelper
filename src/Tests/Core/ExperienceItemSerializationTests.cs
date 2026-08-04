@@ -10,6 +10,33 @@ namespace FindJobHelper.Core.Tests;
 public sealed class ExperienceItemSerializationTests
 {
     [Fact]
+    public async Task Serialization_PreservesExclusionMemberIdentity()
+    {
+        var first = Item("first");
+        var second = Item("second");
+        var database = Database(first, second);
+        var list = Assert.Single(database.Experiences);
+        database = WithExperiences(database, [new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Type = list.Type,
+            Items = list.Items,
+            ItemExclusionSets = [new ExperienceItemExclusionSet { Items = [first, second] }],
+        }]);
+
+        var json = await Serialize(database);
+        await using var input = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        var roundTripped = await ExperienceDatabaseSerializer.Deserialize(input, CancellationToken.None);
+        var roundTrippedList = Assert.Single(roundTripped.Experiences);
+        var set = Assert.Single(roundTrippedList.ItemExclusionSets);
+
+        Assert.Same(roundTrippedList.Items[0], set.Items[0]);
+        Assert.Same(roundTrippedList.Items[1], set.Items[1]);
+    }
+
+    [Fact]
     public async Task Serialization_PreservesNamedGroupIdsAndMemberIdentity()
     {
         var first = Item("first");

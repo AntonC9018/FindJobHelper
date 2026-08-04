@@ -12,6 +12,61 @@ public sealed class ExperienceSearchTests
     private static readonly ExperienceKey ProjectKey = new("Project");
 
     [Fact]
+    public void Search_ExclusionKeepsHigherRankedItemAndUsesUnrelatedFallback()
+    {
+        var tag = new Tag("a");
+        var high = Item("high", (tag, 10));
+        var conflicting = Item("conflicting", (tag, 9));
+        var fallback = Item("fallback", (tag, 8));
+        var list = Experience("work", ExperienceType.Job, 2025, high, conflicting, fallback);
+        list = new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Type = list.Type,
+            Items = list.Items,
+            ItemExclusionSets = [new ExperienceItemExclusionSet { Items = [high, conflicting] }],
+        };
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Mmr(new MmrOptions(1, 1, 0));
+        builder.Configure(WorkKey, _ => true, options => options.TotalItemBudget = 2);
+
+        var result = builder.Build().Run([list], NoOpProgressReporter.Instance);
+
+        Assert.Equal(new[] { "high", "fallback" }, Texts(result.Get(WorkKey)));
+        Assert.DoesNotContain(
+            result.Diagnostics.Items,
+            trace => ReferenceEquals(trace.Item, conflicting));
+    }
+
+    [Fact]
+    public void Search_ThrowsWhenDependencyClosureContainsMutuallyExclusiveItems()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency", (tag, 1));
+        var candidate = ItemDependingOn("candidate", [dependency], (tag, 10));
+        var list = Experience("work", ExperienceType.Job, 2025, dependency, candidate);
+        list = new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Type = list.Type,
+            Items = list.Items,
+            ItemExclusionSets = [new ExperienceItemExclusionSet { Items = [dependency, candidate] }],
+        };
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(WorkKey, _ => true, options => options.TotalItemBudget = 2);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            builder.Build().Run([list], NoOpProgressReporter.Instance));
+
+        Assert.Contains("closure", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("mutually exclusive", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Search_DefaultsMissingBudgetsToUnboundedRange()
     {
         var tag = new Tag("a");
