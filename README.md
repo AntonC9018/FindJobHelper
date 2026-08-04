@@ -121,14 +121,19 @@ Comments and trailing commas are allowed, but unknown properties are rejected.
     "saturationPenalty": 0.18
   },
   "selection": {
+    "default": {
+      "directMatchBoost": 0.25
+    },
     "workExperience": {
       "minTotalItemBudget": 2,
       "totalItemBudget": 8,
       "scoreLowerBound": 0,
-      "recencyBoost": 0.25
+      "recencyBoost": 0.25,
+      "directMatchBoost": 0.5
     },
     "personalProjects": {
-      "totalItemBudget": 2
+      "totalItemBudget": 2,
+      "directMatchBoost": 0
     }
   },
   "sectionOrder": [
@@ -199,11 +204,15 @@ to fill a range.
 | --- | ---: | --- | --- |
 | `minTotalItemBudget` | `0` | Tries to select at least this many bullets in the section. Minimum filling may accept a candidate even when its MMR score is non-positive, but cannot invent matching candidates or bypass page-layout admission. |
 | `totalItemBudget` | Unlimited | Maximum number of bullets in the section. Dependencies and other required companion bullets count toward the budget. `minTotalItemBudget` cannot exceed it. |
-| `scoreLowerBound` | `0` | Removes a bullet before MMR ranking when its raw weighted tag-match score is below this value. It is applied before the recency boost. |
-| `recencyBoost` | `0` | Favors newer experience lists within the same section. The oldest list receives a multiplier of `1`; the newest receives `1 + recencyBoost`; dates in between are linearly interpolated. |
+| `scoreLowerBound` | `0` | Removes a bullet before MMR ranking when its tag relevance, including the direct-match bonus, is below this value. The later recency bonus remains excluded. |
+| `directMatchBoost` | `0` | Adds a contribution-based bonus for exact configured tags and bidirectional full-overlap aliases. It must be finite and non-negative. |
+| `recencyBoost` | `0` | Adds a bonus for newer experience lists within the same section. The oldest list receives no bonus; the newest receives `max(0, baseRelevance) × recencyBoost`; dates in between are linearly interpolated. |
 
-For example, `recencyBoost: 0.25` leaves the oldest job's relevance unchanged and
-multiplies the newest job's relevance by `1.25`.
+`selection.default.directMatchBoost` is inherited when a section omits the property.
+A section value overrides it, and an explicit `0` disables the inherited boost. This
+nullable inheritance rule applies only to `directMatchBoost`; all existing selection
+properties keep their previous overlay behavior. Omitting the property everywhere
+resolves it to `0` and preserves existing clean-CV selection.
 
 ## MMR parameters
 
@@ -223,11 +232,10 @@ MMR score =
 
 Where:
 
-- `normalizedRelevance` is the candidate's raw weighted tag-match score, including its
-  recency multiplier, divided by the highest adjusted relevance among all candidates.
-  When several requirements reach the same experience tag, raw relevance uses only the
-  largest effective coefficient, so aliases and overlapping relation paths do not
-  inflate relevance.
+- `normalizedRelevance` is the candidate's fully adjusted, pre-MMR relevance divided by
+  the highest such relevance among all candidates. When several requirements reach the
+  same experience tag, base relevance uses only the largest effective coefficient, so
+  aliases and overlapping relation paths do not inflate it.
 - `maxSimilarity` is the highest cosine similarity between the candidate's explicit
   requirement-coverage vector and any already selected bullet's vector.
 - `saturation` is a weighted penalty for explicit requirements that have already
@@ -239,20 +247,54 @@ is the maximum alias weight. For example, configuring both `C#` and `.NET` at `1
 creates one canonical `.NET` requirement with weight `1.5`, not `3`.
 
 Every matched experience tag retains all explicit requirements that reached it. Its
-largest effective coefficient contributes to raw relevance, while every positive origin
-contributes to requirement coverage:
+largest effective coefficient contributes to base relevance. A separate direct
+coefficient exists only for an exact configured tag or a bidirectional full-overlap
+alias, and uses the largest configured weight in that alias group:
 
 ```text
-raw contribution for an experience tag =
+baseTagContribution =
     evidence score × maximum effective requirement coefficient
+
+directContribution =
+    evidence score × maximum direct-or-alias coefficient
+
+directBonus =
+    max(0, directContribution) × directMatchBoost
+
+tagRelevance = baseTagContribution + directBonus
 
 coverage for an explicit requirement =
     sum of its effective contributions across matched experience tags
 ```
 
+Partial, one-way, and transitive relations are indirect and receive no direct bonus.
+Each bullet tag earns its own bonus; the aggregate bullet score is never multiplied once
+per matching tag. If a bullet tag is a stronger indirect match for one requirement and a
+weaker direct match for another, only the weaker direct contribution is boosted. For
+example, base relevance `10`, direct contribution `4`, and `directMatchBoost: 0.5`
+produce `10 + 4 × 0.5 = 12`, not `15`.
+
+After tag relevance is complete, recency is added from unboosted base relevance:
+
+```text
+appliedRecencyBoost = configuredRecencyBoost × normalizedRecency
+recencyBonus = max(0, baseRelevance) × appliedRecencyBoost
+
+adjustedPreMmrRelevance =
+    baseRelevance + directBonus + recencyBonus
+```
+
+The bonuses are additive rather than compounded. With base relevance `10`, direct
+contribution `4`, direct boost `0.5`, and applied recency boost `0.25`, the result entering
+MMR is `10 + 2 + 2.5 = 14.5`, not `(10 + 2) × 1.25 = 15`.
+
 This means an indirect `Unity` or `Game Programming` match reached from `.NET` still
 occupies the `.NET` MMR dimension. Transitive intermediate tags do not become MMR
-dimensions unless they were explicitly configured as requirements.
+dimensions unless they were explicitly configured as requirements. Direct and recency
+bonuses do not change requirement coverage, cosine-similarity vectors, saturation
+proportions, or selected-requirement counts. MMR subtracts its similarity and saturation
+terms only after both positive relevance bonuses have been applied; no later conversion
+rescales the signed result.
 
 The configuration requires all three MMR parameters:
 
@@ -295,12 +337,12 @@ candidate has a positive MMR score, unless a section minimum still needs to be f
   it is a hard pre-MMR filter.
 
 Change one dimension at a time. Use `--debug` after each change to inspect aggregate
-and per-bullet scores directly in the generated CV. Per-bullet annotations keep raw
-matches separate from the signed MMR rank and show the relevance, similarity, and
-saturation terms, canonical requirement coverage, configured aliases, and
-target-to-origin contributions. Negative scores remain visible when page filling or a
-section minimum forces their selection. Event headings aggregate only raw relevance,
-signed rank, coverage, and matches; they do not imply an event-level MMR formula. The
+and per-bullet scores directly in the generated CV. Per-bullet annotations emit one
+normalized signed `rank`, show base relevance, both additive bonuses, adjusted relevance,
+and the MMR terms, and keep the unboosted requirement-origin values used by similarity
+and saturation visible. Negative normalized ranks remain unchanged when page filling or
+a section minimum forces their selection. Event rank aggregates sum those normalized
+bullet ranks; they do not imply an event-level MMR formula. The
 annotated Markdown preserves the configured section order and selected content, making
 it easier to see whether tag weights, MMR settings, or section budgets need the next
 adjustment.

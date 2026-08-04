@@ -122,13 +122,10 @@ public sealed class SomeTests
             .Run(db.Experiences, NoOpProgressReporter.Instance)
             .Get(workKey);
         var settings = new VerifySettings();
-        settings.IgnoreMember<EventDebugInfo>(x => x.RawScore);
-        settings.IgnoreMember<EventDebugInfo>(x => x.RequirementCoverage);
-        settings.IgnoreMember<EventDebugInfo>(x => x.TagMatches);
-        settings.IgnoreMember<SubEvent>(x => x.DebugRawScore);
-        settings.IgnoreMember<SubEvent>(x => x.DebugRequirementCoverage);
-        settings.IgnoreMember<SubEvent>(x => x.DebugTagMatches);
-        settings.IgnoreMember<SubEvent>(x => x.DebugMmrScoreBreakdown);
+        settings.IgnoreMember<SelectionDebugInfo>(x => x.RawScore);
+        settings.IgnoreMember<SelectionDebugInfo>(x => x.RequirementCoverage);
+        settings.IgnoreMember<SelectionDebugInfo>(x => x.TagMatches);
+        settings.IgnoreMember<SelectionDebugInfo>(x => x.MmrScoreBreakdown);
         await Verify(ev, settings);
     }
 

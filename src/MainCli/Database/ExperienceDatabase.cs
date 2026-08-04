@@ -115,21 +115,21 @@ public sealed record class MmrOptions(
 
 public sealed record MmrScoreBreakdown(
     int SelectionOrdinal,
+    float BaseRelevance,
+    float DirectMatchBonus,
     float RawRelevance,
-    float RecencyMultiplier,
-    float AdjustedRelevance,
+    float AppliedRecencyBoost,
+    float RecencyBonus,
+    float AdjustedPreMmrRelevance,
     float NormalizedRelevance,
     float MaximumCosineSimilarity,
     float Saturation,
     float WeightedRelevanceTerm,
     float WeightedSimilarityPenalty,
     float WeightedSaturationPenalty,
-    float NormalizedMmrScore,
-    float RawEquivalentRankScore)
+    float NormalizedMmrScore)
 {
     public float FinalSignedNormalizedMmrScore => NormalizedMmrScore;
-
-    public float SignedRawEquivalentRankScore => RawEquivalentRankScore;
 }
 
 public static class ExperienceListSorter
@@ -449,7 +449,12 @@ public static class ExperienceListSorter
         {
             foreach (var x in t.Items)
             {
-                subBuilder.Add(new(x.Score, x.Item.Text));
+                subBuilder.Add(new(
+                    x.Item.Text,
+                    new()
+                    {
+                        Score = x.Score,
+                    }));
             }
 
             builder.Add(new()
@@ -982,11 +987,13 @@ public sealed class TagMatchOrigin
 {
     public TagMatchOrigin(
         RequiredTagGroup requiredTagGroup,
-        float coefficient)
+        float coefficient,
+        bool isDirect = false)
     {
         ArgumentNullException.ThrowIfNull(requiredTagGroup);
         RequiredTagGroup = requiredTagGroup;
         Coefficient = coefficient;
+        IsDirect = isDirect;
     }
 
     public RequiredTagGroup RequiredTagGroup { get; }
@@ -996,6 +1003,8 @@ public sealed class TagMatchOrigin
     public float Coefficient { get; }
 
     public float EffectiveCoefficient => Coefficient;
+
+    public bool IsDirect { get; }
 }
 
 public sealed class WeightedTagProjection
@@ -1003,10 +1012,12 @@ public sealed class WeightedTagProjection
     public WeightedTagProjection(
         Tag targetTag,
         float maximumCoefficient,
+        float maximumDirectCoefficient,
         ImmutableArray<TagMatchOrigin> origins)
     {
         TargetTag = targetTag;
         MaximumCoefficient = maximumCoefficient;
+        MaximumDirectCoefficient = maximumDirectCoefficient;
         Origins = origins.IsDefault ? [] : origins;
     }
 
@@ -1017,6 +1028,8 @@ public sealed class WeightedTagProjection
     public float MaximumCoefficient { get; }
 
     public float MaximumRawCoefficient => MaximumCoefficient;
+
+    public float MaximumDirectCoefficient { get; }
 
     public ImmutableArray<TagMatchOrigin> Origins { get; }
 }
@@ -1072,9 +1085,8 @@ public sealed class WeightedTags : IReadOnlyCollection<WeightedTagProjection>
             .Select(group => new WeightedTagProjection(
                 group.CanonicalTag,
                 group.MaximumWeight,
-                group.MaximumWeight > 0
-                    ? [new(group, group.MaximumWeight)]
-                    : []))
+                group.MaximumWeight,
+                [new(group, group.MaximumWeight, isDirect: true)]))
             .ToImmutableArray();
         return new(groups, projections);
     }
@@ -1126,12 +1138,18 @@ public sealed class ScoredTagMatch
     public ScoredTagMatch(
         WeightedTagProjection projection,
         float evidenceScore,
-        float rawContribution)
+        float baseContribution,
+        float directContribution,
+        float directMatchBonus,
+        float relevanceContribution)
     {
         ArgumentNullException.ThrowIfNull(projection);
         Projection = projection;
         EvidenceScore = evidenceScore;
-        RawContribution = rawContribution;
+        BaseContribution = baseContribution;
+        DirectContribution = directContribution;
+        DirectMatchBonus = directMatchBonus;
+        RelevanceContribution = relevanceContribution;
     }
 
     public WeightedTagProjection Projection { get; }
@@ -1140,7 +1158,15 @@ public sealed class ScoredTagMatch
 
     public float EvidenceScore { get; }
 
-    public float RawContribution { get; }
+    public float BaseContribution { get; }
+
+    public float DirectContribution { get; }
+
+    public float DirectMatchBonus { get; }
+
+    public float RelevanceContribution { get; }
+
+    public float RawContribution => BaseContribution;
 }
 
 public sealed class ScoredTags : IReadOnlyDictionary<Tag, float>
@@ -1162,8 +1188,10 @@ public sealed class ScoredTags : IReadOnlyDictionary<Tag, float>
             x => x.Value);
         _scores = MatchProvenance.ToImmutableDictionary(
             x => x.TargetTag,
-            x => x.RawContribution);
-        Sum = MatchProvenance.Sum(x => x.RawContribution);
+            x => x.RelevanceContribution);
+        BaseRelevance = MatchProvenance.Sum(x => x.BaseContribution);
+        DirectMatchBonus = MatchProvenance.Sum(x => x.DirectMatchBonus);
+        Sum = BaseRelevance + DirectMatchBonus;
     }
 
     public ImmutableArray<ScoredTagMatch> MatchProvenance { get; }
@@ -1173,6 +1201,14 @@ public sealed class ScoredTags : IReadOnlyDictionary<Tag, float>
     public IReadOnlyDictionary<Tag, float> RequirementCoverage { get; }
 
     public IReadOnlyDictionary<RequiredTagGroup, float> RequirementGroupCoverage { get; }
+
+    public float BaseRelevance { get; }
+
+    public float BaseSum => BaseRelevance;
+
+    public float DirectMatchBonus { get; }
+
+    public float DirectMatchBonusSum => DirectMatchBonus;
 
     public float Sum { get; }
 

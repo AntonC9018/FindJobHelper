@@ -499,23 +499,50 @@ public sealed class SelectionOptionsConfiguration
     public int? TotalItemBudget { get; init; }
     public float ScoreLowerBound { get; init; }
     public float RecencyBoost { get; init; }
+    public float? DirectMatchBoost { get; init; } = 0;
 
     public void Apply(SearchPredicateOptions options)
     {
         options.MinTotalItemBudget = MinTotalItemBudget;
         options.TotalItemBudget = TotalItemBudget ?? int.MaxValue;
         options.ScoreLowerBound = ScoreLowerBound;
-        options.RecencyBoost = RecencyBoost;
+        options.RecencyBoost = new(RecencyBoost);
+        if (DirectMatchBoost is { } directMatchBoost)
+        {
+            options.DirectMatchBoost = new(directMatchBoost);
+        }
     }
 
     public void CollectValidationErrors(string path, List<string> errors)
     {
-        var options = new SearchPredicateOptions();
-        Apply(options);
+        var options = new SearchPredicateOptions
+        {
+            MinTotalItemBudget = MinTotalItemBudget,
+            TotalItemBudget = TotalItemBudget ?? int.MaxValue,
+            ScoreLowerBound = ScoreLowerBound,
+        };
         foreach (var error in SearchPredicateOptionsValidator.ValidateOptions(options))
         {
             var propertyName = JsonNamingPolicy.CamelCase.ConvertName(error.PropertyName);
             errors.Add($"'{path}.{propertyName}' {error.Message}");
+        }
+
+        AddBoostValidationError(nameof(RecencyBoost), RecencyBoost);
+        if (DirectMatchBoost is { } directMatchBoost)
+        {
+            AddBoostValidationError(nameof(DirectMatchBoost), directMatchBoost);
+        }
+
+        void AddBoostValidationError(string propertyName, float value)
+        {
+            if (ScoreBoost.IsValid(value))
+            {
+                return;
+            }
+
+            var jsonPropertyName = JsonNamingPolicy.CamelCase.ConvertName(propertyName);
+            errors.Add(
+                $"'{path}.{jsonPropertyName}' must be finite and non-negative.");
         }
     }
 }

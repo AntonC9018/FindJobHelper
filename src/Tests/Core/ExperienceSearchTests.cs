@@ -504,12 +504,12 @@ public sealed class ExperienceSearchTests
         var eventDebugTags = @event.DebugInfo.TagScores
             .Select(x => (Tag: x.Tag.Value, x.Score))
             .ToArray();
-        var debugTags = subItem.DebugTagScores
+        var debugTags = subItem.DebugInfo.TagScores
             .Select(x => (Tag: x.Tag.Value, x.Score))
             .ToArray();
 
-        Assert.Equal(10f, @event.DebugInfo.Score);
-        Assert.Equal(10f, subItem.DebugScore);
+        Assert.Equal(0.72f, @event.DebugInfo.Score, tolerance: 0.0001f);
+        Assert.Equal(0.72f, subItem.DebugInfo.Score, tolerance: 0.0001f);
         Assert.Same(sourceItem.Text, subItem.Text);
         Assert.Equal(
             new[] { (Tag: "b", Score: 6f), (Tag: "a", Score: 4f) },
@@ -550,14 +550,14 @@ public sealed class ExperienceSearchTests
 
         var subItems = Assert.Single(result.Get(WorkKey)).SubItems;
         Assert.Equal(2, subItems.Length);
-        Assert.Equal(10f, subItems[0].DebugScore);
-        Assert.InRange(subItems[1].DebugScore, 2.33f, 2.34f);
-        Assert.Equal(9, Assert.Single(subItems[1].DebugTagScores).Score);
+        Assert.Equal(0.9f, subItems[0].DebugInfo.Score, tolerance: 0.0001f);
+        Assert.InRange(subItems[1].DebugInfo.Score, 0.209f, 0.211f);
+        Assert.Equal(9, Assert.Single(subItems[1].DebugInfo.TagScores).Score);
         Assert.Equal(
             9,
-            Assert.Single(subItems[1].DebugRequirementCoverage).Score);
+            Assert.Single(subItems[1].DebugInfo.RequirementCoverage).Score);
         var breakdown = Assert.IsType<MmrScoreBreakdown>(
-            subItems[1].DebugMmrScoreBreakdown);
+            subItems[1].DebugInfo.MmrScoreBreakdown);
         Assert.InRange(
             breakdown.NormalizedMmrScore,
             0.209f,
@@ -611,6 +611,177 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
+    public void Search_DirectBoostCanMoveCandidateAcrossScoreLowerBound()
+    {
+        var tag = new Tag("a");
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            options =>
+            {
+                options.TotalItemBudget = 1;
+                options.ScoreLowerBound = 5;
+                options.DirectMatchBoost = 0.5f;
+            });
+
+        var result = builder.Build().Run([
+            Experience("work", ExperienceType.Job, 2025, Item("boosted", (tag, 4))),
+        ], NoOpProgressReporter.Instance);
+        var trace = Assert.Single(result.Diagnostics.Items);
+
+        Assert.Equal(new[] { "boosted" }, Texts(result.Get(WorkKey)));
+        Assert.Equal(4, trace.ScoreBreakdown.BaseRelevance);
+        Assert.Equal(2, trace.ScoreBreakdown.DirectMatchBonus);
+        Assert.Equal(6, trace.ScoreBreakdown.RawRelevance);
+    }
+
+    [Fact]
+    public void Search_ComposesDirectAndRecencyBonusesAdditivelyBeforeMmr()
+    {
+        var tagBuilder = new TagsDatabaseBuilder();
+        var indirect = tagBuilder.Tag("Indirect");
+        var target = tagBuilder.Tag("Target");
+        indirect.IsIncludedIn(target)
+            .Fully()
+            .WhichIsIncludedInIt()
+            .By(0.1f);
+        var tagsResult = tagBuilder.Build();
+        Assert.Empty(tagsResult.Errors ?? []);
+        var query = tagsResult.Database!.Weighted([
+            ("Indirect", 1),
+            ("Target", 0.4f),
+        ]);
+        var builder = NewBuilder(query);
+        builder.Mmr(new MmrOptions(
+            RelevanceWeight: 1,
+            SaturationQuota: 10,
+            SaturationPenalty: 0));
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            options =>
+            {
+                options.TotalItemBudget = 2;
+                options.DirectMatchBoost = 0.5f;
+                options.RecencyBoost = 0.25f;
+            });
+
+        var result = builder.Build().Run([
+            Experience("older", ExperienceType.Job, 2019, Item("older", (new("Target"), 10))),
+            Experience("newer", ExperienceType.Job, 2024, Item("newer", (new("Target"), 10))),
+        ], NoOpProgressReporter.Instance);
+        var breakdown = Assert.Single(
+            result.Diagnostics.Items,
+            x => x.Event.Title.Value == "newer").ScoreBreakdown;
+
+        Assert.Equal(10, breakdown.BaseRelevance);
+        Assert.Equal(2, breakdown.DirectMatchBonus);
+        Assert.Equal(12, breakdown.RawRelevance);
+        Assert.Equal(0.25f, breakdown.AppliedRecencyBoost);
+        Assert.Equal(2.5f, breakdown.RecencyBonus);
+        Assert.Equal(14.5f, breakdown.AdjustedPreMmrRelevance);
+        Assert.Equal(1, breakdown.NormalizedMmrScore);
+    }
+
+    [Fact]
+    public void Search_RequiredAndDependencyItemsUseResolvedSectionDirectBoost()
+    {
+        var tag = new Tag("a");
+        var dependency = Item("dependency", (tag, 4));
+        var dependent = ItemDependingOn(
+            "dependent",
+            [dependency],
+            (tag, 10));
+        var always = RequiredItem(
+            "always",
+            ItemRequirement.Always,
+            (tag, 6));
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(
+            WorkKey,
+            _ => true,
+            options =>
+            {
+                options.TotalItemBudget = 3;
+                options.DirectMatchBoost = 0.5f;
+            });
+
+        var result = builder.Build().Run([
+            Experience(
+                "work",
+                ExperienceType.Job,
+                2025,
+                always,
+                dependent,
+                dependency),
+        ], NoOpProgressReporter.Instance);
+        var byText = result.Diagnostics.Items.ToDictionary(
+            x => x.Item.Text.ToString()!,
+            x => x);
+
+        Assert.Equal(3, byText.Count);
+        Assert.Equal(3, byText["always"].ScoreBreakdown.DirectMatchBonus);
+        Assert.Equal(5, byText["dependent"].ScoreBreakdown.DirectMatchBonus);
+        Assert.Equal(2, byText["dependency"].ScoreBreakdown.DirectMatchBonus);
+        Assert.Equal(SelectionItemReason.RequiredAlways, byText["always"].Reason);
+        Assert.Equal(SelectionItemReason.Dependency, byText["dependency"].Reason);
+    }
+
+    [Fact]
+    public void Search_BoostsDoNotChangeSimilaritySaturationOrCoverage()
+    {
+        var tag = new Tag("a");
+        var experiences = new[]
+        {
+            Experience("newer", ExperienceType.Job, 2024, Item("first", (tag, 10))),
+            Experience("older", ExperienceType.Job, 2019, Item("second", (tag, 9))),
+        };
+
+        var unboosted = Run(directMatchBoost: 0, recencyBoost: 0);
+        var boosted = Run(directMatchBoost: 0.5f, recencyBoost: 0.5f);
+        var unboostedSecond = Assert.Single(
+            unboosted.Diagnostics.Items,
+            x => x.Item.Text.ToString() == "second");
+        var boostedSecond = Assert.Single(
+            boosted.Diagnostics.Items,
+            x => x.Item.Text.ToString() == "second");
+
+        Assert.Equal(
+            unboostedSecond.Matches.RequirementCoverage.OrderBy(
+                static x => x.Key.Name),
+            boostedSecond.Matches.RequirementCoverage.OrderBy(
+                static x => x.Key.Name));
+        Assert.Equal(
+            unboostedSecond.ScoreBreakdown.MaximumCosineSimilarity,
+            boostedSecond.ScoreBreakdown.MaximumCosineSimilarity);
+        Assert.Equal(
+            unboostedSecond.ScoreBreakdown.Saturation,
+            boostedSecond.ScoreBreakdown.Saturation);
+
+        SearchResult Run(float directMatchBoost, float recencyBoost)
+        {
+            var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+            builder.Mmr(new MmrOptions(
+                RelevanceWeight: 0.9f,
+                SaturationQuota: 1,
+                SaturationPenalty: 0.2f));
+            builder.Configure(
+                WorkKey,
+                _ => true,
+                options =>
+                {
+                    options.TotalItemBudget = 2;
+                    options.DirectMatchBoost = directMatchBoost;
+                    options.RecencyBoost = recencyBoost;
+                });
+            return builder.Build().Run(
+                experiences,
+                NoOpProgressReporter.Instance);
+        }
+    }
+
+    [Fact]
     public void Search_RecencyBoostInterpolatesLinearlyBetweenSectionDates()
     {
         var tag = new Tag("a");
@@ -637,9 +808,15 @@ public sealed class ExperienceSearchTests
         var oldest = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "oldest");
         var middle = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "middle");
         var newest = Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "newest");
-        Assert.Equal(10, oldest.DebugScore);
-        Assert.InRange(middle.DebugScore, 12.5f, 12.501f);
-        Assert.Equal(15, newest.DebugScore);
+        Assert.Equal(10, oldest.ScoreBreakdown.AdjustedPreMmrRelevance);
+        Assert.InRange(
+            middle.ScoreBreakdown.AdjustedPreMmrRelevance,
+            12.5f,
+            12.501f);
+        Assert.Equal(15, newest.ScoreBreakdown.AdjustedPreMmrRelevance);
+        Assert.InRange(oldest.DebugScore, 0.666f, 0.667f);
+        Assert.InRange(middle.DebugScore, 0.833f, 0.834f);
+        Assert.Equal(1, newest.DebugScore);
         Assert.Equal(10, Assert.Single(newest.DebugTagScores).Score);
     }
 
@@ -666,7 +843,12 @@ public sealed class ExperienceSearchTests
             Experience("second", ExperienceType.Job, 2024, Item("second", (tag, 10))),
         ], NoOpProgressReporter.Instance);
 
-        Assert.All(result.Diagnostics.Items, item => Assert.Equal(10, item.DebugScore));
+        Assert.All(result.Diagnostics.Items, item =>
+        {
+            Assert.Equal(0, item.ScoreBreakdown.RecencyBonus);
+            Assert.Equal(10, item.ScoreBreakdown.AdjustedPreMmrRelevance);
+            Assert.Equal(1, item.DebugScore);
+        });
     }
 
     [Fact]
@@ -690,7 +872,10 @@ public sealed class ExperienceSearchTests
         ], NoOpProgressReporter.Instance);
 
         Assert.Equal(new[] { "eligible" }, Texts(result.Get(WorkKey)));
-        Assert.Equal(5, Assert.Single(result.Diagnostics.Items).DebugScore);
+        var trace = Assert.Single(result.Diagnostics.Items);
+        Assert.Equal(5, trace.ScoreBreakdown.BaseRelevance);
+        Assert.Equal(0, trace.ScoreBreakdown.RecencyBonus);
+        Assert.Equal(0.72f, trace.DebugScore, tolerance: 0.0001f);
     }
 
     [Fact]
@@ -726,18 +911,27 @@ public sealed class ExperienceSearchTests
             Experience("new project", ExperienceType.Project, 2020, Item("new project", (tag, 10))),
         ], NoOpProgressReporter.Instance);
 
-        Assert.Equal(
-            10,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "old work").DebugScore);
-        Assert.Equal(
-            15,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "new work").DebugScore);
-        Assert.Equal(
-            10,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "old project").DebugScore);
-        Assert.Equal(
-            20,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "new project").DebugScore);
+        AssertBreakdown("old work", adjusted: 10, normalizedRank: 0.5f);
+        AssertBreakdown("new work", adjusted: 15, normalizedRank: 0.75f);
+        AssertBreakdown("old project", adjusted: 10, normalizedRank: 0.5f);
+        AssertBreakdown("new project", adjusted: 20, normalizedRank: 1);
+
+        void AssertBreakdown(
+            string title,
+            float adjusted,
+            float normalizedRank)
+        {
+            var trace = Assert.Single(
+                result.Diagnostics.Items,
+                x => x.Event.Title.Value == title);
+            Assert.Equal(
+                adjusted,
+                trace.ScoreBreakdown.AdjustedPreMmrRelevance);
+            Assert.Equal(
+                normalizedRank,
+                trace.DebugScore,
+                tolerance: 0.0001f);
+        }
     }
 
     [Fact]
@@ -775,12 +969,16 @@ public sealed class ExperienceSearchTests
             new DateOnly(2025, 7, 1),
             NoOpProgressReporter.Instance);
 
-        Assert.Equal(
-            10,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "completed").DebugScore);
-        Assert.Equal(
-            15,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "ongoing").DebugScore);
+        var completed = Assert.Single(
+            result.Diagnostics.Items,
+            x => x.Event.Title.Value == "completed");
+        var ongoing = Assert.Single(
+            result.Diagnostics.Items,
+            x => x.Event.Title.Value == "ongoing");
+        Assert.Equal(10, completed.ScoreBreakdown.AdjustedPreMmrRelevance);
+        Assert.Equal(15, ongoing.ScoreBreakdown.AdjustedPreMmrRelevance);
+        Assert.InRange(completed.DebugScore, 0.666f, 0.667f);
+        Assert.Equal(1, ongoing.DebugScore);
     }
 
     [Fact]
@@ -806,30 +1004,32 @@ public sealed class ExperienceSearchTests
             Experience("newer", ExperienceType.Job, 2024, Item("newer", (tag, 10))),
         ], NoOpProgressReporter.Instance);
 
-        Assert.Equal(
-            15,
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "newer").DebugScore);
-        Assert.InRange(
-            Assert.Single(result.Diagnostics.Items, x => x.Event.Title.Value == "older").DebugScore,
-            4.999f,
-            5.001f);
+        var newer = Assert.Single(
+            result.Diagnostics.Items,
+            x => x.Event.Title.Value == "newer");
+        var older = Assert.Single(
+            result.Diagnostics.Items,
+            x => x.Event.Title.Value == "older");
+        Assert.Equal(15, newer.ScoreBreakdown.AdjustedPreMmrRelevance);
+        Assert.Equal(10, older.ScoreBreakdown.AdjustedPreMmrRelevance);
+        Assert.Equal(10, Assert.Single(newer.Matches.RequirementCoverage).Value);
+        Assert.Equal(10, Assert.Single(older.Matches.RequirementCoverage).Value);
+        Assert.Equal(1, older.ScoreBreakdown.MaximumCosineSimilarity);
+        Assert.Equal(1, older.ScoreBreakdown.Saturation);
+        Assert.Equal(0.3f, older.DebugScore, tolerance: 0.0001f);
     }
 
     [Theory]
     [InlineData(-0.1f)]
     [InlineData(float.NaN)]
     [InlineData(float.PositiveInfinity)]
-    public void Search_RejectsInvalidRecencyBoost(float recencyBoost)
+    [InlineData(float.NegativeInfinity)]
+    public void ScoreBoost_RejectsInvalidValue(float value)
     {
-        var builder = NewBuilder(WeightedTags.Empty);
-        builder.Configure(
-            WorkKey,
-            _ => true,
-            options => options.RecencyBoost = recencyBoost);
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ScoreBoost(value));
 
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => builder.Build());
-
-        Assert.Equal("RecencyBoost", exception.ParamName);
+        Assert.Equal("value", exception.ParamName);
     }
 
     [Fact]

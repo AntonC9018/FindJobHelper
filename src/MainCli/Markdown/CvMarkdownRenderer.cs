@@ -1,8 +1,8 @@
 using System.Collections.Immutable;
-using System.Globalization;
 using CodegenCS;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
+using static FindJobHelper.Core.Helper.DiagnosticFormatting;
 
 namespace FindJobHelper.CVGeneration;
 
@@ -246,13 +246,11 @@ internal static class CvMarkdownRenderer
 
     private static FormattableString RenderAnnotatedSubItem(SubEvent item)
     {
-        var content =
-            $"{FormatDiagnosticDetails(FormatBulletMetrics(item))}\n\n" +
-            item.Text.ToMarkdownString();
-        var listItem = "- " + IndentMultiline(
-            value: content,
-            indentation: "  ");
-        return $"{listItem}";
+        return $"""
+            - {FormatDiagnosticDetails(FormatBulletMetrics(item))}
+
+              {item.Text.ToMarkdownString()}
+            """;
     }
 
     private static FormattableString? RenderFooter(CvDataModel model)
@@ -271,7 +269,7 @@ internal static class CvMarkdownRenderer
             : (FormattableString) $"{string.Join(" · ", links)}";
     }
 
-    private static string FormatEventMetrics(EventDebugInfo debugInfo)
+    private static string FormatEventMetrics(SelectionDebugInfo debugInfo)
     {
         var lines = new List<string>
         {
@@ -285,17 +283,23 @@ internal static class CvMarkdownRenderer
 
     private static string FormatBulletMetrics(SubEvent item)
     {
+        var debugInfo = item.DebugInfo;
         var lines = new List<string>();
-        if (item.DebugMmrScoreBreakdown is not { } breakdown)
+        if (debugInfo.MmrScoreBreakdown is not { } breakdown)
         {
-            lines.Add($"rank: {FormatScore(item.DebugScore)}");
-            lines.Add($"raw: {FormatScore(item.DebugRawScore)}");
+            lines.Add($"rank: {FormatScore(debugInfo.Score)}");
+            lines.Add($"raw: {FormatScore(debugInfo.RawScore)}");
         }
         else
         {
-            lines.Add($"rank: {FormatScore(breakdown.RawEquivalentRankScore)}");
-            lines.Add($"raw: {FormatScore(breakdown.RawRelevance)}");
-            lines.Add($"mmr: {FormatScore(breakdown.NormalizedMmrScore)}");
+            lines.Add($"rank: {FormatScore(breakdown.NormalizedMmrScore)}");
+            lines.Add("relevance:");
+            lines.Add($"  base: {FormatScore(breakdown.BaseRelevance)}");
+            lines.Add(
+                $"  direct match: {FormatScore(breakdown.DirectMatchBonus)}");
+            lines.Add($"  recency: {FormatScore(breakdown.RecencyBonus)}");
+            lines.Add(
+                $"  adjusted: {FormatScore(breakdown.AdjustedPreMmrRelevance)}");
             lines.Add("MMR terms:");
             lines.Add(
                 $"  relevance: {FormatSignedScore(breakdown.WeightedRelevanceTerm)}");
@@ -305,8 +309,8 @@ internal static class CvMarkdownRenderer
                 $"  saturation: {FormatSignedScore(-breakdown.WeightedSaturationPenalty)}");
         }
 
-        AppendCoverage(lines, item.DebugRequirementCoverage);
-        AppendMatches(lines, item.DebugTagMatches);
+        AppendCoverage(lines, debugInfo.RequirementCoverage);
+        AppendMatches(lines, debugInfo.TagMatches);
         return string.Join("\n", lines);
     }
 
@@ -319,7 +323,7 @@ internal static class CvMarkdownRenderer
             return;
         }
 
-        lines.Add("coverage:");
+        lines.Add("coverage (unboosted; used for similarity and saturation):");
         lines.AddRange(coverage.Select(x =>
             $"  {FormatRequirementLabel(x.Requirement)}: {FormatScore(x.Score)}"));
     }
@@ -338,7 +342,13 @@ internal static class CvMarkdownRenderer
         {
             lines.Add($"  {match.TargetTag.Name}:");
             lines.Add(
-                $"    raw contribution: {FormatScore(match.RawContribution)}");
+                $"    base contribution: {FormatScore(match.BaseContribution)}");
+            lines.Add(
+                $"    direct contribution: {FormatScore(match.DirectContribution)}");
+            lines.Add(
+                $"    direct match bonus: {FormatScore(match.DirectMatchBonus)}");
+            lines.Add(
+                $"    final relevance: {FormatScore(match.RelevanceContribution)}");
             if (match.Origins.IsEmpty)
             {
                 continue;
@@ -353,20 +363,26 @@ internal static class CvMarkdownRenderer
                 .ToImmutableArray();
 
             lines.Add(bestOrigins.Length == 1
-                ? "    best requirement:"
-                : "    best requirements:");
+                ? "    best requirement origin (unboosted):"
+                : "    best requirement origins (unboosted):");
             lines.AddRange(bestOrigins.Select(origin =>
                 $"      {FormatRequirementLabel(origin.Requirement)}: " +
-                FormatScore(origin.Contribution)));
+                FormatOriginContribution(origin)));
 
             if (!additionalOrigins.IsEmpty)
             {
-                lines.Add("    additional requirement coverage:");
+                lines.Add("    additional requirement origins (unboosted):");
                 lines.AddRange(additionalOrigins.Select(origin =>
                     $"      {FormatRequirementLabel(origin.Requirement)}: " +
-                    FormatScore(origin.Contribution)));
+                    FormatOriginContribution(origin)));
             }
         }
+    }
+
+    private static string FormatOriginContribution(DebugTagMatchOrigin origin)
+    {
+        return $"{FormatScore(origin.Contribution)}" +
+               (origin.IsDirect ? " (direct)" : "");
     }
 
     private static string FormatFencedBlock(string contents) =>
@@ -376,29 +392,8 @@ internal static class CvMarkdownRenderer
         $"<details>\n<summary>Diagnostics</summary>\n\n" +
         $"{FormatFencedBlock(contents)}\n</details>";
 
-    private static string IndentMultiline(
-        string value,
-        string indentation)
-    {
-        var lines = value
-            .ReplaceLineEndings("\n")
-            .Split('\n');
-        return string.Join(
-            "\n",
-            lines.Select((line, index) =>
-                index == 0 || line.Length == 0
-                    ? line
-                    : indentation + line));
-    }
-
     private static string FormatRequirementLabel(RequiredTagGroup requirement) =>
         requirement.ConfiguredTags[0].Tag.Name;
-
-    private static string FormatScore(float value) =>
-        value.ToString("0.###", CultureInfo.InvariantCulture);
-
-    private static string FormatSignedScore(float value) =>
-        value.ToString("+0.###;-0.###;+0", CultureInfo.InvariantCulture);
 
     private static string CategoryValue(Category category, RegularString value) =>
         category.IsUrl ? Autolink(value.Value) : Text(value);

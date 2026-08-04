@@ -9,6 +9,155 @@ public sealed class RequiredTagProvenanceTests
     private static readonly ExperienceKey WorkKey = new("Work");
 
     [Fact]
+    public void Match_DirectBoostAppliesOnlyToExactTagsAndFullAliases()
+    {
+        var builder = new TagsDatabaseBuilder();
+        var direct = builder.Tag("Direct", "Alias");
+        var partial = builder.Tag("Partial");
+        var oneWay = builder.Tag("One Way");
+        var middle = builder.Tag("Middle");
+        var transitive = builder.Tag("Transitive");
+        direct.IsIncludedIn(partial)
+            .By(0.6f)
+            .WhichIsIncludedInIt()
+            .By(0.2f);
+        direct.IsIncludedIn(oneWay)
+            .Fully()
+            .WhichIsIncludedInIt()
+            .By(0.2f);
+        direct.IsIncludedIn(middle)
+            .By(0.9f)
+            .WhichIsIncludedInIt()
+            .By(0.1f);
+        middle.IsIncludedIn(transitive)
+            .By(0.9f)
+            .WhichIsIncludedInIt()
+            .By(0.1f);
+        var query = Build(builder).Weighted([("Direct", 1)]);
+
+        AssertMatch("Direct", expectedBase: 10, expectedDirect: 10, expectedBonus: 5);
+        AssertMatch("Alias", expectedBase: 10, expectedDirect: 10, expectedBonus: 5);
+        AssertMatch("Partial", expectedBase: 6, expectedDirect: 0, expectedBonus: 0);
+        AssertMatch("One Way", expectedBase: 10, expectedDirect: 0, expectedBonus: 0);
+        AssertMatch("Transitive", expectedBase: 8, expectedDirect: 0, expectedBonus: 0);
+
+        Assert.True(query.TryGetValue(new("Direct"), out var directProjection));
+        Assert.True(query.TryGetValue(new("Alias"), out var aliasProjection));
+        Assert.True(query.TryGetValue(new("Partial"), out var partialProjection));
+        Assert.True(query.TryGetValue(new("One Way"), out var oneWayProjection));
+        Assert.True(query.TryGetValue(new("Transitive"), out var transitiveProjection));
+        Assert.True(Assert.Single(directProjection.Origins).IsDirect);
+        Assert.True(Assert.Single(aliasProjection.Origins).IsDirect);
+        Assert.False(Assert.Single(partialProjection.Origins).IsDirect);
+        Assert.False(Assert.Single(oneWayProjection.Origins).IsDirect);
+        Assert.False(Assert.Single(transitiveProjection.Origins).IsDirect);
+
+        void AssertMatch(
+            string tag,
+            float expectedBase,
+            float expectedDirect,
+            float expectedBonus)
+        {
+            var scored = query.Match([new(new(tag), 10)], directMatchBoost: 0.5f);
+            var match = Assert.Single(scored.Matches);
+            Assert.Equal(expectedBase, match.BaseContribution, tolerance: 0.0001f);
+            Assert.Equal(expectedDirect, match.DirectContribution, tolerance: 0.0001f);
+            Assert.Equal(expectedBonus, match.DirectMatchBonus, tolerance: 0.0001f);
+            Assert.Equal(
+                expectedBase + expectedBonus,
+                match.RelevanceContribution,
+                tolerance: 0.0001f);
+        }
+    }
+
+    [Fact]
+    public void Match_UsesWeakerDirectContributionWhenIndirectMatchIsStronger()
+    {
+        var builder = new TagsDatabaseBuilder();
+        var indirect = builder.Tag("Indirect");
+        var target = builder.Tag("Target");
+        indirect.IsIncludedIn(target)
+            .Fully()
+            .WhichIsIncludedInIt()
+            .By(0.1f);
+        var query = Build(builder).Weighted([
+            ("Indirect", 1),
+            ("Target", 0.4f),
+        ]);
+
+        var scored = query.Match(
+            [new(new("Target"), 10)],
+            directMatchBoost: 0.5f);
+        var match = Assert.Single(scored.Matches);
+
+        Assert.Equal(1, match.Projection.MaximumCoefficient);
+        Assert.Equal(0.4f, match.Projection.MaximumDirectCoefficient);
+        Assert.Equal(10, match.BaseContribution);
+        Assert.Equal(4, match.DirectContribution);
+        Assert.Equal(2, match.DirectMatchBonus);
+        Assert.Equal(12, match.RelevanceContribution);
+        Assert.Equal(10, scored.BaseRelevance);
+        Assert.Equal(2, scored.DirectMatchBonus);
+        Assert.Equal(12, scored.Sum);
+        Assert.Equal(14, scored.RequirementCoverage.Values.Sum());
+    }
+
+    [Fact]
+    public void Match_AddsPerTagBonusesAndDoesNotBoostNonPositiveContributions()
+    {
+        var first = new Tag("First");
+        var second = new Tag("Second");
+        var query = WeightedTags.Create([
+            (first, 1),
+            (second, 0.5f),
+        ]);
+
+        var positive = query.Match([
+            new(first, 10),
+            new(second, 8),
+        ], directMatchBoost: 0.5f);
+        var negative = query.Match([
+            new(first, -10),
+        ], directMatchBoost: 0.5f);
+
+        Assert.Equal(14, positive.BaseRelevance);
+        Assert.Equal(7, positive.DirectMatchBonus);
+        Assert.Equal(21, positive.Sum);
+        Assert.Equal(0, Assert.Single(negative.Matches).DirectMatchBonus);
+        Assert.Equal(-10, negative.Sum);
+    }
+
+    [Fact]
+    public void Match_BoostsDoNotAlterRequirementCoverage()
+    {
+        var builder = new TagsDatabaseBuilder();
+        var exact = builder.Tag("Exact");
+        var indirect = builder.Tag("Indirect");
+        exact.IsIncludedIn(indirect)
+            .By(0.5f)
+            .WhichIsIncludedInIt()
+            .By(0.1f);
+        var query = Build(builder).Weighted([("Exact", 1)]);
+        var tags = ImmutableArray.Create(
+            new TagReference(new("Exact"), 4),
+            new TagReference(new("Indirect"), 6));
+
+        var unboosted = query.Match(tags);
+        var boosted = query.Match(tags, directMatchBoost: 2);
+
+        Assert.Equal(
+            unboosted.RequirementCoverage.OrderBy(static x => x.Key.Name),
+            boosted.RequirementCoverage.OrderBy(static x => x.Key.Name));
+        Assert.Equal(
+            unboosted.RequirementGroupCoverage.OrderBy(
+                static x => x.Key.CanonicalTag.Name),
+            boosted.RequirementGroupCoverage.OrderBy(
+                static x => x.Key.CanonicalTag.Name));
+        Assert.Equal(7, unboosted.Sum);
+        Assert.Equal(15, boosted.Sum);
+    }
+
+    [Fact]
     public void Weighted_AliasesUseOneCanonicalGroupAndMaximumWeight()
     {
         var builder = new TagsDatabaseBuilder();
@@ -327,7 +476,9 @@ public sealed class RequiredTagProvenanceTests
             secondMinimum.ScoreBreakdown.Saturation,
             tolerance: 0.0001f);
         Assert.True(secondMinimum.DebugScore < 0);
-        Assert.True(secondMinimum.ScoreBreakdown.NormalizedMmrScore < 0);
+        Assert.Equal(
+            secondMinimum.ScoreBreakdown.NormalizedMmrScore,
+            secondMinimum.DebugScore);
     }
 
     private static (

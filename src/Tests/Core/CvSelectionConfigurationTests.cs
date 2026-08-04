@@ -65,6 +65,10 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal(0, configuration.Selection.Education.RecencyBoost);
         Assert.Equal(0, configuration.Selection.WorkExperience.RecencyBoost);
         Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
+        Assert.Equal(0f, configuration.Selection.Default.DirectMatchBoost);
+        Assert.Equal(0f, configuration.Selection.Education.DirectMatchBoost);
+        Assert.Equal(0f, configuration.Selection.WorkExperience.DirectMatchBoost);
+        Assert.Equal(0f, configuration.Selection.PersonalProjects.DirectMatchBoost);
         Assert.Equal(CvPageCount.OnePage, configuration.PageCount);
         Assert.Equal(CvPageCount.OnePage, search.PageCount);
         Assert.Null(configuration.PageLayout);
@@ -161,8 +165,8 @@ public sealed class CvSelectionConfigurationTests
               { "page": 4, "sections": ["PersonalProjects"] }
             ]
             """);
-        var document = JsonNode.Parse(json)!.AsObject();
-        document["pageCount"] = 4;
+        var document = TestJsonTree.Parse(json)
+            .Set("pageCount", 4);
 
         var configuration = await LoadAsync(document.ToJsonString());
         var search = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
@@ -185,8 +189,8 @@ public sealed class CvSelectionConfigurationTests
               { "pages": "2-4", "sections": ["WorkExperience"] }
             ]
             """);
-        var document = JsonNode.Parse(json)!.AsObject();
-        document["pageCount"] = pageCount;
+        var document = TestJsonTree.Parse(json)
+            .Set("pageCount", pageCount);
 
         var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
 
@@ -205,8 +209,8 @@ public sealed class CvSelectionConfigurationTests
     {
         var json = await WithSectionOrderAsync(
             """[{ "page": 1, "sections": ["WorkExperience"] }]""");
-        var document = JsonNode.Parse(json)!.AsObject();
-        document["pageCount"] = JsonNode.Parse(pageCount);
+        var document = TestJsonTree.Parse(json)
+            .SetJson("pageCount", pageCount);
 
         var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
 
@@ -225,8 +229,8 @@ public sealed class CvSelectionConfigurationTests
     {
         var json = await WithSectionOrderAsync(
             """[{ "page": 1, "sections": ["WorkExperience"] }]""");
-        var document = JsonNode.Parse(json)!.AsObject();
-        document["limitToOnePage"] = false;
+        var document = TestJsonTree.Parse(json)
+            .Set("limitToOnePage", false);
 
         var exception = await LoadInvalidAsync(document.ToJsonString(), buildSearch: false);
 
@@ -288,16 +292,50 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_MapsRecencyBoost()
     {
-        var json = (await ReadFixtureAsync()).Replace(
-            "\"workExperience\": {",
-            "\"workExperience\": {\n      \"recencyBoost\": 0.25,",
-            StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Set("selection.workExperience.recencyBoost", 0.25)
+            .ToJsonString();
 
         var configuration = await LoadAsync(json);
 
         Assert.Equal(0.25f, configuration.Selection.WorkExperience.RecencyBoost);
         Assert.Equal(0, configuration.Selection.Education.RecencyBoost);
         Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MapsDirectMatchBoostOverrides()
+    {
+        var json = (await ReadFixtureTreeAsync())
+            .Set("selection.default.directMatchBoost", 0.25)
+            .Set("selection.workExperience.directMatchBoost", 0.5)
+            .Set("selection.personalProjects.directMatchBoost", 0)
+            .ToJsonString();
+
+        var configuration = await LoadAsync(json);
+
+        Assert.Equal(0.25f, configuration.Selection.Default.DirectMatchBoost);
+        Assert.Equal(0f, configuration.Selection.Education.DirectMatchBoost);
+        Assert.Equal(0.5f, configuration.Selection.WorkExperience.DirectMatchBoost);
+        Assert.Equal(0, configuration.Selection.PersonalProjects.DirectMatchBoost);
+    }
+
+    [Fact]
+    public void SelectionOptionsConfiguration_DirectMatchBoostDefaultsToZero()
+    {
+        var configuration = new SelectionOptionsConfiguration();
+        var options = new SearchPredicateOptions
+        {
+            DirectMatchBoost = 0.25f,
+        };
+
+        configuration.Apply(options);
+
+        Assert.Equal(0f, configuration.DirectMatchBoost);
+        Assert.Equal(default, options.DirectMatchBoost);
+        Assert.Equal(
+            default,
+            new SearchPredicateOptions().DirectMatchBoost);
     }
 
     [Fact]
@@ -339,15 +377,10 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task BuildSearch_DoesNotForceAWorkExperienceItemPerHeading()
     {
-        var json = (await ReadFixtureAsync())
-            .Replace(
-                "\"relevanceWeight\": 0.72",
-                "\"relevanceWeight\": 0",
-                StringComparison.Ordinal)
-            .Replace(
-                "\"saturationPenalty\": 0.18",
-                "\"saturationPenalty\": 0",
-                StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Set("mmr.relevanceWeight", 0)
+            .Set("mmr.saturationPenalty", 0)
+            .ToJsonString();
         var configuration = await LoadAsync(json);
         var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
         var database = ExperienceDatabaseFactory.Create(tags);
@@ -367,13 +400,12 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_LegacyPageFlagDefaultsToOnePageAndMapsFalseToUnrestricted()
     {
-        var json = await ReadFixtureAsync();
-        var omitted = json.Replace("  \"limitToOnePage\": true,\r\n", "", StringComparison.Ordinal)
-            .Replace("  \"limitToOnePage\": true,\n", "", StringComparison.Ordinal);
-        var disabled = json.Replace(
-            "\"limitToOnePage\": true",
-            "\"limitToOnePage\": false",
-            StringComparison.Ordinal);
+        var omitted = (await ReadFixtureTreeAsync())
+            .Remove("limitToOnePage")
+            .ToJsonString();
+        var disabled = (await ReadFixtureTreeAsync())
+            .Set("limitToOnePage", false)
+            .ToJsonString();
 
         var omittedConfiguration = await LoadAsync(omitted);
         var disabledConfiguration = await LoadAsync(disabled);
@@ -392,10 +424,10 @@ public sealed class CvSelectionConfigurationTests
     [InlineData(int.MaxValue)]
     public async Task LoadAsync_MapsAnyPositivePageCount(int pageCount)
     {
-        var json = (await ReadFixtureAsync()).Replace(
-            "\"limitToOnePage\": true",
-            $"\"pageCount\": {pageCount}",
-            StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Remove("limitToOnePage")
+            .Set("pageCount", pageCount)
+            .ToJsonString();
 
         var configuration = await LoadAsync(json);
         var search = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
@@ -414,10 +446,10 @@ public sealed class CvSelectionConfigurationTests
     [InlineData("2147483648")]
     public async Task LoadAsync_RejectsInvalidPageCount(string value)
     {
-        var json = (await ReadFixtureAsync()).Replace(
-            "\"limitToOnePage\": true",
-            $"\"pageCount\": {value}",
-            StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Remove("limitToOnePage")
+            .SetJson("pageCount", value)
+            .ToJsonString();
 
         var exception = await LoadInvalidAsync(json, buildSearch: false);
 
@@ -427,10 +459,9 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_RejectsPageCountTogetherWithLegacyFlag()
     {
-        var json = (await ReadFixtureAsync()).Replace(
-            "\"limitToOnePage\": true,",
-            "\"limitToOnePage\": true,\n  \"pageCount\": 2,",
-            StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Set("pageCount", 2)
+            .ToJsonString();
 
         var exception = await LoadInvalidAsync(json, buildSearch: false);
 
@@ -440,10 +471,9 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_RejectsMissingSkills()
     {
-        var json = await ReadFixtureAsync();
-        var withoutSkills = json
-            .Replace("  \"skills\": [\r\n    \"E2E Skill\"\r\n  ],\r\n", "", StringComparison.Ordinal)
-            .Replace("  \"skills\": [\n    \"E2E Skill\"\n  ],\n", "", StringComparison.Ordinal);
+        var withoutSkills = (await ReadFixtureTreeAsync())
+            .Remove("skills")
+            .ToJsonString();
 
         var exception = await LoadInvalidAsync(withoutSkills, buildSearch: false);
 
@@ -453,10 +483,9 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_RejectsNonBooleanLimitToOnePage()
     {
-        var json = (await ReadFixtureAsync()).Replace(
-            "\"limitToOnePage\": true",
-            "\"limitToOnePage\": \"yes\"",
-            StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Set("limitToOnePage", "yes")
+            .ToJsonString();
 
         var exception = await LoadInvalidAsync(json, buildSearch: false);
 
@@ -464,18 +493,20 @@ public sealed class CvSelectionConfigurationTests
     }
 
     [Theory]
-    [InlineData("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", "mmr.relevanceWeight")]
-    [InlineData("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", "must be non-negative")]
-    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": -1, \"totalItemBudget\": 1", "minTotalItemBudget")]
-    [InlineData("\"totalItemBudget\": 1", "\"minTotalItemBudget\": 2, \"totalItemBudget\": 1", "must not exceed")]
-    [InlineData("\"scoreLowerBound\": 0", "\"scoreLowerBound\": 0, \"recencyBoost\": -0.1", "recencyBoost")]
+    [InlineData("mmr.relevanceWeight", "1.1", "mmr.relevanceWeight")]
+    [InlineData("selection.education.totalItemBudget", "-1", "must be non-negative")]
+    [InlineData("selection.education.minTotalItemBudget", "-1", "minTotalItemBudget")]
+    [InlineData("selection.education.minTotalItemBudget", "2", "must not exceed")]
+    [InlineData("selection.education.recencyBoost", "-0.1", "recencyBoost")]
+    [InlineData("selection.education.directMatchBoost", "-0.1", "directMatchBoost")]
     public async Task LoadAsync_RejectsInvalidSelectionValues(
-        string oldValue,
-        string newValue,
+        string path,
+        string value,
         string expectedMessage)
     {
-        var json = await ReadFixtureAsync();
-        var mutated = json.Replace(oldValue, newValue, StringComparison.Ordinal);
+        var mutated = (await ReadFixtureTreeAsync())
+            .SetJson(path, value)
+            .ToJsonString();
 
         var exception = await LoadInvalidAsync(mutated, buildSearch: true);
 
@@ -502,13 +533,34 @@ public sealed class CvSelectionConfigurationTests
             errors);
     }
 
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    public void SelectionOptionsConfiguration_RejectsNonFiniteDirectMatchBoost(
+        float directMatchBoost)
+    {
+        var options = new SelectionOptionsConfiguration
+        {
+            ScoreLowerBound = 0,
+            DirectMatchBoost = directMatchBoost,
+        };
+        var errors = new List<string>();
+
+        options.CollectValidationErrors("selection.workExperience", errors);
+
+        Assert.Contains(
+            "'selection.workExperience.directMatchBoost' must be finite and non-negative.",
+            errors);
+    }
+
     [Fact]
     public async Task LoadAsync_MapsMinimumAndTotalSelectionBudgets()
     {
-        var json = (await ReadFixtureAsync()).Replace(
-            "\"totalItemBudget\": 1",
-            "\"minTotalItemBudget\": 1, \"totalItemBudget\": 2",
-            StringComparison.Ordinal);
+        var json = (await ReadFixtureTreeAsync())
+            .Set("selection.education.minTotalItemBudget", 1)
+            .Set("selection.education.totalItemBudget", 2)
+            .ToJsonString();
 
         var configuration = await LoadAsync(json);
 
@@ -519,9 +571,9 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_DefaultsMissingSelectionBudgetsToUnboundedRange()
     {
-        var json = await ReadFixtureAsync();
-        var budgetIndex = json.IndexOf("\"totalItemBudget\": 1,", StringComparison.Ordinal);
-        json = json.Remove(budgetIndex, "\"totalItemBudget\": 1,".Length);
+        var json = (await ReadFixtureTreeAsync())
+            .Remove("selection.education.totalItemBudget")
+            .ToJsonString();
 
         var configuration = await LoadAsync(json);
         var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
@@ -543,7 +595,9 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_AllowsEmptySelectionAndDefaultsEverySection()
     {
-        var json = ReplaceSelection(await ReadFixtureAsync(), new JsonObject());
+        var json = (await ReadFixtureTreeAsync())
+            .Set("selection", new JsonObject())
+            .ToJsonString();
 
         var configuration = await LoadAsync(json);
 
@@ -553,6 +607,7 @@ public sealed class CvSelectionConfigurationTests
             Assert.Null(options.TotalItemBudget);
             Assert.Equal(0, options.ScoreLowerBound);
             Assert.Equal(0, options.RecencyBoost);
+            Assert.Equal(0f, options.DirectMatchBoost);
         });
 
         _ = configuration.BuildSearch(TagsDatabaseFactory.Create().TagsDatabase);
@@ -561,15 +616,17 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_AllowsPartialSectionConfiguration()
     {
-        var json = ReplaceSelection(
-            await ReadFixtureAsync(),
-            new JsonObject
-            {
-                ["workExperience"] = new JsonObject
+        var json = (await ReadFixtureTreeAsync())
+            .Set(
+                "selection",
+                new JsonObject
                 {
-                    ["recencyBoost"] = 0.25,
-                },
-            });
+                    ["workExperience"] = new JsonObject
+                    {
+                        ["recencyBoost"] = 0.25,
+                    },
+                })
+            .ToJsonString();
 
         var configuration = await LoadAsync(json);
 
@@ -581,13 +638,15 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_RejectsDuplicateSections()
     {
-        var json = await ReadFixtureAsync();
-        var duplicateSection = json.Replace(
-            "\"PersonalProjects\"",
-            "\"WorkExperience\"",
-            StringComparison.Ordinal);
+        var json = await ReadFixtureTreeAsync();
+        var sectionOrder = json.Array("sectionOrder");
+        var personalProjectsIndex = sectionOrder
+            .Select(static (section, index) => (section, index))
+            .Single(x => x.section?.GetValue<string>() == "PersonalProjects")
+            .index;
+        sectionOrder[personalProjectsIndex] = "WorkExperience";
 
-        var exception = await LoadInvalidAsync(duplicateSection, buildSearch: false);
+        var exception = await LoadInvalidAsync(json.ToJsonString(), buildSearch: false);
 
         Assert.Contains("occurs more than once", exception.Message);
     }
@@ -595,19 +654,30 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_ReportsAllShapeErrorsTogether()
     {
-        var json = await ReadFixtureAsync();
-        var invalidJson = json
-            .Replace("\"weight\": 1.0", "\"weight\": 0", StringComparison.Ordinal)
-            .Replace("E2E Skill", " ", StringComparison.Ordinal)
-            .Replace("E2E JSON Configuration", " ", StringComparison.Ordinal)
-            .Replace("\"relevanceWeight\": 0.72", "\"relevanceWeight\": 1.1", StringComparison.Ordinal)
-            .Replace("\"saturationQuota\": 2", "\"saturationQuota\": 0", StringComparison.Ordinal)
-            .Replace("\"saturationPenalty\": 0.18", "\"saturationPenalty\": -1", StringComparison.Ordinal)
-            .Replace("\"totalItemBudget\": 1", "\"totalItemBudget\": -1", StringComparison.Ordinal)
-            .Replace("\"scoreLowerBound\": 0", "\"scoreLowerBound\": -1", StringComparison.Ordinal)
-            .Replace("\"PersonalProjects\"", "\"WorkExperience\"", StringComparison.Ordinal);
+        var invalidJson = await ReadFixtureTreeAsync();
+        invalidJson.Array("requiredTags")[0]!.AsObject()["weight"] = 0;
+        invalidJson.Array("skills")[0] = " ";
+        invalidJson.Array("technologies")[0] = " ";
+        invalidJson
+            .Set("mmr.relevanceWeight", 1.1)
+            .Set("mmr.saturationQuota", 0)
+            .Set("mmr.saturationPenalty", -1)
+            .Set("selection.education.totalItemBudget", -1)
+            .Set("selection.education.scoreLowerBound", -1)
+            .Set("selection.workExperience.totalItemBudget", -1)
+            .Set("selection.workExperience.scoreLowerBound", -1)
+            .Set("selection.personalProjects.totalItemBudget", -1)
+            .Set("selection.personalProjects.scoreLowerBound", -1);
+        var sectionOrder = invalidJson.Array("sectionOrder");
+        var personalProjectsIndex = sectionOrder
+            .Select(static (section, index) => (section, index))
+            .Single(x => x.section?.GetValue<string>() == "PersonalProjects")
+            .index;
+        sectionOrder[personalProjectsIndex] = "WorkExperience";
 
-        var exception = await LoadInvalidAsync(invalidJson, buildSearch: false);
+        var exception = await LoadInvalidAsync(
+            invalidJson.ToJsonString(),
+            buildSearch: false);
 
         Assert.Equal(13, exception.Errors.Length);
         Assert.Contains(exception.Errors, error => error.Contains("required tag", StringComparison.OrdinalIgnoreCase));
@@ -621,15 +691,23 @@ public sealed class CvSelectionConfigurationTests
     [Fact]
     public async Task LoadAsync_RejectsUnknownAndDuplicateTags()
     {
-        var json = await ReadFixtureAsync();
-        var duplicateTag = json.Replace(
-            "{ \"name\": \".NET\", \"weight\": 1.0 }",
-            "{ \"name\": \".NET\", \"weight\": 1.0 },\r\n    { \"name\": \".net\", \"weight\": 1.0 }");
-        var duplicateException = await LoadInvalidAsync(duplicateTag, buildSearch: false);
+        var duplicateTag = await ReadFixtureTreeAsync();
+        duplicateTag.Array("requiredTags").Add(new JsonObject
+        {
+            ["name"] = ".net",
+            ["weight"] = 1,
+        });
+        var duplicateException = await LoadInvalidAsync(
+            duplicateTag.ToJsonString(),
+            buildSearch: false);
         Assert.Contains("more than once", duplicateException.Message);
 
-        var unknownTag = json.Replace(".NET", "No Such Tag", StringComparison.Ordinal);
-        var unknownException = await LoadInvalidAsync(unknownTag, buildSearch: true);
+        var unknownTag = await ReadFixtureTreeAsync();
+        unknownTag.Array("requiredTags")[0]!.AsObject()["name"] =
+            "No Such Tag";
+        var unknownException = await LoadInvalidAsync(
+            unknownTag.ToJsonString(),
+            buildSearch: true);
         Assert.Contains("was not found", unknownException.Message);
     }
 
@@ -699,21 +777,16 @@ public sealed class CvSelectionConfigurationTests
 
     private static Task<string> ReadFixtureAsync() => File.ReadAllTextAsync(FixturePath);
 
+    private static async Task<TestJsonTree> ReadFixtureTreeAsync() =>
+        TestJsonTree.Parse(await ReadFixtureAsync());
+
     private static async Task<string> WithSectionOrderAsync(string sectionOrder)
     {
-        var configuration = JsonNode.Parse(await ReadFixtureAsync())!.AsObject();
-        configuration.Remove("limitToOnePage");
-        configuration.Remove("pageCount");
-        configuration["sectionOrder"] = JsonNode.Parse(sectionOrder);
-        return configuration.ToJsonString();
-    }
-
-    private static string ReplaceSelection(string json, JsonObject selection)
-    {
-        var configuration = JsonNode.Parse(json)?.AsObject()
-            ?? throw new InvalidOperationException("The test fixture must contain a JSON object.");
-        configuration["selection"] = selection;
-        return configuration.ToJsonString();
+        return (await ReadFixtureTreeAsync())
+            .Remove("limitToOnePage")
+            .Remove("pageCount")
+            .SetJson("sectionOrder", sectionOrder)
+            .ToJsonString();
     }
 
     private static string FixturePath => Path.Combine(

@@ -34,6 +34,9 @@
     "saturationPenalty": 0.18
   },
   "selection": {
+    "default": {
+      "directMatchBoost": 0.25
+    },
     "education": {
       "minTotalItemBudget": 0,
       "totalItemBudget": 2,
@@ -43,12 +46,14 @@
       "minTotalItemBudget": 2,
       "totalItemBudget": 8,
       "scoreLowerBound": 5,
-      "recencyBoost": 0.25
+      "recencyBoost": 0.25,
+      "directMatchBoost": 0.5
     },
     "personalProjects": {
       "minTotalItemBudget": 0,
       "totalItemBudget": 1,
-      "scoreLowerBound": 5
+      "scoreLowerBound": 5,
+      "directMatchBoost": 0
     }
   },
   "sectionOrder": [

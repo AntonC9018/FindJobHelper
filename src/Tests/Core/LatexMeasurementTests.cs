@@ -239,7 +239,7 @@ public sealed class LatexMeasurementTests
             },
             SubItems =
             [
-                new(0, new PlainText { Text = "bullet_&" }),
+                CreateSubEvent(new PlainText { Text = "bullet_&" }),
             ],
         };
 
@@ -343,7 +343,7 @@ public sealed class LatexMeasurementTests
             Place = new("Place\\{}"),
             DateRange = DateRange.Completed(new(2024), new(2025)),
             Text = new PlainText { Text = "summary#%&_\\" },
-            SubItems = [new(0, new PlainText { Text = "bullet#%&_\\" })],
+            SubItems = [CreateSubEvent(new PlainText { Text = "bullet#%&_\\" })],
             Urls = ["https://event.test/a_b?x=1&y=2"],
         };
         var renderedEvent = CvLatexFragmentRenderer.Materialize(
@@ -622,8 +622,8 @@ public sealed class LatexMeasurementTests
             Urls = list.Urls,
             SubItems =
             [
-                new(0, firstText),
-                new(0, secondText),
+                CreateSubEvent(firstText),
+                CreateSubEvent(secondText),
             ],
         };
         var linkedList = new ExperienceList
@@ -638,7 +638,7 @@ public sealed class LatexMeasurementTests
         };
         var linkedEvent = @event with
         {
-            SubItems = [new(0, firstText)],
+            SubItems = [CreateSubEvent(firstText)],
             Urls = linkedList.Urls,
         };
         var headingOnlyEvent = new Event
@@ -974,11 +974,11 @@ public sealed class LatexMeasurementTests
                     DateRange = DateRange.Completed(new(2020), new(2021)),
                     SubItems = Enumerable.Range(1, 100)
                         .Select(position => new SubEvent(
-                            0,
                             new PlainText
                             {
                                 Text = $"A complete bullet {position} that belongs to the same atomic event.",
-                            }))
+                            },
+                            new()))
                         .ToImmutableArray(),
                 },
             ];
@@ -1365,13 +1365,16 @@ public sealed class LatexMeasurementTests
                 DateRange = DateRange.Completed(new(2020), new(2021)),
                 SubItems =
                 [
-                    new(0, new PlainText { Text = "A production bullet used to create a controlled atomic section." }),
+                    CreateSubEvent(new PlainText { Text = "A production bullet used to create a controlled atomic section." }),
                 ],
             })
             .ToImmutableArray();
 
     private static string ResultLine(LatexMeasurementRequest request, long height)
         => $"FJH1|corr={request.CorrelationId}|rule={request.CacheKey.RuleVersion}|kind={request.CacheKey.Kind}|sha256={request.CacheKey.ContentHash}|height-sp={height}";
+
+    private static SubEvent CreateSubEvent(IRichTextNode text) =>
+        new(text, new());
 
     private static int CountOccurrences(string value, string searchValue)
     {

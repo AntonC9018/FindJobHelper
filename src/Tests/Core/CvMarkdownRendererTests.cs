@@ -8,9 +8,9 @@ namespace FindJobHelper.Core.Tests;
 public sealed class CvMarkdownRendererTests
 {
     [Fact]
-    public void EventDebugInfo_RawScoreFallsBackToScoreForLegacyDiagnostics()
+    public void SelectionDebugInfo_RawScoreFallsBackToScoreForLegacyDiagnostics()
     {
-        var debugInfo = new EventDebugInfo
+        var debugInfo = new SelectionDebugInfo
         {
             Score = 5,
         };
@@ -37,24 +37,43 @@ public sealed class CvMarkdownRendererTests
             markdown,
             StringComparison.Ordinal);
         Assert.Contains("MMR terms:", markdown, StringComparison.Ordinal);
-        Assert.Contains("coverage:\n  C#: 9.38", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "coverage (unboosted; used for similarity and saturation):\n  C#: 8",
+            markdown,
+            StringComparison.Ordinal);
+        Assert.Contains("rank: -0.056", markdown, StringComparison.Ordinal);
+        Assert.Contains("relevance:", markdown, StringComparison.Ordinal);
+        Assert.Contains("base: 10", markdown, StringComparison.Ordinal);
+        Assert.Contains("direct match: 2", markdown, StringComparison.Ordinal);
+        Assert.Contains("recency: 2.5", markdown, StringComparison.Ordinal);
+        Assert.Contains("adjusted: 14.5", markdown, StringComparison.Ordinal);
+        Assert.DoesNotContain("mmr:", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("[configured:", markdown, StringComparison.Ordinal);
         Assert.Contains(
             """
             matches:
               Unity:
-                raw contribution: 8.62
-                best requirement:
-                  C#: 8.62
-                additional requirement coverage:
-                  Playwright: 4.23
+                base contribution: 6
+                direct contribution: 4
+                direct match bonus: 2
+                final relevance: 8
+                best requirement origin (unboosted):
+                  C#: 6
+                additional requirement origins (unboosted):
+                  Playwright: 3 (direct)
               Tooling Development:
-                raw contribution: 4.23
-                best requirements:
-                  Playwright: 4.23
-                  C#: 4.23
+                base contribution: 2
+                direct contribution: 0
+                direct match bonus: 0
+                final relevance: 2
+                best requirement origins (unboosted):
+                  Playwright: 2
+                  C#: 2
               Source Generation:
-                raw contribution: 2
+                base contribution: 2
+                direct contribution: 0
+                direct match bonus: 0
+                final relevance: 2
             """.ReplaceLineEndings("\n"),
             markdown,
             StringComparison.Ordinal);
@@ -94,8 +113,14 @@ public sealed class CvMarkdownRendererTests
     {
         var markdown = Render(CreateModel(), CvMarkdownRenderMode.Annotated);
 
-        Assert.Contains("coverage:\n  C#: 9.38", markdown, StringComparison.Ordinal);
-        Assert.DoesNotContain("coverage:\n  .NET:", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "coverage (unboosted; used for similarity and saturation):\n  C#: 8",
+            markdown,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "coverage (unboosted; used for similarity and saturation):\n  .NET:",
+            markdown,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("[configured:", markdown, StringComparison.Ordinal);
     }
 
@@ -112,10 +137,13 @@ public sealed class CvMarkdownRendererTests
         @event.SubItems =
         [
             new(
-                debugScore: 1.23456f,
                 text: new PlainText
                 {
                     Text = "First line\nsecond line",
+                },
+                debugInfo: new()
+                {
+                    Score = 1.23456f,
                 }),
         ];
         @event.Urls = [];
@@ -192,41 +220,47 @@ public sealed class CvMarkdownRendererTests
             maximumWeight: 1);
         var negativeBreakdown = new MmrScoreBreakdown(
             SelectionOrdinal: 2,
-            RawRelevance: 12.85f,
-            RecencyMultiplier: 1,
-            AdjustedRelevance: 12.85f,
+            BaseRelevance: 10,
+            DirectMatchBonus: 2,
+            RawRelevance: 12,
+            AppliedRecencyBoost: 0.25f,
+            RecencyBonus: 2.5f,
+            AdjustedPreMmrRelevance: 14.5f,
             NormalizedRelevance: 0.297f,
             MaximumCosineSimilarity: 0.254f,
             Saturation: 1.106f,
             WeightedRelevanceTerm: 0.214f,
             WeightedSimilarityPenalty: 0.071f,
             WeightedSaturationPenalty: 0.199f,
-            NormalizedMmrScore: -0.056f,
-            RawEquivalentRankScore: -2.34f);
+            NormalizedMmrScore: -0.056f);
         var coverage =
             new[]
             {
-                new DebugRequirementCoverage(dotnetRequirement, 9.38f),
-                new DebugRequirementCoverage(playwrightRequirement, 4.23f),
+                new DebugRequirementCoverage(dotnetRequirement, 8),
+                new DebugRequirementCoverage(playwrightRequirement, 5),
             }.ToImmutableArray();
         var matches =
             new[]
             {
                 new DebugTagMatch(
                     new("Unity"),
-                    8.62f,
+                    BaseContribution: 6,
+                    DirectContribution: 4,
+                    DirectMatchBonus: 2,
+                    RelevanceContribution: 8,
+                    Origins:
                     [
-                        new(dotnetRequirement, 8.62f),
-                        new(playwrightRequirement, 4.23f),
+                        new(dotnetRequirement, 6),
+                        new(playwrightRequirement, 3, IsDirect: true),
                     ]),
-                new DebugTagMatch(
+                UnboostedMatch(
                     new("Tooling Development"),
-                    4.23f,
+                    2,
                     [
-                        new(playwrightRequirement, 4.23f),
-                        new(dotnetRequirement, 4.23f),
+                        new(playwrightRequirement, 2),
+                        new(dotnetRequirement, 2),
                     ]),
-                new DebugTagMatch(
+                UnboostedMatch(
                     new("Source Generation"),
                     2,
                     []),
@@ -281,7 +315,7 @@ public sealed class CvMarkdownRendererTests
                         ],
                         TagMatches =
                         [
-                            new(
+                            UnboostedMatch(
                                 new("Education"),
                                 5,
                                 [new(educationRequirement, 5)]),
@@ -299,12 +333,13 @@ public sealed class CvMarkdownRendererTests
                     DateRange = DateRange.Ongoing(new(2022)),
                     DebugInfo = new()
                     {
-                        Score = -2.34f,
-                        RawScore = 12.85f,
+                        Score = -0.056f,
+                        RawScore = 12,
                         TagScores =
                         [
-                            new("Unity", 8.62f),
-                            new("Tooling Development", 4.23f),
+                            new("Unity", 8),
+                            new("Tooling Development", 2),
+                            new("Source Generation", 2),
                         ],
                         RequirementCoverage = coverage,
                         TagMatches = matches,
@@ -321,7 +356,6 @@ public sealed class CvMarkdownRendererTests
                     SubItems =
                     [
                         new(
-                            negativeBreakdown,
                             new RichText
                             {
                                 Items =
@@ -333,12 +367,20 @@ public sealed class CvMarkdownRendererTests
                                         RichTextFactory.Bold("design note")),
                                 ],
                             },
-                            [
-                                new("Unity", 8.62f),
-                                new("Tooling Development", 4.23f),
-                            ],
-                            coverage,
-                            matches),
+                            new()
+                            {
+                                Score = negativeBreakdown.NormalizedMmrScore,
+                                RawScore = negativeBreakdown.RawRelevance,
+                                TagScores =
+                                [
+                                    new("Unity", 8),
+                                    new("Tooling Development", 2),
+                                    new("Source Generation", 2),
+                                ],
+                                RequirementCoverage = coverage,
+                                TagMatches = matches,
+                                MmrScoreBreakdown = negativeBreakdown,
+                            }),
                     ],
                     Urls = ["https://event.test/demo_(one)?x=1&y=2"],
                 },
@@ -352,6 +394,20 @@ public sealed class CvMarkdownRendererTests
                 Section.WorkExperience,
             ],
         };
+    }
+
+    private static DebugTagMatch UnboostedMatch(
+        Tag targetTag,
+        float contribution,
+        ImmutableArray<DebugTagMatchOrigin> origins)
+    {
+        return new(
+            targetTag,
+            BaseContribution: contribution,
+            DirectContribution: 0,
+            DirectMatchBonus: 0,
+            RelevanceContribution: contribution,
+            Origins: origins);
     }
 
     private static string Render(

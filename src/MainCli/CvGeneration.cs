@@ -613,13 +613,13 @@ public record struct Event()
     public required RegularString Title;
     public required Place Place;
     public required DateRange DateRange;
-    public EventDebugInfo DebugInfo = new();
+    public SelectionDebugInfo DebugInfo = new();
     public IRichTextNode? Text;
     public ImmutableArray<SubEvent> SubItems = [];
     public ImmutableArray<RegularString> Urls = [];
 }
 
-public sealed class EventDebugInfo
+public sealed class SelectionDebugInfo
 {
     private float _rawScore;
 
@@ -641,6 +641,8 @@ public sealed class EventDebugInfo
     public ImmutableArray<DebugRequirementCoverage> RequirementCoverage { get; set; } = [];
 
     public ImmutableArray<DebugTagMatch> TagMatches { get; set; } = [];
+
+    public MmrScoreBreakdown? MmrScoreBreakdown { get; set; }
 }
 
 public readonly record struct DebugTagScore(RegularString Tag, float Score);
@@ -651,69 +653,31 @@ public sealed record DebugRequirementCoverage(
 
 public sealed record DebugTagMatchOrigin(
     RequiredTagGroup Requirement,
-    float Contribution);
+    float Contribution,
+    bool IsDirect = false);
 
 public sealed record DebugTagMatch(
     Tag TargetTag,
-    float RawContribution,
+    float BaseContribution,
+    float DirectContribution,
+    float DirectMatchBonus,
+    float RelevanceContribution,
     ImmutableArray<DebugTagMatchOrigin> Origins);
 
 public readonly record struct SubEvent
 {
     public SubEvent(
-        float debugScore,
-        IRichTextNode text) : this(debugScore, text, [])
-    {
-    }
-
-    public SubEvent(
-        float debugScore,
         IRichTextNode text,
-        ImmutableArray<DebugTagScore> debugTagScores)
+        SelectionDebugInfo debugInfo)
     {
         ArgumentNullException.ThrowIfNull(text);
-        DebugScore = debugScore;
+        ArgumentNullException.ThrowIfNull(debugInfo);
         Text = text;
-        DebugTagScores = debugTagScores.IsDefault
-            ? []
-            : debugTagScores;
-        DebugRawScore = debugScore;
-        DebugRequirementCoverage = [];
-        DebugTagMatches = [];
-        DebugMmrScoreBreakdown = null;
+        DebugInfo = debugInfo;
     }
 
-    public SubEvent(
-        MmrScoreBreakdown scoreBreakdown,
-        IRichTextNode text,
-        ImmutableArray<DebugTagScore> debugTagScores,
-        ImmutableArray<DebugRequirementCoverage> debugRequirementCoverage,
-        ImmutableArray<DebugTagMatch> debugTagMatches)
-    {
-        ArgumentNullException.ThrowIfNull(scoreBreakdown);
-        ArgumentNullException.ThrowIfNull(text);
-        DebugScore = scoreBreakdown.RawEquivalentRankScore;
-        DebugRawScore = scoreBreakdown.RawRelevance;
-        Text = text;
-        DebugTagScores = debugTagScores.IsDefault
-            ? []
-            : debugTagScores;
-        DebugRequirementCoverage = debugRequirementCoverage.IsDefault
-            ? []
-            : debugRequirementCoverage;
-        DebugTagMatches = debugTagMatches.IsDefault
-            ? []
-            : debugTagMatches;
-        DebugMmrScoreBreakdown = scoreBreakdown;
-    }
-
-    public float DebugScore { get; }
-    public float DebugRawScore { get; }
     public IRichTextNode Text { get; }
-    public ImmutableArray<DebugTagScore> DebugTagScores { get; }
-    public ImmutableArray<DebugRequirementCoverage> DebugRequirementCoverage { get; }
-    public ImmutableArray<DebugTagMatch> DebugTagMatches { get; }
-    public MmrScoreBreakdown? DebugMmrScoreBreakdown { get; }
+    public SelectionDebugInfo DebugInfo { get; }
 }
 public readonly record struct Place(RegularString Name)
 {

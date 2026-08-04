@@ -108,8 +108,8 @@ public sealed class CvRendererProgressTests
             DateRange = DateRange.Completed(new(2024), new(2025)),
             SubItems =
             [
-                new(0, new PlainText { Text = "First bullet" }),
-                new(0, new PlainText { Text = "Second bullet" }),
+                CreateSubEvent(new PlainText { Text = "First bullet" }),
+                CreateSubEvent(new PlainText { Text = "Second bullet" }),
             ],
         };
         var builder = new LatexRenderProgressBuilder();
@@ -148,6 +148,9 @@ public sealed class CvRendererProgressTests
             measurementFragment,
             StringComparison.Ordinal);
     }
+
+    private static SubEvent CreateSubEvent(IRichTextNode text) =>
+        new(text, new());
 
     private static CvDataModel CreateEmptyModel() => new()
     {

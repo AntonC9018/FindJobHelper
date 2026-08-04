@@ -21,12 +21,15 @@ Builds **reliable systems** with [`.NET`](<https://dot.net/>)\.
 ```text
 rank: 5
 raw: 5
-coverage:
+coverage (unboosted; used for similarity and saturation):
   Education: 5
 matches:
   Education:
-    raw contribution: 5
-    best requirement:
+    base contribution: 5
+    direct contribution: 0
+    direct match bonus: 0
+    final relevance: 5
+    best requirement origin (unboosted):
       Education: 5
 ```
 </details>
@@ -48,25 +51,34 @@ Completed with distinction\.
 <summary>Diagnostics</summary>
 
 ```text
-rank: -2.34
-raw: 12.85
-coverage:
-  C#: 9.38
-  Playwright: 4.23
+rank: -0.056
+raw: 12
+coverage (unboosted; used for similarity and saturation):
+  C#: 8
+  Playwright: 5
 matches:
   Unity:
-    raw contribution: 8.62
-    best requirement:
-      C#: 8.62
-    additional requirement coverage:
-      Playwright: 4.23
+    base contribution: 6
+    direct contribution: 4
+    direct match bonus: 2
+    final relevance: 8
+    best requirement origin (unboosted):
+      C#: 6
+    additional requirement origins (unboosted):
+      Playwright: 3 (direct)
   Tooling Development:
-    raw contribution: 4.23
-    best requirements:
-      Playwright: 4.23
-      C#: 4.23
+    base contribution: 2
+    direct contribution: 0
+    direct match bonus: 0
+    final relevance: 2
+    best requirement origins (unboosted):
+      Playwright: 2
+      C#: 2
   Source Generation:
-    raw contribution: 2
+    base contribution: 2
+    direct contribution: 0
+    direct match bonus: 0
+    final relevance: 2
 ```
 </details>
 
@@ -78,30 +90,42 @@ Owned *backend delivery*\.
   <summary>Diagnostics</summary>
 
   ```text
-  rank: -2.34
-  raw: 12.85
-  mmr: -0.056
+  rank: -0.056
+  relevance:
+    base: 10
+    direct match: 2
+    recency: 2.5
+    adjusted: 14.5
   MMR terms:
     relevance: +0.214
     similarity: -0.071
     saturation: -0.199
-  coverage:
-    C#: 9.38
-    Playwright: 4.23
+  coverage (unboosted; used for similarity and saturation):
+    C#: 8
+    Playwright: 5
   matches:
     Unity:
-      raw contribution: 8.62
-      best requirement:
-        C#: 8.62
-      additional requirement coverage:
-        Playwright: 4.23
+      base contribution: 6
+      direct contribution: 4
+      direct match bonus: 2
+      final relevance: 8
+      best requirement origin (unboosted):
+        C#: 6
+      additional requirement origins (unboosted):
+        Playwright: 3 (direct)
     Tooling Development:
-      raw contribution: 4.23
-      best requirements:
-        Playwright: 4.23
-        C#: 4.23
+      base contribution: 2
+      direct contribution: 0
+      direct match bonus: 0
+      final relevance: 2
+      best requirement origins (unboosted):
+        Playwright: 2
+        C#: 2
     Source Generation:
-      raw contribution: 2
+      base contribution: 2
+      direct contribution: 0
+      direct match bonus: 0
+      final relevance: 2
   ```
   </details>
 

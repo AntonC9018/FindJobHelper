@@ -5,6 +5,24 @@ namespace FindJobHelper.Core.Tests;
 public sealed class SelectionDebugReportTests
 {
     [Fact]
+    public void MarkdownTableCell_UsesSpanFormattingForLineBreaksAndPipes()
+    {
+        var cell = new SelectionDebugReport.MarkdownTableCell(
+            "first\r\nsecond\nthird|value");
+        Span<char> tooSmall = stackalloc char[1];
+
+        var formatted = cell.TryFormat(
+            tooSmall,
+            out var charsWritten,
+            format: default,
+            provider: null);
+
+        Assert.False(formatted);
+        Assert.Equal(0, charsWritten);
+        Assert.Equal("first<br>second<br>third\\|value", $"{cell}");
+    }
+
+    [Fact]
     public async Task FrozenDatasetSelectionComparisonReport()
     {
         var runs = await SelectionDebugReport.RunAll(CancellationToken.None);

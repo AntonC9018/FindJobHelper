@@ -726,6 +726,8 @@ public static class TagsDatabaseExtensions
     {
         public Tag TargetTag { get; } = targetTag;
         public float MaximumCoefficient { get; set; } = float.NegativeInfinity;
+        public float MaximumDirectCoefficient { get; set; } = float.NegativeInfinity;
+        public bool HasDirectCoefficient { get; set; }
         public List<TagMatchOrigin> Origins { get; } = new();
     }
 
@@ -771,14 +773,21 @@ public static class TagsDatabaseExtensions
             var projectionOrder = new List<ProjectionBuilder>();
             foreach (var group in groups)
             {
-                AddProjection(group.CanonicalTag, group.MaximumWeight, group);
+                AddProjection(
+                    group.CanonicalTag,
+                    group.MaximumWeight,
+                    group,
+                    isDirect: true);
                 foreach (var link in self.RelationsOf(group.CanonicalTag))
                 {
                     AddProjection(
                         link.OtherTag,
                         link.PercentageOfSelfIncludedInTheOtherTag.Value
                             * group.MaximumWeight,
-                        group);
+                        group,
+                        isDirect: AreAliases(
+                            group.CanonicalTag,
+                            link.OtherTag));
                 }
             }
 
@@ -788,13 +797,17 @@ public static class TagsDatabaseExtensions
                     .Select(x => new WeightedTagProjection(
                         x.TargetTag,
                         x.MaximumCoefficient,
+                        x.HasDirectCoefficient
+                            ? x.MaximumDirectCoefficient
+                            : 0,
                         x.Origins.ToImmutableArray()))
                     .ToImmutableArray());
 
             void AddProjection(
                 Tag targetTag,
                 float coefficient,
-                RequiredTagGroup group)
+                RequiredTagGroup group,
+                bool isDirect)
             {
                 if (!projectionBuilders.TryGetValue(targetTag, out var projection))
                 {
@@ -806,9 +819,16 @@ public static class TagsDatabaseExtensions
                 projection.MaximumCoefficient = Math.Max(
                     projection.MaximumCoefficient,
                     coefficient);
+                if (isDirect)
+                {
+                    projection.HasDirectCoefficient = true;
+                    projection.MaximumDirectCoefficient = Math.Max(
+                        projection.MaximumDirectCoefficient,
+                        coefficient);
+                }
                 if (coefficient > 0)
                 {
-                    projection.Origins.Add(new(group, coefficient));
+                    projection.Origins.Add(new(group, coefficient, isDirect));
                 }
             }
 
@@ -875,7 +895,9 @@ public static class TagsDatabaseExtensions
 
     extension(WeightedTags self)
     {
-        public ScoredTags Match(ImmutableArray<TagReference> tags)
+        public ScoredTags Match(
+            ImmutableArray<TagReference> tags,
+            ScoreBoost directMatchBoost = default)
         {
             var matches = ImmutableArray.CreateBuilder<ScoredTagMatch>();
             var coverage =
@@ -890,10 +912,18 @@ public static class TagsDatabaseExtensions
                 }
 
                 var evidenceScore = (float) tagReference.Score;
+                var baseContribution =
+                    evidenceScore * projection.MaximumCoefficient;
+                var directContribution =
+                    evidenceScore * projection.MaximumDirectCoefficient;
+                var directMatchBonus = directMatchBoost.Apply(directContribution);
                 matches.Add(new(
                     projection,
                     evidenceScore,
-                    evidenceScore * projection.MaximumCoefficient));
+                    baseContribution,
+                    directContribution,
+                    directMatchBonus,
+                    baseContribution + directMatchBonus));
                 foreach (var origin in projection.Origins)
                 {
                     var contribution = evidenceScore * origin.Coefficient;

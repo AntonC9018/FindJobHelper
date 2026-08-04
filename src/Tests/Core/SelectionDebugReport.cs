@@ -4,6 +4,7 @@ using System.Text;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 using MainCli;
+using static FindJobHelper.Core.Helper.DiagnosticFormatting;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -47,8 +48,8 @@ internal static class SelectionDebugReport
     public static string ToMarkdown(ImmutableArray<SelectionDebugRun> runs)
     {
         var ret = new StringBuilder();
-        ret.AppendLine("| scenario | preset | section | event | selected item | reason | selection | raw | rank | mmr | MMR terms | coverage | matches | dependency notes | budget minimum/maximum vs actual |");
-        ret.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |");
+        ret.AppendLine("| scenario | preset | section | event | selected item | reason | selection | base relevance | direct bonus | recency bonus | adjusted relevance | rank | MMR terms | coverage (unboosted) | matches | dependency notes | budget minimum/maximum vs actual |");
+        ret.AppendLine("| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | --- |");
 
         foreach (var run in runs)
         {
@@ -59,36 +60,45 @@ internal static class SelectionDebugReport
             {
                 var dependencyNotes = FormatDependencyNotes(trace);
                 ret.Append("| ");
-                ret.Append(EscapeCell(run.Scenario));
+                AppendFormatted(ret, EscapeCell(run.Scenario));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(run.Preset));
+                AppendFormatted(ret, EscapeCell(run.Preset));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(trace.Section.Value));
+                AppendFormatted(ret, EscapeCell(trace.Section.Value));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(trace.Event.Title.Value));
+                AppendFormatted(ret, EscapeCell(trace.Event.Title.Value));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(trace.Item.Text.ToMarkdownString()));
+                AppendFormatted(ret, EscapeCell(trace.Item.Text.ToMarkdownString()));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(trace.Reason.ToString().ToLowerInvariant()));
+                AppendFormatted(
+                    ret,
+                    EscapeCell(trace.Reason.ToString().ToLowerInvariant()));
                 ret.Append(" | ");
                 ret.Append(trace.ScoreBreakdown.SelectionOrdinal);
                 ret.Append(" | ");
-                ret.Append(FormatFloat(trace.RawScore));
+                AppendFormatted(ret, FormatScore(trace.ScoreBreakdown.BaseRelevance));
                 ret.Append(" | ");
-                ret.Append(FormatFloat(trace.DebugScore));
+                AppendFormatted(ret, FormatScore(trace.ScoreBreakdown.DirectMatchBonus));
                 ret.Append(" | ");
-                ret.Append(FormatFloat(
-                    trace.ScoreBreakdown.NormalizedMmrScore));
+                AppendFormatted(ret, FormatScore(trace.ScoreBreakdown.RecencyBonus));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(FormatMmrTerms(trace.ScoreBreakdown)));
+                AppendFormatted(
+                    ret,
+                    FormatScore(trace.ScoreBreakdown.AdjustedPreMmrRelevance));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(FormatCoverage(trace.Matches)));
+                AppendFormatted(ret, FormatScore(trace.DebugScore));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(FormatMatches(trace.Matches)));
+                AppendFormatted(ret, EscapeCell(FormatMmrTerms(trace.ScoreBreakdown)));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(dependencyNotes));
+                AppendFormatted(ret, EscapeCell(FormatCoverage(trace.Matches)));
                 ret.Append(" | ");
-                ret.Append(EscapeCell(FormatBudget(budgetBySection[trace.Section])));
+                AppendFormatted(ret, EscapeCell(FormatMatches(trace.Matches)));
+                ret.Append(" | ");
+                AppendFormatted(ret, EscapeCell(dependencyNotes));
+                ret.Append(" | ");
+                AppendFormatted(
+                    ret,
+                    EscapeCell(FormatBudget(budgetBySection[trace.Section])));
                 ret.AppendLine(" |");
             }
         }
@@ -232,11 +242,9 @@ internal static class SelectionDebugReport
 
     private static string FormatMmrTerms(MmrScoreBreakdown breakdown)
     {
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{breakdown.WeightedRelevanceTerm:+0.###;-0.###;+0} relevance " +
-            $"{-breakdown.WeightedSimilarityPenalty:+0.###;-0.###;+0} similarity " +
-            $"{-breakdown.WeightedSaturationPenalty:+0.###;-0.###;+0} saturation");
+        return $"{FormatSignedScore(breakdown.WeightedRelevanceTerm)} relevance " +
+               $"{FormatSignedScore(-breakdown.WeightedSimilarityPenalty)} similarity " +
+               $"{FormatSignedScore(-breakdown.WeightedSaturationPenalty)} saturation";
     }
 
     private static string FormatCoverage(ScoredTags matches)
@@ -249,7 +257,7 @@ internal static class SelectionDebugReport
                     x => x.Key.CanonicalTag.Name,
                     StringComparer.OrdinalIgnoreCase)
                 .Select(x =>
-                    $"{FormatRequirementLabel(x.Key)}={FormatFloat(x.Value)}"));
+                    $"{FormatRequirementLabel(x.Key)}={FormatScore(x.Value)}"));
     }
 
     private static string FormatMatches(ScoredTags matches)
@@ -257,7 +265,7 @@ internal static class SelectionDebugReport
         return string.Join(
             "; ",
             matches.Matches
-                .OrderByDescending(x => x.RawContribution)
+                .OrderByDescending(x => x.RelevanceContribution)
                 .ThenBy(
                     x => x.TargetTag.Name,
                     StringComparer.OrdinalIgnoreCase)
@@ -276,10 +284,17 @@ internal static class SelectionDebugReport
                                 StringComparer.OrdinalIgnoreCase)
                             .Select(x =>
                                 $"{x.Origin.RequiredTagGroup.CanonicalTag.Name}=" +
-                                $"{FormatFloat(x.Contribution)}"));
+                                $"{FormatScore(x.Contribution)}" +
+                                (x.Origin.IsDirect ? " (direct)" : "")));
+                    var contributions =
+                        $"base {FormatScore(match.BaseContribution)}, " +
+                        $"direct {FormatScore(match.DirectContribution)}, " +
+                        $"bonus {FormatScore(match.DirectMatchBonus)}, " +
+                        $"final {FormatScore(match.RelevanceContribution)}";
                     return origins.Length == 0
-                        ? $"{match.TargetTag.Name}={FormatFloat(match.RawContribution)}"
-                        : $"{match.TargetTag.Name}={FormatFloat(match.RawContribution)} via {origins}";
+                        ? $"{match.TargetTag.Name}: {contributions}"
+                        : $"{match.TargetTag.Name}: {contributions}; " +
+                          $"origins (unboosted) {origins}";
                 }));
     }
 
@@ -307,17 +322,114 @@ internal static class SelectionDebugReport
             $"actual {budget.ActualCount}, remaining {budget.RemainingMaximumBudget}, over +{over}");
     }
 
-    private static string EscapeCell(string value)
+    private static void AppendFormatted<T>(StringBuilder output, T value)
+        where T : ISpanFormattable
     {
-        return value
-            .Replace("\r\n", "<br>", StringComparison.Ordinal)
-            .Replace("\n", "<br>", StringComparison.Ordinal)
-            .Replace("|", "\\|", StringComparison.Ordinal);
+        output.Append(CultureInfo.InvariantCulture, $"{value}");
     }
 
-    private static string FormatFloat(float value)
+    private static MarkdownTableCell EscapeCell(string value) => new(value);
+
+    internal readonly record struct MarkdownTableCell(string Value) : ISpanFormattable
     {
-        return value.ToString("0.###", CultureInfo.InvariantCulture);
+        public override string ToString()
+        {
+            return string.Create(
+                GetFormattedLength(),
+                this,
+                static (destination, value) =>
+                {
+                    if (!value.TryFormat(
+                            destination,
+                            out _,
+                            format: default,
+                            provider: null))
+                    {
+                        throw new InvalidOperationException(
+                            "The Markdown table cell buffer was too small.");
+                    }
+                });
+        }
+
+        public string ToString(string? format, IFormatProvider? formatProvider)
+        {
+            _ = format;
+            _ = formatProvider;
+            return ToString();
+        }
+
+        public bool TryFormat(
+            Span<char> destination,
+            out int charsWritten,
+            ReadOnlySpan<char> format,
+            IFormatProvider? provider)
+        {
+            _ = format;
+            _ = provider;
+
+            var requiredLength = GetFormattedLength();
+            if (destination.Length < requiredLength)
+            {
+                charsWritten = 0;
+                return false;
+            }
+
+            var position = 0;
+            for (var index = 0; index < Value.Length; index++)
+            {
+                var character = Value[index];
+                if (character == '\r'
+                    && index + 1 < Value.Length
+                    && Value[index + 1] == '\n')
+                {
+                    "<br>".AsSpan().CopyTo(destination[position..]);
+                    position += 4;
+                    index++;
+                }
+                else if (character == '\n')
+                {
+                    "<br>".AsSpan().CopyTo(destination[position..]);
+                    position += 4;
+                }
+                else if (character == '|')
+                {
+                    destination[position++] = '\\';
+                    destination[position++] = '|';
+                }
+                else
+                {
+                    destination[position++] = character;
+                }
+            }
+
+            charsWritten = position;
+            return true;
+        }
+
+        private int GetFormattedLength()
+        {
+            var length = Value.Length;
+            for (var index = 0; index < Value.Length; index++)
+            {
+                if (Value[index] == '\r'
+                    && index + 1 < Value.Length
+                    && Value[index + 1] == '\n')
+                {
+                    length += 2;
+                    index++;
+                }
+                else if (Value[index] == '\n')
+                {
+                    length += 3;
+                }
+                else if (Value[index] == '|')
+                {
+                    length++;
+                }
+            }
+
+            return length;
+        }
     }
 
     private sealed record SelectionScenario(
