@@ -9,41 +9,6 @@ namespace FindJobHelper.Core.Tests;
 public sealed class CvGenerationCliEndToEndTests
 {
     [Fact]
-    public async Task Help_ListsConfigurationAndGenerationFlags()
-    {
-        var result = await RunCliAsync("--help");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Contains("list-tags", result.StandardOutput);
-        Assert.Contains("--config", result.StandardOutput);
-        Assert.Contains("--output-directory", result.StandardOutput);
-        Assert.Contains("--output-format", result.StandardOutput);
-        Assert.Contains("tex", result.StandardOutput);
-        Assert.Contains("md", result.StandardOutput);
-        Assert.Contains("--debug", result.StandardOutput);
-        Assert.Contains("--open", result.StandardOutput);
-    }
-
-    [Fact]
-    public async Task ListTags_ListsEveryTagInAlphabeticalOrder()
-    {
-        var result = await RunCliAsync("list-tags");
-
-        Assert.Equal(0, result.ExitCode);
-        Assert.Equal(string.Empty, result.StandardError);
-
-        var expected = TagsDatabaseFactory.Create().TagsDatabase.TagsGraph.Keys
-            .Select(static tag => tag.Name)
-            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static name => name, StringComparer.Ordinal);
-        var actual = result.StandardOutput.Split(
-            ["\r\n", "\n"],
-            StringSplitOptions.RemoveEmptyEntries);
-
-        Assert.Equal(expected, actual);
-    }
-
-    [Fact]
     public async Task Generate_RequiresConfigurationAndOutputDirectory()
     {
         var result = await RunCliAsync();

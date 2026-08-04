@@ -40,6 +40,12 @@ To print every tag accepted by `requiredTags`, run:
 dotnet run --project src/MainCli/MainCli.csproj -- list-tags
 ```
 
+To print an example JSON configuration, run:
+
+```powershell
+dotnet run --project src/MainCli/MainCli.csproj -- example-config
+```
+
 To inspect why experiences were selected, publish an annotated Markdown CV:
 
 ```powershell

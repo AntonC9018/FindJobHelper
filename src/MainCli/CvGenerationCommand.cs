@@ -12,6 +12,16 @@ using Location = FindJobHelper.CVGeneration.Location;
 
 public sealed class CvGenerationCommand
 {
+    [Command("example-config", Description = "Print an example JSON CV selection configuration.")]
+    public void PrintExampleConfig()
+    {
+        var examplePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "data",
+            "cv-selection.example.json");
+        Console.Write(File.ReadAllText(examplePath));
+    }
+
     [Command("list-tags", Description = "List all tags available for CV selection.")]
     public void ListTags()
     {
