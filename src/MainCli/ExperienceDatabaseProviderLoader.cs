@@ -15,7 +15,12 @@ internal static class ExperienceDatabaseProviderLoader
             ArgumentException.ThrowIfNullOrWhiteSpace(path);
             fullPath = Path.GetFullPath(path, Environment.CurrentDirectory);
         }
-        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        catch (Exception ex) when (
+            ex is ArgumentException
+                or IOException
+                or NotSupportedException
+                or SecurityException
+                or UnauthorizedAccessException)
         {
             throw new ExperienceDatabaseProviderLoadException(
                 "The experience database DLL path is invalid.",
@@ -66,6 +71,12 @@ internal static class ExperienceDatabaseProviderLoader
                 $"Experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
                 ex);
         }
+        catch (Exception ex)
+        {
+            throw new ExperienceDatabaseProviderLoadException(
+                $"Experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
+                ex);
+        }
 
         Type[] exportedTypes;
         try
@@ -74,12 +85,27 @@ internal static class ExperienceDatabaseProviderLoader
         }
         catch (ReflectionTypeLoadException ex)
         {
-            var dependencyMessage = ex.LoaderExceptions
-                .FirstOrDefault(static exception => exception is not null)
-                ?.Message;
+            var dependencyException = ex.LoaderExceptions
+                .FirstOrDefault(static exception =>
+                    exception is FileNotFoundException or FileLoadException);
+            if (dependencyException is not null)
+            {
+                throw new ExperienceDatabaseProviderLoadException(
+                    $"A dependency required by experience database DLL '{fullPath}' could not be loaded: {dependencyException.Message}",
+                    ex);
+            }
+
+            var loaderMessage = ex.LoaderExceptions
+                .FirstOrDefault(static exception => exception is not null)?.Message;
             throw new ExperienceDatabaseProviderLoadException(
                 $"Types in experience database DLL '{fullPath}' could not be inspected"
-                + (dependencyMessage is null ? "." : $": {dependencyMessage}"),
+                + (loaderMessage is null ? "." : $": {loaderMessage}"),
+                ex);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or FileLoadException)
+        {
+            throw new ExperienceDatabaseProviderLoadException(
+                $"A dependency required by experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
                 ex);
         }
         catch (Exception ex)
@@ -110,7 +136,17 @@ internal static class ExperienceDatabaseProviderLoader
         }
 
         var providerType = providerTypes[0];
-        var constructor = providerType.GetConstructor(Type.EmptyTypes);
+        ConstructorInfo? constructor;
+        try
+        {
+            constructor = providerType.GetConstructor(Type.EmptyTypes);
+        }
+        catch (Exception ex)
+        {
+            throw new ExperienceDatabaseProviderLoadException(
+                $"Experience database provider '{providerType.FullName}' could not be inspected: {ex.Message}",
+                ex);
+        }
         if (constructor is null)
         {
             throw new ExperienceDatabaseProviderLoadException(
