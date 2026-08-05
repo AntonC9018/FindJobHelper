@@ -493,21 +493,94 @@ public readonly struct SelectionOptionsEnumerable(SelectionConfiguration configu
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
+internal struct SelectionOptionsFieldMask
+{
+    public bool MinTotalItemBudget { get; set; }
+    public bool TotalItemBudget { get; set; }
+    public bool ScoreLowerBound { get; set; }
+    public bool RecencyBoost { get; set; }
+    public bool DirectMatchBoost { get; set; }
+}
+
 public sealed class SelectionOptionsConfiguration
 {
-    public int MinTotalItemBudget { get; init; } = 0;
-    public int? TotalItemBudget { get; init; }
-    public float ScoreLowerBound { get; init; }
-    public float RecencyBoost { get; init; }
-    public float? DirectMatchBoost { get; init; } = 0;
+    private int _minTotalItemBudget;
+    private int? _totalItemBudget;
+    private float _scoreLowerBound;
+    private float _recencyBoost;
+    private float? _directMatchBoost = 0;
+
+    internal SelectionOptionsFieldMask SpecifiedFields;
+
+    public int MinTotalItemBudget
+    {
+        get => _minTotalItemBudget;
+        init
+        {
+            _minTotalItemBudget = value;
+            SpecifiedFields.MinTotalItemBudget = true;
+        }
+    }
+
+    public int? TotalItemBudget
+    {
+        get => _totalItemBudget;
+        init
+        {
+            _totalItemBudget = value;
+            SpecifiedFields.TotalItemBudget = true;
+        }
+    }
+
+    public float ScoreLowerBound
+    {
+        get => _scoreLowerBound;
+        init
+        {
+            _scoreLowerBound = value;
+            SpecifiedFields.ScoreLowerBound = true;
+        }
+    }
+
+    public float RecencyBoost
+    {
+        get => _recencyBoost;
+        init
+        {
+            _recencyBoost = value;
+            SpecifiedFields.RecencyBoost = true;
+        }
+    }
+
+    public float? DirectMatchBoost
+    {
+        get => _directMatchBoost;
+        init
+        {
+            _directMatchBoost = value;
+            SpecifiedFields.DirectMatchBoost = true;
+        }
+    }
 
     public void Apply(SearchPredicateOptions options)
     {
-        options.MinTotalItemBudget = MinTotalItemBudget;
-        options.TotalItemBudget = TotalItemBudget ?? int.MaxValue;
-        options.ScoreLowerBound = ScoreLowerBound;
-        options.RecencyBoost = new(RecencyBoost);
-        if (DirectMatchBoost is { } directMatchBoost)
+        if (SpecifiedFields.MinTotalItemBudget)
+        {
+            options.MinTotalItemBudget = MinTotalItemBudget;
+        }
+        if (SpecifiedFields.TotalItemBudget)
+        {
+            options.TotalItemBudget = TotalItemBudget ?? int.MaxValue;
+        }
+        if (SpecifiedFields.ScoreLowerBound)
+        {
+            options.ScoreLowerBound = ScoreLowerBound;
+        }
+        if (SpecifiedFields.RecencyBoost)
+        {
+            options.RecencyBoost = new(RecencyBoost);
+        }
+        if (SpecifiedFields.DirectMatchBoost && DirectMatchBoost is { } directMatchBoost)
         {
             options.DirectMatchBoost = new(directMatchBoost);
         }

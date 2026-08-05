@@ -332,10 +332,37 @@ public sealed class CvSelectionConfigurationTests
         configuration.Apply(options);
 
         Assert.Equal(0f, configuration.DirectMatchBoost);
-        Assert.Equal(default, options.DirectMatchBoost);
+        Assert.Equal(0.25f, options.DirectMatchBoost.Value);
         Assert.Equal(
             default,
             new SearchPredicateOptions().DirectMatchBoost);
+    }
+
+    [Fact]
+    public void SelectionOptionsConfiguration_OmittedSectionValuesPreserveDefaults()
+    {
+        var defaults = new SelectionOptionsConfiguration
+        {
+            MinTotalItemBudget = 2,
+            TotalItemBudget = 8,
+            ScoreLowerBound = 0.4f,
+            RecencyBoost = 0.3f,
+            DirectMatchBoost = 0.2f,
+        };
+        var section = new SelectionOptionsConfiguration
+        {
+            TotalItemBudget = 5,
+        };
+        var options = new SearchPredicateOptions();
+
+        defaults.Apply(options);
+        section.Apply(options);
+
+        Assert.Equal(2, options.MinTotalItemBudget);
+        Assert.Equal(5, options.TotalItemBudget);
+        Assert.Equal(0.4f, options.ScoreLowerBound);
+        Assert.Equal(0.3f, options.RecencyBoost.Value);
+        Assert.Equal(0.2f, options.DirectMatchBoost.Value);
     }
 
     [Fact]
