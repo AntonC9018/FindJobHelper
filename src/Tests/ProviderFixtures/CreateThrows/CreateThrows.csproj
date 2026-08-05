@@ -1,5 +1,2 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <ItemGroup>
-        <ProjectReference Include="..\..\..\Core\FindJobHelper.Core.csproj" />
-    </ItemGroup>
 </Project>
