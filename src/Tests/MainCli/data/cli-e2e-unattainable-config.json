@@ -16,15 +16,15 @@
   },
   "selection": {
     "education": {
-      "totalItemBudget": 1,
+      "itemBudget": 1,
       "scoreLowerBound": 0
     },
     "workExperience": {
-      "totalItemBudget": 1,
+      "itemBudget": 1,
       "scoreLowerBound": 0
     },
     "personalProjects": {
-      "totalItemBudget": 1,
+      "itemBudget": 1,
       "scoreLowerBound": 0
     }
   },

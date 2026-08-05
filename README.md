@@ -168,14 +168,14 @@ Comments and trailing commas are allowed, but unknown properties are rejected.
       "directMatchBoost": 0.25
     },
     "workExperience": {
-      "minTotalItemBudget": 2,
-      "totalItemBudget": 8,
+      "minItemBudget": 2,
+      "itemBudget": 8,
       "scoreLowerBound": 0,
       "recencyBoost": 0.25,
       "directMatchBoost": 0.5
     },
     "personalProjects": {
-      "totalItemBudget": 2,
+      "itemBudget": 2,
       "directMatchBoost": 0
     }
   },
@@ -245,8 +245,8 @@ to fill a range.
 
 | Parameter | Default | Effect |
 | --- | ---: | --- | --- |
-| `minTotalItemBudget` | `0` | Tries to select at least this many bullets in the section. Minimum filling may accept a candidate even when its MMR score is non-positive, but cannot invent matching candidates or bypass page-layout admission. |
-| `totalItemBudget` | Unlimited | Maximum number of bullets in the section. Dependencies and other required companion bullets count toward the budget. `minTotalItemBudget` cannot exceed it. |
+| `minItemBudget` | `0` | Tries to select at least this many bullets in the section. Minimum filling may accept a candidate even when its MMR score is non-positive, but cannot invent matching candidates or bypass page-layout admission. |
+| `itemBudget` | Unlimited | Maximum number of bullets in the section. Dependencies and other required companion bullets count toward the budget. `minItemBudget` cannot exceed it. |
 | `scoreLowerBound` | `0` | Removes a bullet before MMR ranking when its tag relevance, including the direct-match bonus, is below this value. The later recency bonus remains excluded. |
 | `directMatchBoost` | `0` | Adds a contribution-based bonus for exact configured tags and bidirectional full-overlap aliases. It must be finite and non-negative. |
 | `recencyBoost` | `0` | Adds a bonus for newer experience lists within the same section. The oldest list receives no bonus; the newest receives `max(0, baseRelevance) × recencyBoost`; dates in between are linearly interpolated. |
@@ -373,7 +373,7 @@ candidate has a positive MMR score, unless a section minimum still needs to be f
   `saturationPenalty`.
 - Important requirements disappear: raise their `requiredTags` weights or raise
   `relevanceWeight`.
-- One section dominates: lower that section's `totalItemBudget`, or set minimum and
+- One section dominates: lower that section's `itemBudget`, or set minimum and
   maximum budgets for the other sections.
 - Older but more relevant work is displaced: reduce `recencyBoost`.
 - Weakly related bullets appear: raise `scoreLowerBound`. Tune this carefully because

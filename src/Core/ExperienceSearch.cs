@@ -41,8 +41,8 @@ public readonly record struct ScoreBoost
 
 public sealed class SearchPredicateOptions
 {
-    public int MinTotalItemBudget { get; set; } = 0;
-    public int TotalItemBudget { get; set; } = int.MaxValue;
+    public int MinItemBudget { get; set; } = 0;
+    public int ItemBudget { get; set; } = int.MaxValue;
 
     public float ScoreLowerBound { get; set; }
     public ScoreBoost RecencyBoost { get; set; }
@@ -54,8 +54,8 @@ public sealed class SearchPredicateOptions
     {
         return new()
         {
-            MinTotalItemBudget = MinTotalItemBudget,
-            TotalItemBudget = TotalItemBudget,
+            MinItemBudget = MinItemBudget,
+            ItemBudget = ItemBudget,
             ScoreLowerBound = ScoreLowerBound,
             RecencyBoost = RecencyBoost,
             DirectMatchBoost = DirectMatchBoost,
@@ -85,25 +85,25 @@ internal static class SearchPredicateOptionsValidator
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (options.MinTotalItemBudget < 0)
+        if (options.MinItemBudget < 0)
         {
             yield return new(
-                nameof(options.MinTotalItemBudget),
+                nameof(options.MinItemBudget),
                 "must be non-negative.",
                 IsOutOfRange: true);
         }
 
-        if (options.TotalItemBudget < 0)
+        if (options.ItemBudget < 0)
         {
             yield return new(
-                nameof(options.TotalItemBudget),
+                nameof(options.ItemBudget),
                 "must be non-negative.",
                 IsOutOfRange: true);
         }
-        else if (options.MinTotalItemBudget > options.TotalItemBudget)
+        else if (options.MinItemBudget > options.ItemBudget)
         {
             yield return new(
-                nameof(options.MinTotalItemBudget),
+                nameof(options.MinItemBudget),
                 "must not exceed the total item budget.",
                 IsOutOfRange: false);
         }
@@ -231,8 +231,8 @@ public sealed class SearchBuilder
                 predicate.Key,
                 predicate.Predicate,
                 new(
-                    predicate.Options.MinTotalItemBudget,
-                    predicate.Options.TotalItemBudget,
+                    predicate.Options.MinItemBudget,
+                    predicate.Options.ItemBudget,
                     predicate.Options.ScoreLowerBound,
                     predicate.Options.RecencyBoost,
                     predicate.Options.DirectMatchBoost,
@@ -380,8 +380,8 @@ public static class SearchBuilderExtensions
 }
 
 internal readonly record struct ExperienceSelectionOptions(
-    int MinTotalItemBudget,
-    int TotalItemBudget,
+    int MinItemBudget,
+    int ItemBudget,
     float ScoreLowerBound,
     ScoreBoost RecencyBoost,
     ScoreBoost DirectMatchBoost,
@@ -487,10 +487,10 @@ internal sealed record SelectionDiagnostics(
             groups
                 .Select(x => new SelectionBudgetTrace(
                     x.Key,
-                    x.Options.MinTotalItemBudget,
-                    x.Options.TotalItemBudget,
+                    x.Options.MinItemBudget,
+                    x.Options.ItemBudget,
                     ActualCount: 0,
-                    RemainingMaximumBudget: x.Options.TotalItemBudget))
+                    RemainingMaximumBudget: x.Options.ItemBudget))
                 .ToImmutableArray());
     }
 }
@@ -548,7 +548,7 @@ internal static class ExperienceSelectionEngine
             .ToList();
 
         var alwaysCandidates = groupedLists
-            .Where(x => x.Group.Options.TotalItemBudget > 0)
+            .Where(x => x.Group.Options.ItemBudget > 0)
             .SelectMany(x => x.AlwaysCandidates(
                 appliedRecencyBoosts.GetValueOrDefault(x.List)))
             .ToList();
@@ -1322,7 +1322,7 @@ internal static class ExperienceSelectionEngine
             _admissionPolicy = admissionPolicy;
             foreach (var group in groups)
             {
-                _remainingMaximumBudgets.Add(group.Key, group.Options.TotalItemBudget);
+                _remainingMaximumBudgets.Add(group.Key, group.Options.ItemBudget);
             }
         }
 
@@ -1519,8 +1519,8 @@ internal static class ExperienceSelectionEngine
 
                 budgetTraces.Add(new(
                     group.Key,
-                    group.Options.MinTotalItemBudget,
-                    group.Options.TotalItemBudget,
+                    group.Options.MinItemBudget,
+                    group.Options.ItemBudget,
                     actualCount,
                     _remainingMaximumBudgets[group.Key]));
             }
@@ -1550,8 +1550,8 @@ internal static class ExperienceSelectionEngine
 
         private bool IsBelowMinimum(ExperienceSelectionGroup group)
         {
-            var actualCount = group.Options.TotalItemBudget - _remainingMaximumBudgets[group.Key];
-            return actualCount < group.Options.MinTotalItemBudget;
+            var actualCount = group.Options.ItemBudget - _remainingMaximumBudgets[group.Key];
+            return actualCount < group.Options.MinItemBudget;
         }
 
         private void CollectSelectionClosure(

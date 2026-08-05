@@ -403,7 +403,7 @@ public sealed class ExperienceListSorterTests
             static _ => true,
             options =>
             {
-                options.TotalItemBudget = budget;
+                options.ItemBudget = budget;
                 options.ScoreLowerBound = scoreLowerBound;
             });
         var events = builder.Build().Run([list], NoOpProgressReporter.Instance).Get(key);

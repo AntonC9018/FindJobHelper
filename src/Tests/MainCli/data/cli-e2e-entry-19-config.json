@@ -33,17 +33,17 @@
   "selection": {
     "default": { "recencyBoost": 0.1 },
     "education": {
-      "minTotalItemBudget": 1,
+      "minItemBudget": 1,
       "scoreLowerBound": 0,
       "recencyBoost": 0.1
     },
     "workExperience": {
-      "minTotalItemBudget": 5,
+      "minItemBudget": 5,
       "scoreLowerBound": 0,
       "recencyBoost": 0.15
     },
     "personalProjects": {
-      "minTotalItemBudget": 1,
+      "minItemBudget": 1,
       "scoreLowerBound": 0,
       "recencyBoost": 0.1
     }

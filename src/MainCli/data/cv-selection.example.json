@@ -35,15 +35,15 @@
   },
   "selection": {
     "default": {
-      // "minTotalItemBudget": 2,
-      // "totalItemBudget": 8,
+      // "minItemBudget": 2,
+      // "itemBudget": 8,
       // "scoreLowerBound": 5,
       // "recencyBoost": 0.25,
       // "directMatchBoost": 0.5
     },
     "education": {
-      // "minTotalItemBudget": 2,
-      // "totalItemBudget": 8,
+      // "minItemBudget": 2,
+      // "itemBudget": 8,
       // "scoreLowerBound": 5,
       // "recencyBoost": 0.25,
       // "directMatchBoost": 0.5

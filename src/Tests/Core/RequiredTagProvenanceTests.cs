@@ -603,8 +603,8 @@ public sealed class RequiredTagProvenanceTests
             static _ => true,
             options =>
             {
-                options.MinTotalItemBudget = minimum;
-                options.TotalItemBudget = maximum;
+                options.MinItemBudget = minimum;
+                options.ItemBudget = maximum;
                 options.ScoreLowerBound = scoreLowerBound;
             });
         return builder.Build().Run([

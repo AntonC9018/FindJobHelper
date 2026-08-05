@@ -62,8 +62,8 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal("Education", search.Sections.EducationKey.Value);
         Assert.Equal("Work", search.Sections.WorkKey.Value);
         Assert.Equal("PersonalProjects", search.Sections.PersonalProjectsKey.Value);
-        Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
-        Assert.Equal(1, configuration.Selection.Education.TotalItemBudget);
+        Assert.Equal(0, configuration.Selection.Education.MinItemBudget);
+        Assert.Equal(1, configuration.Selection.Education.ItemBudget);
         Assert.Equal(0, configuration.Selection.Education.RecencyBoost);
         Assert.Equal(0, configuration.Selection.WorkExperience.RecencyBoost);
         Assert.Equal(0, configuration.Selection.PersonalProjects.RecencyBoost);
@@ -345,23 +345,23 @@ public sealed class CvSelectionConfigurationTests
     {
         var defaults = new SelectionOptionsConfiguration
         {
-            MinTotalItemBudget = 2,
-            TotalItemBudget = 8,
+            MinItemBudget = 2,
+            ItemBudget = 8,
             ScoreLowerBound = 0.4f,
             RecencyBoost = 0.3f,
             DirectMatchBoost = 0.2f,
         };
         var section = new SelectionOptionsConfiguration
         {
-            TotalItemBudget = 5,
+            ItemBudget = 5,
         };
         var options = new SearchPredicateOptions();
 
         defaults.Apply(options);
         section.Apply(options);
 
-        Assert.Equal(2, options.MinTotalItemBudget);
-        Assert.Equal(5, options.TotalItemBudget);
+        Assert.Equal(2, options.MinItemBudget);
+        Assert.Equal(5, options.ItemBudget);
         Assert.Equal(0.4f, options.ScoreLowerBound);
         Assert.Equal(0.3f, options.RecencyBoost.Value);
         Assert.Equal(0.2f, options.DirectMatchBoost.Value);
@@ -523,9 +523,9 @@ public sealed class CvSelectionConfigurationTests
 
     [Theory]
     [InlineData("mmr.relevanceWeight", "1.1", "mmr.relevanceWeight")]
-    [InlineData("selection.education.totalItemBudget", "-1", "must be non-negative")]
-    [InlineData("selection.education.minTotalItemBudget", "-1", "minTotalItemBudget")]
-    [InlineData("selection.education.minTotalItemBudget", "2", "must not exceed")]
+    [InlineData("selection.education.itemBudget", "-1", "must be non-negative")]
+    [InlineData("selection.education.minItemBudget", "-1", "minItemBudget")]
+    [InlineData("selection.education.minItemBudget", "2", "must not exceed")]
     [InlineData("selection.education.recencyBoost", "-0.1", "recencyBoost")]
     [InlineData("selection.education.directMatchBoost", "-0.1", "directMatchBoost")]
     public async Task LoadAsync_RejectsInvalidSelectionValues(
@@ -587,31 +587,31 @@ public sealed class CvSelectionConfigurationTests
     public async Task LoadAsync_MapsMinimumAndTotalSelectionBudgets()
     {
         var json = (await ReadFixtureTreeAsync())
-            .Set("selection.education.minTotalItemBudget", 1)
-            .Set("selection.education.totalItemBudget", 2)
+            .Set("selection.education.minItemBudget", 1)
+            .Set("selection.education.itemBudget", 2)
             .ToJsonString();
 
         var configuration = await LoadAsync(json);
 
-        Assert.Equal(1, configuration.Selection.Education.MinTotalItemBudget);
-        Assert.Equal(2, configuration.Selection.Education.TotalItemBudget);
+        Assert.Equal(1, configuration.Selection.Education.MinItemBudget);
+        Assert.Equal(2, configuration.Selection.Education.ItemBudget);
     }
 
     [Fact]
     public async Task LoadAsync_DefaultsMissingSelectionBudgetsToUnboundedRange()
     {
         var json = (await ReadFixtureTreeAsync())
-            .Remove("selection.education.totalItemBudget")
+            .Remove("selection.education.itemBudget")
             .ToJsonString();
 
         var configuration = await LoadAsync(json);
         var options = new SearchPredicateOptions();
         configuration.Selection.Education.Apply(options);
 
-        Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
-        Assert.Null(configuration.Selection.Education.TotalItemBudget);
-        Assert.Equal(0, options.MinTotalItemBudget);
-        Assert.Equal(int.MaxValue, options.TotalItemBudget);
+        Assert.Equal(0, configuration.Selection.Education.MinItemBudget);
+        Assert.Null(configuration.Selection.Education.ItemBudget);
+        Assert.Equal(0, options.MinItemBudget);
+        Assert.Equal(int.MaxValue, options.ItemBudget);
     }
 
     [Fact]
@@ -625,8 +625,8 @@ public sealed class CvSelectionConfigurationTests
 
         Assert.All(configuration.Selection.Options, options =>
         {
-            Assert.Equal(0, options.MinTotalItemBudget);
-            Assert.Null(options.TotalItemBudget);
+            Assert.Equal(0, options.MinItemBudget);
+            Assert.Null(options.ItemBudget);
             Assert.Equal(0, options.ScoreLowerBound);
             Assert.Equal(0, options.RecencyBoost);
             Assert.Equal(0f, options.DirectMatchBoost);
@@ -652,9 +652,9 @@ public sealed class CvSelectionConfigurationTests
 
         var configuration = await LoadAsync(json);
 
-        Assert.Null(configuration.Selection.Education.TotalItemBudget);
+        Assert.Null(configuration.Selection.Education.ItemBudget);
         Assert.Equal(0.25f, configuration.Selection.WorkExperience.RecencyBoost);
-        Assert.Null(configuration.Selection.PersonalProjects.TotalItemBudget);
+        Assert.Null(configuration.Selection.PersonalProjects.ItemBudget);
     }
 
     [Fact]
@@ -684,11 +684,11 @@ public sealed class CvSelectionConfigurationTests
             .Set("mmr.relevanceWeight", 1.1)
             .Set("mmr.saturationQuota", 0)
             .Set("mmr.saturationPenalty", -1)
-            .Set("selection.education.totalItemBudget", -1)
+            .Set("selection.education.itemBudget", -1)
             .Set("selection.education.scoreLowerBound", -1)
-            .Set("selection.workExperience.totalItemBudget", -1)
+            .Set("selection.workExperience.itemBudget", -1)
             .Set("selection.workExperience.scoreLowerBound", -1)
-            .Set("selection.personalProjects.totalItemBudget", -1)
+            .Set("selection.personalProjects.itemBudget", -1)
             .Set("selection.personalProjects.scoreLowerBound", -1);
         var sectionOrder = invalidJson.Array("sectionOrder");
         var personalProjectsIndex = sectionOrder
@@ -706,7 +706,7 @@ public sealed class CvSelectionConfigurationTests
         Assert.Contains(exception.Errors, error => error.Contains("skills", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(exception.Errors, error => error.Contains("technologies", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(exception.Errors, error => error.Contains("mmr.relevanceWeight", StringComparison.Ordinal));
-        Assert.Contains(exception.Errors, error => error.Contains("selection.workExperience.totalItemBudget", StringComparison.Ordinal));
+        Assert.Contains(exception.Errors, error => error.Contains("selection.workExperience.itemBudget", StringComparison.Ordinal));
         Assert.Contains(exception.Errors, error => error.Contains("occurs more than once", StringComparison.Ordinal));
     }
 
@@ -744,9 +744,9 @@ public sealed class CvSelectionConfigurationTests
               "technologies": [".NET"],
               "mmr": { "relevanceWeight": 0.72, "saturationQuota": 2, "saturationPenalty": 0.18 },
               "selection": {
-                "education": { "totalItemBudget": 1, "scoreLowerBound": 0 },
-                "workExperience": { "totalItemBudget": 1, "scoreLowerBound": 0 },
-                "personalProjects": { "totalItemBudget": 1, "scoreLowerBound": 0 }
+                "education": { "itemBudget": 1, "scoreLowerBound": 0 },
+                "workExperience": { "itemBudget": 1, "scoreLowerBound": 0 },
+                "personalProjects": { "itemBudget": 1, "scoreLowerBound": 0 }
               },
               "sectionOrder": ["WorkExperience"],
               "unexpected": true

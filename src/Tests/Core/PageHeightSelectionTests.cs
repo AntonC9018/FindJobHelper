@@ -54,7 +54,7 @@ public sealed class PageHeightSelectionTests
         builder.Configure(
             WorkKey,
             static experience => experience.Type == ExperienceType.Job,
-            static options => options.TotalItemBudget = 3);
+            static options => options.ItemBudget = 3);
         var policy = Policy(
             database,
             pageHeight: 40,
@@ -527,8 +527,8 @@ public sealed class PageHeightSelectionTests
                 experience => experience.Type == group.Type,
                 options =>
                 {
-                    options.MinTotalItemBudget = group.Minimum;
-                    options.TotalItemBudget = group.Maximum;
+                    options.MinItemBudget = group.Minimum;
+                    options.ItemBudget = group.Maximum;
                 });
         }
         return builder.Build();
@@ -543,7 +543,7 @@ public sealed class PageHeightSelectionTests
             static experience => experience.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = maximum;
+                options.ItemBudget = maximum;
                 options.IncludeEmptyLists = true;
             });
         return builder.Build();
@@ -558,7 +558,7 @@ public sealed class PageHeightSelectionTests
             static experience => experience.Type.IsDegree(),
             static options =>
             {
-                options.TotalItemBudget = 1;
+                options.ItemBudget = 1;
                 options.IncludeEmptyLists = true;
             });
         builder.Configure(
@@ -566,7 +566,7 @@ public sealed class PageHeightSelectionTests
             static experience => experience.Type == ExperienceType.Job,
             static options =>
             {
-                options.TotalItemBudget = 1;
+                options.ItemBudget = 1;
                 options.IncludeEmptyLists = true;
             });
         builder.Configure(
@@ -574,7 +574,7 @@ public sealed class PageHeightSelectionTests
             static experience => experience.Type == ExperienceType.Project,
             static options =>
             {
-                options.TotalItemBudget = 1;
+                options.ItemBudget = 1;
                 options.IncludeEmptyLists = true;
             });
         return builder.Build();

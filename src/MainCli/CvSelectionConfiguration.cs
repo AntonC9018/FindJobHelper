@@ -495,8 +495,8 @@ public readonly struct SelectionOptionsEnumerable(SelectionConfiguration configu
 
 internal struct SelectionOptionsFieldMask
 {
-    public bool MinTotalItemBudget { get; set; }
-    public bool TotalItemBudget { get; set; }
+    public bool MinItemBudget { get; set; }
+    public bool ItemBudget { get; set; }
     public bool ScoreLowerBound { get; set; }
     public bool RecencyBoost { get; set; }
     public bool DirectMatchBoost { get; set; }
@@ -504,31 +504,31 @@ internal struct SelectionOptionsFieldMask
 
 public sealed class SelectionOptionsConfiguration
 {
-    private int _minTotalItemBudget;
-    private int? _totalItemBudget;
+    private int _minItemBudget;
+    private int? _itemBudget;
     private float _scoreLowerBound;
     private float _recencyBoost;
     private float? _directMatchBoost = 0;
 
     internal SelectionOptionsFieldMask SpecifiedFields;
 
-    public int MinTotalItemBudget
+    public int MinItemBudget
     {
-        get => _minTotalItemBudget;
+        get => _minItemBudget;
         init
         {
-            _minTotalItemBudget = value;
-            SpecifiedFields.MinTotalItemBudget = true;
+            _minItemBudget = value;
+            SpecifiedFields.MinItemBudget = true;
         }
     }
 
-    public int? TotalItemBudget
+    public int? ItemBudget
     {
-        get => _totalItemBudget;
+        get => _itemBudget;
         init
         {
-            _totalItemBudget = value;
-            SpecifiedFields.TotalItemBudget = true;
+            _itemBudget = value;
+            SpecifiedFields.ItemBudget = true;
         }
     }
 
@@ -564,13 +564,13 @@ public sealed class SelectionOptionsConfiguration
 
     public void Apply(SearchPredicateOptions options)
     {
-        if (SpecifiedFields.MinTotalItemBudget)
+        if (SpecifiedFields.MinItemBudget)
         {
-            options.MinTotalItemBudget = MinTotalItemBudget;
+            options.MinItemBudget = MinItemBudget;
         }
-        if (SpecifiedFields.TotalItemBudget)
+        if (SpecifiedFields.ItemBudget)
         {
-            options.TotalItemBudget = TotalItemBudget ?? int.MaxValue;
+            options.ItemBudget = ItemBudget ?? int.MaxValue;
         }
         if (SpecifiedFields.ScoreLowerBound)
         {
@@ -588,20 +588,20 @@ public sealed class SelectionOptionsConfiguration
 
     public void CollectValidationErrors(string path, List<string> errors)
     {
-        if (MinTotalItemBudget < 0)
+        if (MinItemBudget < 0)
         {
-            errors.Add($"'{path}.minTotalItemBudget' must be non-negative.");
+            errors.Add($"'{path}.minItemBudget' must be non-negative.");
         }
 
-        if (TotalItemBudget is < 0)
+        if (ItemBudget is < 0)
         {
-            errors.Add($"'{path}.totalItemBudget' must be non-negative.");
+            errors.Add($"'{path}.itemBudget' must be non-negative.");
         }
-        else if (TotalItemBudget is { } totalItemBudget
-                 && MinTotalItemBudget > totalItemBudget)
+        else if (ItemBudget is { } itemBudget
+                 && MinItemBudget > itemBudget)
         {
             errors.Add(
-                $"'{path}.minTotalItemBudget' must not exceed the total item budget.");
+                $"'{path}.minItemBudget' must not exceed the total item budget.");
         }
 
         if (!float.IsFinite(ScoreLowerBound) || ScoreLowerBound < 0)

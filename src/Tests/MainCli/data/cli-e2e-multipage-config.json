@@ -16,18 +16,18 @@
   },
   "selection": {
     "education": {
-      "minTotalItemBudget": 0,
-      "totalItemBudget": 100,
+      "minItemBudget": 0,
+      "itemBudget": 100,
       "scoreLowerBound": 0
     },
     "workExperience": {
-      "minTotalItemBudget": 0,
-      "totalItemBudget": 100,
+      "minItemBudget": 0,
+      "itemBudget": 100,
       "scoreLowerBound": 0
     },
     "personalProjects": {
-      "minTotalItemBudget": 0,
-      "totalItemBudget": 100,
+      "minItemBudget": 0,
+      "itemBudget": 100,
       "scoreLowerBound": 0
     }
   },

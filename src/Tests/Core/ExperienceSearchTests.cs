@@ -30,7 +30,7 @@ public sealed class ExperienceSearchTests
         };
         var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Mmr(new MmrOptions(1, 1, 0));
-        builder.Configure(WorkKey, _ => true, options => options.TotalItemBudget = 2);
+        builder.Configure(WorkKey, _ => true, options => options.ItemBudget = 2);
 
         var result = builder.Build().Run([list], NoOpProgressReporter.Instance);
 
@@ -57,7 +57,7 @@ public sealed class ExperienceSearchTests
             ItemExclusionSets = [new ExperienceItemExclusionSet { Items = [dependency, candidate] }],
         };
         var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
-        builder.Configure(WorkKey, _ => true, options => options.TotalItemBudget = 2);
+        builder.Configure(WorkKey, _ => true, options => options.ItemBudget = 2);
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             builder.Build().Run([list], NoOpProgressReporter.Instance));
@@ -106,7 +106,7 @@ public sealed class ExperienceSearchTests
             SaturationPenalty: 0.5f));
         builder.ConfigureDefaults(opts =>
         {
-            opts.TotalItemBudget = 1;
+            opts.ItemBudget = 1;
             opts.ScoreLowerBound = 0;
         });
         builder.Configure(WorkKey, e => e.Type == ExperienceType.Job);
@@ -148,14 +148,14 @@ public sealed class ExperienceSearchTests
             SaturationPenalty: 0));
         builder.ConfigureDefaults(opts =>
         {
-            opts.TotalItemBudget = 1;
+            opts.ItemBudget = 1;
             opts.ScoreLowerBound = 0;
         });
         builder.Configure(WorkKey, e => e.Type == ExperienceType.Job);
         builder.Configure(
             ProjectKey,
             e => e.Type == ExperienceType.Project,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience(
@@ -178,7 +178,7 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_AppliesTotalItemBudgetOption()
+    public void Search_AppliesItemBudgetOption()
     {
         var tagA = new Tag("a");
         var tagB = new Tag("b");
@@ -195,8 +195,8 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.MinTotalItemBudget = 0;
-                opts.TotalItemBudget = 2;
+                opts.MinItemBudget = 0;
+                opts.ItemBudget = 2;
             });
 
         var result = builder.Build().Run([
@@ -231,7 +231,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience("first", ExperienceType.Job, 2025, Item("first", (tagA, 10))),
@@ -257,7 +257,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Project,
             opts =>
             {
-                opts.TotalItemBudget = 2;
+                opts.ItemBudget = 2;
                 opts.PreserveOneItemPerList = false;
             });
 
@@ -294,7 +294,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience(
@@ -354,8 +354,8 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.MinTotalItemBudget = 2;
-                opts.TotalItemBudget = 2;
+                opts.MinItemBudget = 2;
+                opts.ItemBudget = 2;
             });
 
         var result = builder.Build().Run([
@@ -386,8 +386,8 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.MinTotalItemBudget = 2;
-                opts.TotalItemBudget = 2;
+                opts.MinItemBudget = 2;
+                opts.ItemBudget = 2;
                 opts.ScoreLowerBound = 5;
             });
 
@@ -417,8 +417,8 @@ public sealed class ExperienceSearchTests
             _ => true,
             opts =>
             {
-                opts.MinTotalItemBudget = 2;
-                opts.TotalItemBudget = 1;
+                opts.MinItemBudget = 2;
+                opts.ItemBudget = 1;
             });
 
         var exception = Assert.Throws<ArgumentException>(() => builder.Build());
@@ -441,8 +441,8 @@ public sealed class ExperienceSearchTests
             static _ => true,
             options =>
             {
-                options.MinTotalItemBudget = 2;
-                options.TotalItemBudget = 2;
+                options.MinItemBudget = 2;
+                options.ItemBudget = 2;
                 options.ScoreLowerBound = 0;
             });
 
@@ -493,7 +493,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 5;
             });
         builder.Configure(
@@ -501,7 +501,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Project,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 6;
             });
 
@@ -537,7 +537,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 0;
             });
 
@@ -590,7 +590,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 2;
+                opts.ItemBudget = 2;
                 opts.ScoreLowerBound = 0;
             });
 
@@ -658,7 +658,7 @@ public sealed class ExperienceSearchTests
                 e => e.Type == ExperienceType.Job,
                 options =>
                 {
-                    options.TotalItemBudget = 3;
+                    options.ItemBudget = 3;
                     options.RecencyBoost = recencyBoost;
                 });
             return builder.Build().Run([older, newer], NoOpProgressReporter.Instance);
@@ -675,7 +675,7 @@ public sealed class ExperienceSearchTests
             _ => true,
             options =>
             {
-                options.TotalItemBudget = 1;
+                options.ItemBudget = 1;
                 options.ScoreLowerBound = 5;
                 options.DirectMatchBoost = 0.5f;
             });
@@ -717,7 +717,7 @@ public sealed class ExperienceSearchTests
             _ => true,
             options =>
             {
-                options.TotalItemBudget = 2;
+                options.ItemBudget = 2;
                 options.DirectMatchBoost = 0.5f;
                 options.RecencyBoost = 0.25f;
             });
@@ -758,7 +758,7 @@ public sealed class ExperienceSearchTests
             _ => true,
             options =>
             {
-                options.TotalItemBudget = 3;
+                options.ItemBudget = 3;
                 options.DirectMatchBoost = 0.5f;
             });
 
@@ -826,7 +826,7 @@ public sealed class ExperienceSearchTests
                 _ => true,
                 options =>
                 {
-                    options.TotalItemBudget = 2;
+                    options.ItemBudget = 2;
                     options.DirectMatchBoost = directMatchBoost;
                     options.RecencyBoost = recencyBoost;
                 });
@@ -850,7 +850,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = 3;
+                options.ItemBudget = 3;
                 options.RecencyBoost = 0.5f;
             });
 
@@ -889,7 +889,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = 2;
+                options.ItemBudget = 2;
                 options.RecencyBoost = 10;
             });
 
@@ -916,7 +916,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = 1;
+                options.ItemBudget = 1;
                 options.ScoreLowerBound = 5;
                 options.RecencyBoost = 10;
             });
@@ -947,7 +947,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = 2;
+                options.ItemBudget = 2;
                 options.RecencyBoost = 0.5f;
             });
         builder.Configure(
@@ -955,7 +955,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Project,
             options =>
             {
-                options.TotalItemBudget = 2;
+                options.ItemBudget = 2;
                 options.RecencyBoost = 1;
             });
 
@@ -1003,7 +1003,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = 2;
+                options.ItemBudget = 2;
                 options.RecencyBoost = 0.5f;
             });
         var search = builder.Build();
@@ -1050,7 +1050,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = 2;
+                options.ItemBudget = 2;
                 options.RecencyBoost = 0.5f;
             });
 
@@ -1100,14 +1100,14 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 5;
                 opts.IncludeEmptyLists = true;
             });
         builder.Configure(
             ProjectKey,
             e => e.Type == ExperienceType.Project,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var newestUnmatchedJob = ExperienceWithMetadata(
             "newest unmatched job",
@@ -1161,7 +1161,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 0;
+                opts.ItemBudget = 0;
                 opts.IncludeEmptyLists = true;
             });
 
@@ -1188,7 +1188,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Project,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 0;
             });
 
@@ -1213,7 +1213,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             ProjectKey,
             e => e.Type == ExperienceType.Project,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([], NoOpProgressReporter.Instance);
 
@@ -1242,11 +1242,11 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             _ => true,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
         builder.Configure(
             ProjectKey,
             _ => true,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var search = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => search.Run([
@@ -1275,7 +1275,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.RecencyBoost = 0.5f;
             });
 
@@ -1310,7 +1310,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1336,7 +1336,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1364,7 +1364,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1399,7 +1399,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.IncludeEmptyLists = true;
             });
 
@@ -1425,7 +1425,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1454,7 +1454,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1504,7 +1504,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 5;
             });
 
@@ -1551,7 +1551,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1589,7 +1589,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 0);
+            opts => opts.ItemBudget = 0);
 
         var result = builder.Build().Run([
             Experience(
@@ -1613,7 +1613,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1643,7 +1643,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience(
@@ -1676,7 +1676,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var search = builder.Build();
 
@@ -1704,7 +1704,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 3);
+            opts => opts.ItemBudget = 3);
 
         var result = builder.Build().Run([
             Experience(
@@ -1735,7 +1735,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 1;
+                opts.ItemBudget = 1;
                 opts.ScoreLowerBound = 5;
             });
 
@@ -1763,7 +1763,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var result = builder.Build().Run([
             Experience(
@@ -1791,7 +1791,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var result = builder.Build().Run([
             Experience(
@@ -1821,7 +1821,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 3);
+            opts => opts.ItemBudget = 3);
 
         var result = builder.Build().Run([
             Experience(
@@ -1851,7 +1851,7 @@ public sealed class ExperienceSearchTests
             e => e.Type == ExperienceType.Job,
             opts =>
             {
-                opts.TotalItemBudget = 2;
+                opts.ItemBudget = 2;
                 opts.ScoreLowerBound = 1;
             });
 
@@ -1881,7 +1881,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 2);
+            opts => opts.ItemBudget = 2);
 
         var search = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => search.Run([
@@ -1909,7 +1909,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            opts => opts.TotalItemBudget = 1);
+            opts => opts.ItemBudget = 1);
 
         var search = builder.Build();
         var exception = Assert.Throws<InvalidOperationException>(() => search.Run([
@@ -1940,7 +1940,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             e => e.Type == ExperienceType.Job,
-            options => options.TotalItemBudget = 3);
+            options => options.ItemBudget = 3);
         var progress = new ProgressTestReporter();
 
         var result = builder.Build().Run(
@@ -1987,7 +1987,7 @@ public sealed class ExperienceSearchTests
             _ => true,
             options =>
             {
-                options.TotalItemBudget = 1;
+                options.ItemBudget = 1;
                 options.ScoreLowerBound = 20;
             });
         var rejectedProgress = new ProgressTestReporter();
@@ -2023,7 +2023,7 @@ public sealed class ExperienceSearchTests
         builder.Configure(
             WorkKey,
             _ => true,
-            options => options.TotalItemBudget = 1);
+            options => options.ItemBudget = 1);
         var search = builder.Build();
         var experiences = new[]
         {

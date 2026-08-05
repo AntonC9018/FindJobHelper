@@ -281,7 +281,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             static experience => experience.Type == ExperienceType.Job,
             options =>
             {
-                options.TotalItemBudget = maximum;
+                options.ItemBudget = maximum;
                 options.IncludeEmptyLists = true;
             });
         return builder.Build();
@@ -296,7 +296,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             static experience => experience.Type == ExperienceType.Job,
             static options =>
             {
-                options.TotalItemBudget = 0;
+                options.ItemBudget = 0;
                 options.IncludeEmptyLists = true;
             });
         builder.Configure(
@@ -304,7 +304,7 @@ public sealed class ExplicitPageLayoutSelectionTests
             static experience => experience.Type == ExperienceType.Project,
             static options =>
             {
-                options.TotalItemBudget = 0;
+                options.ItemBudget = 0;
                 options.IncludeEmptyLists = true;
             });
         return builder.Build();
