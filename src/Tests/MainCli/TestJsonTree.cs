@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace FindJobHelper.Core.Tests;
+namespace MainCli.Tests;
 
 internal sealed class TestJsonTree
 {

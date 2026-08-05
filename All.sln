@@ -7,6 +7,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TestInitHelper", "src\InitH
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FindJobHelper.Core.Tests", "src\Tests\Core\FindJobHelper.Core.Tests.csproj", "{DD7D2A20-1868-4317-9562-B04E26B6D817}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MainCli.Tests", "src\Tests\MainCli\MainCli.Tests.csproj", "{A0E58C0E-20C4-45A2-9893-09A4DB730A20}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FindJobHelper.Usage.Tests", "src\Tests\Usage\FindJobHelper.Usage.Tests.csproj", "{B0E58C0E-20C4-45A2-9893-09A4DB730B20}"
+EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TheirStackClient", "src\TheirStackClient\TheirStackClient.csproj", "{5D24346F-C6AC-4631-9666-47FFEBF1ABCA}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TheirStackClientGenerator", "src\TheirStackClientGenerator\TheirStackClientGenerator.csproj", "{D7EAFA30-100B-4E14-9BB6-F77B9D5011F7}"
@@ -35,6 +39,14 @@ Global
 		{DD7D2A20-1868-4317-9562-B04E26B6D817}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DD7D2A20-1868-4317-9562-B04E26B6D817}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DD7D2A20-1868-4317-9562-B04E26B6D817}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0E58C0E-20C4-45A2-9893-09A4DB730A20}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0E58C0E-20C4-45A2-9893-09A4DB730A20}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0E58C0E-20C4-45A2-9893-09A4DB730A20}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0E58C0E-20C4-45A2-9893-09A4DB730A20}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B0E58C0E-20C4-45A2-9893-09A4DB730B20}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B0E58C0E-20C4-45A2-9893-09A4DB730B20}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B0E58C0E-20C4-45A2-9893-09A4DB730B20}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B0E58C0E-20C4-45A2-9893-09A4DB730B20}.Release|Any CPU.Build.0 = Release|Any CPU
 		{5D24346F-C6AC-4631-9666-47FFEBF1ABCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5D24346F-C6AC-4631-9666-47FFEBF1ABCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5D24346F-C6AC-4631-9666-47FFEBF1ABCA}.Release|Any CPU.ActiveCfg = Release|Any CPU

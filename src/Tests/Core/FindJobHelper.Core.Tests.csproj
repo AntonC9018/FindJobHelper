@@ -1,13 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
-        <ProjectReference Include="..\..\MainCli\MainCli.csproj" />
+        <ProjectReference Include="..\..\Core\FindJobHelper.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="data\**\*.*" CopyToOutputDirectory="Always" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Spectre.Console.Testing" Version="0.57.2" />
+        <None Include="..\..\MainCli\data\cv_template_config.tex"
+              Link="data\cv_template_config.tex"
+              CopyToOutputDirectory="Always" />
     </ItemGroup>
 </Project>

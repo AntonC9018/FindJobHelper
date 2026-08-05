@@ -1,5 +1,4 @@
 using FindJobHelper.CVGeneration;
-using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -90,33 +89,6 @@ public sealed class ExperienceItemBuilderTests
 
         Assert.Contains("empty", exception.Message, StringComparison.Ordinal);
         Assert.Contains("at least one", exception.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void UniversityLecturer_HasExpectedNamedGroupMembership()
-    {
-        var (tags, _) = TagsDatabaseFactory.Create();
-        var list = Assert.Single(
-            ExperienceDatabaseFactory.Create(tags).Experiences,
-            experience => experience.Title.Value == "University Lecturer");
-
-        Assert.Equal(7, list.Items.Length);
-        var teaching = Assert.Single(list.ItemGroups, group => group.Id == "teaching");
-        var automation = Assert.Single(
-            list.ItemGroups,
-            group => group.Id == "university-automation");
-
-        Assert.Collection(
-            teaching.Items,
-            item => Assert.Same(list.Items[0], item),
-            item => Assert.Same(list.Items[5], item));
-        Assert.Collection(
-            automation.Items,
-            item => Assert.Same(list.Items[1], item),
-            item => Assert.Same(list.Items[2], item),
-            item => Assert.Same(list.Items[3], item),
-            item => Assert.Same(list.Items[4], item),
-            item => Assert.Same(list.Items[6], item));
     }
 
     [Fact]

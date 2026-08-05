@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
-using MainCli;
 using static FindJobHelper.Core.Helper.DiagnosticFormatting;
 
 namespace FindJobHelper.Core.Tests;
@@ -20,7 +19,7 @@ internal static class SelectionDebugReport
         CancellationToken cancellationToken)
     {
         var db = await LoadFrozenDb(cancellationToken);
-        var tagsDatabase = TagsDatabaseFactory.Create().TagsDatabase;
+        var tagsDatabase = await FrozenDatabaseFixtures.LoadTags(cancellationToken);
         var runs = ImmutableArray.CreateBuilder<SelectionDebugRun>();
 
         foreach (var scenario in Scenarios())

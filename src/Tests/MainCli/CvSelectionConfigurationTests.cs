@@ -1,9 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using FindJobHelper.Core;
 using FindJobHelper.CVGeneration;
+using FindJobHelper.Usage;
 using MainCli;
 
-namespace FindJobHelper.Core.Tests;
+namespace MainCli.Tests;
 
 public sealed class CvSelectionConfigurationTests
 {
@@ -603,20 +605,13 @@ public sealed class CvSelectionConfigurationTests
             .ToJsonString();
 
         var configuration = await LoadAsync(json);
-        var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
-        var database = ExperienceDatabaseFactory.Create(tags);
-        var configured = configuration.BuildSearch(tagsDatabase);
-        var result = configured.Search.Run(
-            database.Experiences,
-            NoOpProgressReporter.Instance);
-        var educationBudget = Assert.Single(
-            result.Diagnostics.Budgets,
-            budget => budget.Section == configured.Sections.EducationKey);
+        var options = new SearchPredicateOptions();
+        configuration.Selection.Education.Apply(options);
 
         Assert.Equal(0, configuration.Selection.Education.MinTotalItemBudget);
         Assert.Null(configuration.Selection.Education.TotalItemBudget);
-        Assert.Equal(0, educationBudget.RequestedMinimum);
-        Assert.Equal(int.MaxValue, educationBudget.RequestedMaximum);
+        Assert.Equal(0, options.MinTotalItemBudget);
+        Assert.Equal(int.MaxValue, options.TotalItemBudget);
     }
 
     [Fact]

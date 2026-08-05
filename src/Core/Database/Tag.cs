@@ -947,19 +947,36 @@ public static class TagsDatabaseExtensions
 
 public static class TagDatabaseSerializer
 {
+    private sealed record SerializedTagDatabase(
+        ImmutableArray<SerializedTag> Tags);
+
+    private sealed record SerializedTag(
+        string Name,
+        ImmutableArray<SerializedTagRelation> Relations);
+
+    private sealed record SerializedTagRelation(
+        string OtherTag,
+        float Overlap);
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
-        ReferenceHandler = ReferenceHandler.Preserve,
     };
 
     extension(TagsDatabase db)
     {
         public async Task Serialize(Stream output, CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(db);
+            var serialized = new SerializedTagDatabase(
+                db.DeclarationOrder
+                    .Select(tag => new SerializedTag(
+                        tag.Name,
+                        SerializeRelations(db.RelationsOf(tag))))
+                    .ToImmutableArray());
             await JsonSerializer.SerializeAsync(
                 options: Options,
-                value: db,
+                value: serialized,
                 utf8Json: output,
                 cancellationToken: cancellationToken);
         }
@@ -967,15 +984,48 @@ public static class TagDatabaseSerializer
 
     public static async Task<TagsDatabase> Deserialize(Stream input, CancellationToken cancellationToken)
     {
-        var ret = await JsonSerializer.DeserializeAsync<TagsDatabase>(
+        var serialized = await JsonSerializer.DeserializeAsync<SerializedTagDatabase>(
             options: Options,
             utf8Json: input,
             cancellationToken: cancellationToken);
-        if (ret == null)
+        if (serialized is null)
         {
             throw new InvalidOperationException("File did not contain a db object.");
         }
-        return ret;
+
+        var declarationOrder = serialized.Tags
+            .Select(static tag => new Tag(tag.Name))
+            .ToImmutableArray();
+        var tagsByName = declarationOrder.ToDictionary(
+            static tag => tag.Name,
+            StringComparer.OrdinalIgnoreCase);
+        var graph = serialized.Tags
+            .Select(tag => KeyValuePair.Create(
+                tagsByName[tag.Name],
+                new Relations(tag.Relations
+                    .Select(relation => new TagRelation(
+                        tagsByName.TryGetValue(relation.OtherTag, out var otherTag)
+                            ? otherTag
+                            : throw new JsonException(
+                                $"Tag relation references unknown tag '{relation.OtherTag}'."),
+                        OverlapScore.Create(relation.Overlap)))
+                    .ToImmutableArray())))
+            .ToFrozenDictionary();
+        return new(graph, declarationOrder);
+    }
+
+    private static ImmutableArray<SerializedTagRelation> SerializeRelations(
+        Relations relations)
+    {
+        var builder = ImmutableArray.CreateBuilder<SerializedTagRelation>();
+        foreach (var relation in relations)
+        {
+            builder.Add(new(
+                relation.OtherTag.Name,
+                relation.PercentageOfSelfIncludedInTheOtherTag.Value));
+        }
+
+        return builder.DrainToImmutable();
     }
 }
 

@@ -2,9 +2,10 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
 using FindJobHelper.CVGeneration;
+using FindJobHelper.Usage;
 using MainCli;
 
-namespace FindJobHelper.Core.Tests;
+namespace MainCli.Tests;
 
 public sealed class CvGenerationCliEndToEndTests
 {
@@ -16,6 +17,61 @@ public sealed class CvGenerationCliEndToEndTests
         Assert.Equal(2, result.ExitCode);
         Assert.Contains("config is required", result.StandardError);
         Assert.DoesNotContain("output-directory is required", result.StandardError);
+    }
+
+    [Fact]
+    public async Task Generate_RequiresExperienceDatabase()
+    {
+        var result = await RunCliWithoutExperienceDatabaseAsync(
+            "--config",
+            FixturePath,
+            "--debug");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("experience-database is required", result.StandardError);
+    }
+
+    [Fact]
+    public async Task ExampleConfig_DoesNotRequireExperienceDatabase()
+    {
+        var result = await RunCliWithoutExperienceDatabaseAsync("example-config");
+
+        AssertSuccessful(result);
+        Assert.Contains("requiredTags", result.StandardOutput);
+    }
+
+    [Fact]
+    public async Task ListTags_LoadsUsageProviderDll()
+    {
+        var result = await RunCliAsync("list-tags");
+
+        AssertSuccessful(result);
+        Assert.Contains(".NET", result.StandardOutput);
+        Assert.Contains("ASP.NET Core", result.StandardOutput);
+    }
+
+    [Fact]
+    public async Task ProviderFailure_DoesNotCreateOutputDirectory()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-provider-failure-{Guid.NewGuid():N}");
+        var missingDll = Path.Combine(
+            Path.GetTempPath(),
+            $"missing-provider-{Guid.NewGuid():N}.dll");
+
+        var result = await RunCliAsync(
+            "--config",
+            FixturePath,
+            "--experience-database",
+            missingDll,
+            "--output-directory",
+            outputDirectory,
+            "--debug");
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Contains("Experience database error:", result.StandardError);
+        Assert.False(Directory.Exists(outputDirectory));
     }
 
     [Fact]
@@ -559,7 +615,16 @@ public sealed class CvGenerationCliEndToEndTests
         return markdown;
     }
 
-    private static async Task<ProcessResult> RunCliAsync(params string[] arguments)
+    private static Task<ProcessResult> RunCliAsync(params string[] arguments) =>
+        RunCliCoreAsync(addExperienceDatabase: true, arguments);
+
+    private static Task<ProcessResult> RunCliWithoutExperienceDatabaseAsync(
+        params string[] arguments) =>
+        RunCliCoreAsync(addExperienceDatabase: false, arguments);
+
+    private static async Task<ProcessResult> RunCliCoreAsync(
+        bool addExperienceDatabase,
+        params string[] arguments)
     {
         var startInfo = new ProcessStartInfo("dotnet")
         {
@@ -569,10 +634,21 @@ public sealed class CvGenerationCliEndToEndTests
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
-        startInfo.ArgumentList.Add(typeof(CvTemplate).Assembly.Location);
+        startInfo.ArgumentList.Add(typeof(CvGenerationCommand).Assembly.Location);
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
+        }
+
+        var command = arguments.FirstOrDefault();
+        var acceptsExperienceDatabase = command is not "example-config" and not "new-config";
+        if (addExperienceDatabase
+            && acceptsExperienceDatabase
+            && !arguments.Contains("--experience-database", StringComparer.Ordinal))
+        {
+            startInfo.ArgumentList.Add("--experience-database");
+            startInfo.ArgumentList.Add(
+                typeof(ExperienceDatabaseProvider).Assembly.Location);
         }
 
         startInfo.Environment["PersonalInfo__Email"] = "e2e@example.test";

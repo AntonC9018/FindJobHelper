@@ -1,4 +1,4 @@
-namespace FindJobHelper.Core.Tests;
+namespace MainCli.Tests;
 
 public sealed class CvArtifactPlanTests
 {

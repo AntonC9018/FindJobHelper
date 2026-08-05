@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
-using MainCli;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -93,7 +92,7 @@ public sealed class SomeTests
     {
         var ct = CancellationToken.None;
         var db = await GetDb(ct);
-        var tags = TagsDatabaseFactory.Create().TagsDatabase;
+        var tags = await FrozenDatabaseFixtures.LoadTags(ct);
 
         var workKey = new ExperienceKey("Work");
         var searchBuilder = new SearchBuilder();

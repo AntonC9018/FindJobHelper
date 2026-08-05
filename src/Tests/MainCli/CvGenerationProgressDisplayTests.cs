@@ -1,7 +1,7 @@
 using FindJobHelper.CVGeneration;
 using Spectre.Console.Testing;
 
-namespace FindJobHelper.Core.Tests;
+namespace MainCli.Tests;
 
 public sealed class CvGenerationProgressDisplayTests
 {
