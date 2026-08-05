@@ -1,5 +1,5 @@
 {
-  "pageCount": 4,
+  "pageCount": 2,
   "requiredTags": [
     { "name": ".NET", "weight": 1.0 },
     { "name": "Thesis", "weight": 0.01 },
@@ -35,30 +35,26 @@
   },
   "selection": {
     "default": {
-      "directMatchBoost": 0.25
+      // "minTotalItemBudget": 2,
+      // "totalItemBudget": 8,
+      // "scoreLowerBound": 5,
+      // "recencyBoost": 0.25,
+      // "directMatchBoost": 0.5
     },
     "education": {
-      "minTotalItemBudget": 0,
-      "totalItemBudget": 2,
-      "scoreLowerBound": 0
+      // "minTotalItemBudget": 2,
+      // "totalItemBudget": 8,
+      // "scoreLowerBound": 5,
+      // "recencyBoost": 0.25,
+      // "directMatchBoost": 0.5
     },
     "workExperience": {
-      "minTotalItemBudget": 2,
-      "totalItemBudget": 8,
-      "scoreLowerBound": 5,
-      "recencyBoost": 0.25,
-      "directMatchBoost": 0.5
     },
     "personalProjects": {
-      "minTotalItemBudget": 0,
-      "totalItemBudget": 1,
-      "scoreLowerBound": 5,
-      "directMatchBoost": 0
     }
   },
   "sectionOrder": [
-    { "page": 1, "sections": ["Languages", "Education"] },
-    { "pages": "2-3", "sections": ["WorkExperience"] },
-    { "page": 4, "sections": ["PersonalProjects"] }
+    { "page": 1, "sections": ["WorkExperience"] },
+    { "page": 2, "sections": ["PersonalProjects", "Languages", "Education"] },
   ]
 }

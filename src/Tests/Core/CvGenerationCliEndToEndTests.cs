@@ -9,13 +9,76 @@ namespace FindJobHelper.Core.Tests;
 public sealed class CvGenerationCliEndToEndTests
 {
     [Fact]
-    public async Task Generate_RequiresConfigurationAndOutputDirectory()
+    public async Task Generate_RequiresConfiguration()
     {
         var result = await RunCliAsync();
 
         Assert.Equal(2, result.ExitCode);
         Assert.Contains("config is required", result.StandardError);
-        Assert.Contains("output-directory is required", result.StandardError);
+        Assert.DoesNotContain("output-directory is required", result.StandardError);
+    }
+
+    [Fact]
+    public async Task NewConfig_WritesExampleConfigToOutputDirectory()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-new-config-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "new-config",
+                "--output-directory",
+                outputDirectory);
+
+            AssertSuccessful(result);
+            var outputPath = Path.Combine(outputDirectory, "config.json");
+            Assert.True(File.Exists(outputPath));
+            Assert.Equal(
+                await File.ReadAllTextAsync(Path.Combine(
+                    AppContext.BaseDirectory,
+                    "data",
+                    "cv-selection.example.json")),
+                await File.ReadAllTextAsync(outputPath));
+            Assert.Contains($"Created '{outputPath}'.", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task NewConfig_DoesNotOverwriteExistingConfig()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-new-config-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputDirectory);
+        var outputPath = Path.Combine(outputDirectory, "config.json");
+        const string existingContent = "existing configuration";
+        await File.WriteAllTextAsync(outputPath, existingContent);
+
+        try
+        {
+            var result = await RunCliAsync(
+                "new-config",
+                "--output-directory",
+                outputDirectory);
+
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Contains(
+                $"Cannot create '{outputPath}': the file already exists.",
+                result.StandardError);
+            Assert.Equal(existingContent, await File.ReadAllTextAsync(outputPath));
+        }
+        finally
+        {
+            Directory.Delete(outputDirectory, recursive: true);
+        }
     }
 
     [Theory]

@@ -46,6 +46,13 @@ To print an example JSON configuration, run:
 dotnet run --project src/MainCli/MainCli.csproj -- example-config
 ```
 
+To create `config.json` in the current directory (or another output directory), run:
+
+```powershell
+dotnet run --project src/MainCli/MainCli.csproj -- new-config
+dotnet run --project src/MainCli/MainCli.csproj -- new-config --output-directory path/to/output
+```
+
 To inspect why experiences were selected, publish an annotated Markdown CV:
 
 ```powershell

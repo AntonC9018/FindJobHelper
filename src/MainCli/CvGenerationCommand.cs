@@ -15,11 +15,30 @@ public sealed class CvGenerationCommand
     [Command("example-config", Description = "Print an example JSON CV selection configuration.")]
     public void PrintExampleConfig()
     {
-        var examplePath = Path.Combine(
-            AppContext.BaseDirectory,
-            "data",
-            "cv-selection.example.json");
+        var examplePath = GetExampleConfigPath();
         Console.Write(File.ReadAllText(examplePath));
+    }
+
+    [Command("new-config", Description = "Write an example configuration to config.json.")]
+    public int NewConfig(
+        [Option(
+            "output-directory",
+            Description = "Destination directory for config.json.")]
+        string outputDirectory = ".")
+    {
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory);
+        Directory.CreateDirectory(fullOutputDirectory);
+        var outputPath = Path.Combine(fullOutputDirectory, "config.json");
+        if (File.Exists(outputPath))
+        {
+            Console.Error.WriteLine(
+                $"Cannot create '{outputPath}': the file already exists.");
+            return ExitCodes.Error;
+        }
+
+        File.Copy(GetExampleConfigPath(), outputPath);
+        Console.WriteLine($"Created '{outputPath}'.");
+        return ExitCodes.Success;
     }
 
     [Command("list-tags", Description = "List all tags available for CV selection.")]
@@ -404,6 +423,11 @@ public sealed class CvGenerationCommand
             "https://www.linkedin.com/in/anton-curmanschii-647232161",
         ]),
     ];
+
+    private static string GetExampleConfigPath() => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cv-selection.example.json");
 }
 
 public enum CvOutputFormat
@@ -421,7 +445,7 @@ public sealed class CvGenerationArguments : IArgumentModel
     public string Config { get; set; } = null!;
 
     [Option("output-directory", Description = "Destination directory for the generated artifact.")]
-    public string OutputDirectory { get; set; } = null!;
+    public string OutputDirectory { get; set; } = ".";
 
     [Option(
         "output-format",
