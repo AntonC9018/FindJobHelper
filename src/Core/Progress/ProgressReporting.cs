@@ -27,7 +27,7 @@ public readonly record struct LatexProgressReporters(
     IProgressReporter Tex,
     IProgressReporter Pdf);
 
-internal sealed class ProgressRangeReporter(
+public sealed class ProgressRangeReporter(
     IProgressReporter target,
     double offset,
     double length,
@@ -45,7 +45,7 @@ internal sealed class ProgressRangeReporter(
     }
 }
 
-internal static class ProgressMath
+public static class ProgressMath
 {
     public static double Fraction(ProgressReport report)
     {

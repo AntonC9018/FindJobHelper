@@ -588,16 +588,25 @@ public sealed class SelectionOptionsConfiguration
 
     public void CollectValidationErrors(string path, List<string> errors)
     {
-        var options = new SearchPredicateOptions
+        if (MinTotalItemBudget < 0)
         {
-            MinTotalItemBudget = MinTotalItemBudget,
-            TotalItemBudget = TotalItemBudget ?? int.MaxValue,
-            ScoreLowerBound = ScoreLowerBound,
-        };
-        foreach (var error in SearchPredicateOptionsValidator.ValidateOptions(options))
+            errors.Add($"'{path}.minTotalItemBudget' must be non-negative.");
+        }
+
+        if (TotalItemBudget is < 0)
         {
-            var propertyName = JsonNamingPolicy.CamelCase.ConvertName(error.PropertyName);
-            errors.Add($"'{path}.{propertyName}' {error.Message}");
+            errors.Add($"'{path}.totalItemBudget' must be non-negative.");
+        }
+        else if (TotalItemBudget is { } totalItemBudget
+                 && MinTotalItemBudget > totalItemBudget)
+        {
+            errors.Add(
+                $"'{path}.minTotalItemBudget' must not exceed the total item budget.");
+        }
+
+        if (!float.IsFinite(ScoreLowerBound) || ScoreLowerBound < 0)
+        {
+            errors.Add($"'{path}.scoreLowerBound' must be finite and non-negative.");
         }
 
         AddBoostValidationError(nameof(RecencyBoost), RecencyBoost);
@@ -619,12 +628,3 @@ public sealed class SelectionOptionsConfiguration
         }
     }
 }
-
-public sealed record ConfiguredCvSearch(
-    ExperienceSearch Search,
-    CvExperienceSectionBindings Sections,
-    ImmutableArray<RegularString> Skills,
-    ImmutableArray<RegularString> Technologies,
-    ImmutableArray<Section> SectionOrder,
-    CvPageCount PageCount,
-    CvPageLayout? PageLayout);

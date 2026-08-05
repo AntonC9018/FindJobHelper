@@ -6,15 +6,15 @@ using static FindJobHelper.Core.Helper.DiagnosticFormatting;
 
 namespace FindJobHelper.CVGeneration;
 
-internal enum CvMarkdownRenderMode
+public enum CvMarkdownRenderMode
 {
     Clean,
     Annotated,
 }
 
-internal static class CvMarkdownRenderer
+public static class CvMarkdownRenderer
 {
-    internal static void Render(
+    public static void Render(
         CvDataModel model,
         CvMarkdownRenderMode mode,
         IProgressReporter progress,
@@ -89,7 +89,7 @@ internal static class CvMarkdownRenderer
         }
     }
 
-    internal static int GetWorkUnitCount(CvDataModel model)
+    public static int GetWorkUnitCount(CvDataModel model)
     {
         ArgumentNullException.ThrowIfNull(model);
         return checked(model.SectionOrder.Length + 5);

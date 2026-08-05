@@ -42,9 +42,21 @@ public sealed class CvGenerationCommand
     }
 
     [Command("list-tags", Description = "List all tags available for CV selection.")]
-    public void ListTags()
+    public int ListTags(ExperienceDatabaseArguments arguments)
     {
-        var tagsDatabase = TagsDatabaseFactory.Create().TagsDatabase;
+        ExperienceDatabaseProviderResult providerResult;
+        try
+        {
+            providerResult = ExperienceDatabaseProviderLoader.Load(
+                arguments.ExperienceDatabase);
+        }
+        catch (ExperienceDatabaseProviderLoadException ex)
+        {
+            Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
+
+        var tagsDatabase = providerResult.TagsDatabase;
         foreach (var tag in tagsDatabase.TagsGraph.Keys
                      .Select(static tag => tag.Name)
                      .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
@@ -52,6 +64,8 @@ public sealed class CvGenerationCommand
         {
             Console.WriteLine(tag);
         }
+
+        return ExitCodes.Success;
     }
 
     [DefaultCommand]
@@ -63,6 +77,7 @@ public sealed class CvGenerationCommand
         {
             return await GenerateCore(
                 configPath: arguments.Config,
+                experienceDatabasePath: arguments.ExperienceDatabase,
                 outputDirectory: arguments.OutputDirectory,
                 outputFormat: arguments.OutputFormat,
                 isDebug: arguments.Debug,
@@ -74,6 +89,11 @@ public sealed class CvGenerationCommand
             Console.Error.WriteLine($"Configuration error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
+        catch (ExperienceDatabaseProviderLoadException ex)
+        {
+            Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"CV generation failed: {ex.Message}");
@@ -83,6 +103,7 @@ public sealed class CvGenerationCommand
 
     private static async Task<int> GenerateCore(
         string configPath,
+        string experienceDatabasePath,
         string outputDirectory,
         CvOutputFormat outputFormat,
         bool isDebug,
@@ -97,9 +118,11 @@ public sealed class CvGenerationCommand
             configPath,
             cancellationToken);
         var fullOutputDirectory = Path.GetFullPath(outputDirectory);
-        var (tags, tagsDatabase) = TagsDatabaseFactory.Create();
-        var searchConfiguration = configuration.BuildSearch(tagsDatabase);
-        var experienceDatabase = ExperienceDatabaseFactory.Create(tags);
+        var providerResult = ExperienceDatabaseProviderLoader.Load(
+            experienceDatabasePath);
+        var searchConfiguration = configuration.BuildSearch(
+            providerResult.TagsDatabase);
+        var experienceDatabase = providerResult.ExperienceDatabase;
         var templatePath = Path.Combine(
             AppContext.BaseDirectory,
             "data",
@@ -174,26 +197,11 @@ public sealed class CvGenerationCommand
                     templatePath,
                     progress.Reporter(CvGenerationModule.ComputingHeights),
                     cancellationToken);
-                var admissionPolicy = new PageLayoutSelectionAdmissionPolicy(
+                progress.BeginModule(CvGenerationModule.MatchingExperiences);
+                var searchResult = searchConfiguration.Run(
                     experienceDatabase,
                     measurementSnapshot,
-                    searchConfiguration.Sections,
-                    searchConfiguration.SectionOrder,
-                    searchConfiguration.PageCount,
-                    searchConfiguration.PageLayout);
-                progress.BeginModule(CvGenerationModule.MatchingExperiences);
-                var searchResult = searchConfiguration.Search.Run(
-                    experienceDatabase,
-                    admissionPolicy,
                     progress.Reporter(CvGenerationModule.MatchingExperiences));
-                if (searchConfiguration.PageLayout is null)
-                {
-                    admissionPolicy.RequireExactPageCount();
-                }
-                else
-                {
-                    admissionPolicy.RequireCompletePageLayout();
-                }
 
                 searchConfiguration.Sections.Apply(searchResult, currentModel);
                 return await GenerateAndPublishArtifactsAsync(
@@ -439,7 +447,15 @@ public enum CvOutputFormat
     Md = 2,
 }
 
-public sealed class CvGenerationArguments : IArgumentModel
+public class ExperienceDatabaseArguments : IArgumentModel
+{
+    [Option(
+        "experience-database",
+        Description = "Path to a DLL containing exactly one public experience database provider.")]
+    public string ExperienceDatabase { get; set; } = null!;
+}
+
+public sealed class CvGenerationArguments : ExperienceDatabaseArguments
 {
     [Option("config", Description = "Path to the JSON CV selection configuration.")]
     public string Config { get; set; } = null!;
