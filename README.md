@@ -7,11 +7,21 @@ count.
 
 ## Generate a CV
 
-From the repository root, run:
+The CLI and the experience database are independent build products. From the repository
+root, build the supplied provider and keep its DLL path available:
+
+```powershell
+dotnet build src/Usage/FindJobHelper.Usage.csproj
+$experienceDatabase = (Resolve-Path `
+  src/Usage/bin/Debug/net10.0/FindJobHelper.Usage.dll).Path
+```
+
+Then run:
 
 ```powershell
 dotnet run --project src/MainCli/MainCli.csproj -- `
   --config path/to/config.json `
+  --experience-database $experienceDatabase `
   --output-directory path/to/output
 ```
 
@@ -24,6 +34,7 @@ To publish a clean Markdown CV instead, use:
 ```powershell
 dotnet run --project src/MainCli/MainCli.csproj -- `
   --config path/to/config.json `
+  --experience-database $experienceDatabase `
   --output-directory path/to/output `
   --output-format md
 ```
@@ -37,7 +48,8 @@ markers.
 To print every tag accepted by `requiredTags`, run:
 
 ```powershell
-dotnet run --project src/MainCli/MainCli.csproj -- list-tags
+dotnet run --project src/MainCli/MainCli.csproj -- list-tags `
+  --experience-database $experienceDatabase
 ```
 
 To print an example JSON configuration, run:
@@ -58,6 +70,7 @@ To inspect why experiences were selected, publish an annotated Markdown CV:
 ```powershell
 dotnet run --project src/MainCli/MainCli.csproj -- `
   --config path/to/config.json `
+  --experience-database $experienceDatabase `
   --output-directory path/to/output `
   --debug
 ```
@@ -71,6 +84,23 @@ same selected CV model. Sensitive phone information remains blurred in both file
 | Default or `--output-format tex` | `CurmanchiiAnton.pdf` | PDF |
 | `--output-format md` | `CurmanchiiAnton.md` | Clean Markdown |
 | `--debug`, with either output format | `CurmanchiiAnton.md`, `CurmanchiiAnton-debug.md` | Debug Markdown |
+
+### Experience database providers
+
+`--experience-database` accepts an existing `.dll`; the CLI does not accept a project
+path, build the provider, or probe for a default provider. Relative paths are resolved
+from the current working directory.
+
+A provider assembly references `FindJobHelper.Core` and exports a concrete
+`IExperienceDatabaseProvider` implementation. The assembly must contain exactly one
+such public provider type, and that type must have a public parameterless constructor.
+The CLI constructs it once and calls `Create()` once. `Create()` returns an
+`ExperienceDatabaseProviderResult` containing the matching `TagsDatabase` and
+`ExperienceDatabase`; its constructor rejects either database being null.
+
+The supplied `FindJobHelper.Usage` project is one implementation. A custom provider
+can implement the same contract without creating a compile-time dependency from
+MainCli to Usage.
 
 ### Generation progress
 
