@@ -5,5 +5,17 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootPath>$(MSBuildThisFileDirectory)</RootPath>
+        <Version>0.1.0</Version>
+        <Authors>Anton C.</Authors>
+        <Company>AntonC9018</Company>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl>https://github.com/AntonC9018/FindJobHelper</RepositoryUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <Deterministic>true</Deterministic>
     </PropertyGroup>
+    <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <None Include="$(RootPath)README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
 </Project>

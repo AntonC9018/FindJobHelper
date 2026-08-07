@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\..\src\FindJobHelper.Cli\data\cv_template_config.tex"
+              Link="data\cv_template_config.tex"
+              CopyToOutputDirectory="Always" />
+    </ItemGroup>
+</Project>

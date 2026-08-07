@@ -1,0 +1,5 @@
+<Project>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+    </ItemGroup>
+</Project>

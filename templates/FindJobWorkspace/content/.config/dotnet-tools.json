@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "anton.findjobhelper.cli": {
+      "version": "0.1.0",
+      "commands": [ "find-job-helper" ]
+    }
+  }
+}

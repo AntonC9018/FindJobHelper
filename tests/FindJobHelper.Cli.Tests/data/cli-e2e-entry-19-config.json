@@ -1,0 +1,18 @@
+{
+  "pageCount": 1,
+  "requiredTags": [
+    { "name": ".NET", "weight": 1.5 },
+    { "name": "Testing", "weight": 1.2 },
+    { "name": "Documentation", "weight": 0.8 }
+  ],
+  "skills": [ "Fictional testing", "Fictional documentation" ],
+  "technologies": [ ".NET" ],
+  "mmr": { "relevanceWeight": 0.9, "saturationQuota": 3, "saturationPenalty": 0.15 },
+  "selection": {
+    "default": { "recencyBoost": 0.1 },
+    "education": { "minItemBudget": 1, "scoreLowerBound": 0, "recencyBoost": 0.1 },
+    "workExperience": { "minItemBudget": 1, "scoreLowerBound": 0, "recencyBoost": 0.15 },
+    "personalProjects": { "minItemBudget": 1, "scoreLowerBound": 0, "recencyBoost": 0.1 }
+  },
+  "sectionOrder": [ "WorkExperience", "PersonalProjects", "Education", "Languages" ]
+}

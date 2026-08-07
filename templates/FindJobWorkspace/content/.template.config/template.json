@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Anton C.",
+  "classifications": [ "Console", "CV", "Workspace" ],
+  "identity": "Anton.FindJobHelper.Workspace",
+  "name": "FindJobHelper fictional Workspace",
+  "shortName": "findjob-workspace",
+  "sourceName": "FindJobWorkspace",
+  "preferNameDirectory": true,
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  }
+}

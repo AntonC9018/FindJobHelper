@@ -1,0 +1,13 @@
+bin/
+obj/
+debug/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.xdv
+*.synctex.gz
+sent/*/
+!sent/.gitkeep
+!sent/index.csv
