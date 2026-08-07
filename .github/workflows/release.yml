@@ -1,0 +1,103 @@
+name: Publish synchronized NuGet release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    name: Validate, attest, and publish
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Check out the released commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release identity
+        shell: bash
+        env:
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$version" == *-* && "$RELEASE_PRERELEASE" != "true" ]]; then exit 1; fi
+          if [[ "$version" != *-* && "$RELEASE_PRERELEASE" != "false" ]]; then exit 1; fi
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+
+      - name: Set up the pinned .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore locked dependencies
+        run: dotnet restore FindJobHelper.sln --locked-mode
+
+      - name: Build with warnings treated as errors
+        run: dotnet build FindJobHelper.sln -c Release --no-restore -warnaserror -p:ContinuousIntegrationBuild=true
+
+      - name: Test
+        run: dotnet test FindJobHelper.sln -c Release --no-build --no-restore
+
+      - name: Pack the synchronized artifacts once
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir package-staging
+          common=(-c Release --no-build --no-restore -o package-staging -p:PackageVersion="$VERSION" -p:RepositoryCommit="$GITHUB_SHA" -p:ContinuousIntegrationBuild=true)
+          dotnet pack src/FindJobHelper.Core/FindJobHelper.Core.csproj "${common[@]}"
+          dotnet pack templates/FindJobWorkspace/Anton.FindJobHelper.Templates.csproj "${common[@]}"
+          dotnet pack src/FindJobHelper.Cli/FindJobHelper.Cli.csproj "${common[@]}"
+          python3 scripts/normalize-nupkg.py package-staging/*.nupkg
+          test "$(find package-staging -maxdepth 1 -name '*.nupkg' | wc -l)" -eq 3
+          sha256sum package-staging/*.nupkg > package-staging/SHA256SUMS.txt
+
+      - name: Require approved package hashes
+        shell: bash
+        env:
+          APPROVED_SHA256SUMS: ${{ vars.APPROVED_SHA256SUMS }}
+        run: |
+          set -euo pipefail
+          test -n "$APPROVED_SHA256SUMS"
+          printf '%s\n' "$APPROVED_SHA256SUMS" > approved-sha256sums.txt
+          diff -u approved-sha256sums.txt package-staging/SHA256SUMS.txt
+
+      - name: Attest packages and checksum manifest
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            package-staging/*.nupkg
+            package-staging/SHA256SUMS.txt
+
+      - name: Upload preserved release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-release-${{ env.VERSION }}
+          path: package-staging/
+          if-no-files-found: error
+
+      - name: Authenticate to NuGet.org using OIDC
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Publish Core, Templates, then CLI
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          source='https://www.nuget.org/api/v2/package'
+          dotnet nuget push "package-staging/Anton.FindJobHelper.Core.$VERSION.nupkg" --api-key "$NUGET_API_KEY" --source "$source"
+          dotnet nuget push "package-staging/Anton.FindJobHelper.Templates.$VERSION.nupkg" --api-key "$NUGET_API_KEY" --source "$source"
+          dotnet nuget push "package-staging/Anton.FindJobHelper.Cli.$VERSION.nupkg" --api-key "$NUGET_API_KEY" --source "$source"
