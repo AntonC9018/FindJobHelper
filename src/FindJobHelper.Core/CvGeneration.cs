@@ -21,6 +21,7 @@ public record struct GenerateParams()
     public CvPageCount PageCount;
     public CvPageLayout? PageLayout;
     public LatexExecutablePaths? LatexExecutables;
+    public LatexExecutionOptions ExecutionOptions = LatexExecutionOptions.Empty;
 }
 
 public sealed record GeneratedCvArtifacts(string PdfPath);
@@ -184,7 +185,7 @@ public static class CvTemplate
     public const int ExpectedXeLatexPassCount = 2;
     public const int ExpectedPdfConversionPassCount = 1;
 
-    public static async Task<GeneratedCvArtifacts> Generate(
+    public static async Task<CvRenderResult> Generate(
         GenerateParams p,
         LatexProgressReporters progress)
     {
@@ -284,7 +285,7 @@ public static class CvTemplate
         }
     }
 
-    private static async Task<GeneratedCvArtifacts> CompileAsync(
+    private static async Task<CvRenderResult> CompileAsync(
         GenerateParams p,
         DirectoryInfo outputDirectory,
         IProgressReporter progress,
@@ -322,7 +323,31 @@ public static class CvTemplate
         latexmk = latexmk.WithWorkingDirectory(outputDirectory.FullName);
         latexmk = latexmk.WithValidation(CommandResultValidation.None);
 
-        var result = await latexmk.ExecuteAsync(p.CancellationToken);
+        CommandResult result;
+        try
+        {
+            result = await latexmk.ExecuteAsync(p.CancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            var incomplete = LatexFailureClassifier.ClassifyLaunchFailure(
+                Path.GetFileName(executables.Latexmk),
+                LatexExecutionPhase.FinalRendering,
+                exception,
+                outputDirectory.FullName,
+                p.ExecutionOptions);
+            return incomplete is null
+                ? new LatexCompilationFailure(
+                    LatexExecutionPhase.FinalRendering,
+                    exception.Message,
+                    outputDirectory.FullName,
+                    null)
+                : incomplete;
+        }
 
         if (!result.IsSuccess)
         {
@@ -330,26 +355,41 @@ public static class CvTemplate
             var latexLog = File.Exists(latexLogPath)
                 ? await File.ReadAllTextAsync(latexLogPath, p.CancellationToken)
                 : string.Empty;
+            var incomplete = LatexFailureClassifier.ClassifyLog(
+                latexLog,
+                LatexExecutionPhase.FinalRendering,
+                outputDirectory.FullName,
+                p.ExecutionOptions);
+            if (incomplete is not null)
+            {
+                return incomplete;
+            }
             if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
             {
-                throw new CvMetadataOverflowException();
+                return new RenderLayoutFailure(
+                    new MetadataOverflowFailure(CvMetadataOverflowException.ErrorMessage));
             }
             if (CvLatexErrors.ContainsSectionPageOverflowMarker(latexLog))
             {
-                throw CvLatexErrors.CreateSectionPageOverflowException(latexLog);
+                var exception = CvLatexErrors.CreateSectionPageOverflowException(latexLog);
+                return new RenderLayoutFailure(
+                    new SectionOverflowFailure(exception.Message, exception.SectionLabel));
             }
             if (CvLatexErrors.ContainsEventPageOverflowMarker(latexLog))
             {
-                throw CvLatexErrors.CreateEventPageOverflowException(latexLog, p.Model);
+                var exception = CvLatexErrors.CreateEventPageOverflowException(latexLog, p.Model);
+                return new RenderLayoutFailure(
+                    new EventOverflowFailure(
+                        exception.Message,
+                        exception.SectionLabel,
+                        exception.EventLabel));
             }
 
-            var diagnostic = latexLog
-                .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
-                .FirstOrDefault(static line => line.StartsWith('!'));
-            throw new CvLatexCompilationException(
-                diagnostic is null
-                    ? "LaTeX execution failed."
-                    : $"LaTeX execution failed: {diagnostic}");
+            return new LatexCompilationFailure(
+                LatexExecutionPhase.FinalRendering,
+                LatexFailureClassifier.FirstDiagnostic(latexLog, "LaTeX execution failed."),
+                outputDirectory.FullName,
+                result.ExitCode);
         }
 
         var finalLatexLogPath = Path.Join(outputDirectory.FullName, "main.log");
@@ -358,7 +398,15 @@ public static class CvTemplate
             : null;
         if (p.PageLayout is { } explicitLayout)
         {
-            VerifyExplicitRenderedLayout(explicitLayout, finalLatexLog);
+            try
+            {
+                VerifyExplicitRenderedLayout(explicitLayout, finalLatexLog);
+            }
+            catch (RenderedPageLayoutMismatchException exception)
+            {
+                return new RenderValidationFailure(
+                    new PageLayoutMismatchFailure(exception.Message, exception.Details));
+            }
         }
         else if (p.PageCount.ExactCount is { } requiredPageCount)
         {
@@ -367,13 +415,20 @@ public static class CvTemplate
                     finalLatexLog,
                     out var renderedPageCount))
             {
-                throw new RenderedPageCountUnavailableException(requiredPageCount);
+                var exception = new RenderedPageCountUnavailableException(requiredPageCount);
+                return new RenderValidationFailure(
+                    new PageCountUnavailableFailure(exception.Message, requiredPageCount));
             }
             if (renderedPageCount != requiredPageCount)
             {
-                throw new RenderedPageCountMismatchException(
+                var exception = new RenderedPageCountMismatchException(
                     requiredPageCount,
                     renderedPageCount);
+                return new RenderValidationFailure(
+                    new PageCountMismatchFailure(
+                        exception.Message,
+                        requiredPageCount,
+                        renderedPageCount));
             }
         }
 
@@ -381,11 +436,13 @@ public static class CvTemplate
         var pdfOutputPath = Path.Join(outputDirectory.FullName, pdfOutputName);
         if (!File.Exists(pdfOutputPath))
         {
-            throw new CvPdfNotProducedException();
+            var exception = new CvPdfNotProducedException();
+            return new RenderValidationFailure(
+                new MissingPdfFailure(exception.Message, pdfOutputPath));
         }
 
         latexmkProgress.CompleteConversionAndValidation();
-        return new(pdfOutputPath);
+        return new GeneratedCvArtifacts(pdfOutputPath);
     }
 
     internal static int GetTexWorkUnitCount(

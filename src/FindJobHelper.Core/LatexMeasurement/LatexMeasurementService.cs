@@ -33,16 +33,18 @@ public sealed class LatexMeasurementService
         _ruleVersion = ruleVersion;
     }
 
-    public async Task<CvMeasurementSnapshot> MeasureAsync(
+    public async Task<CvMeasurementResult> MeasureAsync(
         ExperienceDatabase database,
         CvDataModel currentModel,
         string templatePath,
         IProgressReporter progress,
+        LatexExecutionOptions executionOptions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(currentModel);
         ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(executionOptions);
         ArgumentException.ThrowIfNullOrWhiteSpace(templatePath);
         if (!File.Exists(templatePath))
         {
@@ -91,7 +93,7 @@ public sealed class LatexMeasurementService
                     misses[i].Mode);
             }
 
-            var measured = await _runner.MeasureAsync(
+            var runResult = await _runner.MeasureAsync(
                 Path.GetFullPath(templatePath),
                 requests,
                 new ProgressRangeReporter(
@@ -99,8 +101,40 @@ public sealed class LatexMeasurementService
                     offset: completedWorkUnits,
                     length: requests.Length,
                     targetTotal: totalWorkUnits),
+                executionOptions,
                 cancellationToken);
-            ValidateRunnerResults(requests, measured);
+            IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> measured;
+            switch (runResult)
+            {
+                case SuccessfulLatexMeasurementRun success:
+                    measured = success.Measurements;
+                    break;
+                case IncompleteLatexInstallation incomplete:
+                    return incomplete;
+                case LatexCompilationFailure compilation:
+                    return compilation;
+                case MeasurementDataFailure data:
+                    return data;
+                case RenderLayoutFailure { Value: MetadataOverflowFailure metadata }:
+                    return new MeasurementLayoutFailure(
+                        new FixedContentLayoutFailure(metadata.Diagnostic));
+                case RenderLayoutFailure:
+                    throw new InvalidOperationException(
+                        "The measurement runner returned an unsupported rendering layout failure.");
+                default:
+                    throw new InvalidOperationException(
+                        "The measurement runner result union is empty.");
+            }
+            try
+            {
+                ValidateRunnerResults(requests, measured);
+            }
+            catch (CvMeasurementException exception)
+            {
+                return new MeasurementDataFailure(
+                    exception.Message,
+                    Path.GetDirectoryName(Path.GetFullPath(templatePath))!);
+            }
             cancellationToken.ThrowIfCancellationRequested();
 
             var cacheValues = new Dictionary<LatexMeasurementCacheKey, LatexHeight>(requests.Length);
@@ -139,6 +173,32 @@ public sealed class LatexMeasurementService
             TotalWorkUnits: totalWorkUnits,
             Detail: "Computing heights"));
         return snapshot;
+    }
+
+    public async Task<CvMeasurementSnapshot> MeasureAsync(
+        ExperienceDatabase database,
+        CvDataModel currentModel,
+        string templatePath,
+        IProgressReporter progress,
+        CancellationToken cancellationToken)
+    {
+        var result = await MeasureAsync(
+            database,
+            currentModel,
+            templatePath,
+            progress,
+            LatexExecutionOptions.Empty,
+            cancellationToken);
+        return result switch
+        {
+            CvMeasurementSnapshot snapshot => snapshot,
+            IncompleteLatexInstallation failure => throw new CvMeasurementException(failure.Message),
+            LatexCompilationFailure failure => throw new CvMeasurementException(failure.Message),
+            MeasurementDataFailure failure => throw new CvMeasurementException(failure.Diagnostic),
+            MeasurementLayoutFailure failure => throw new CvMeasurementException(
+                failure.Value?.ToString() ?? "CV measurement layout failed."),
+            _ => throw new InvalidOperationException("The CV measurement result union is empty."),
+        };
     }
 
     internal int GetWorkUnitCount(

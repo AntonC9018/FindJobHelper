@@ -55,6 +55,16 @@ public sealed class CvGenerationCommand
             Console.Error.WriteLine($"Experience database error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
+        catch (ExpectedCliFailure ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ex.ExitCode;
+        }
+        catch (CvLayoutException ex)
+        {
+            Console.Error.WriteLine($"CV layout validation failed: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
 
         var tagsDatabase = providerResult.TagsDatabase;
         foreach (var tag in tagsDatabase.TagsGraph.Keys
@@ -137,6 +147,7 @@ public sealed class CvGenerationCommand
         Console.WriteLine($"LaTeX tools selected by {latexExecutables.SelectionSource}: {latexExecutables.Directory}");
         Console.WriteLine($"latexmk: {latexExecutables.Paths.Latexmk}");
         Console.WriteLine($"xelatex: {latexExecutables.Paths.XeLatex}");
+        var latexExecutionOptions = CreateLatexExecutionOptions();
         await using var serviceProvider = await AppConfiguration.CreateApp(
             latexExecutables.Paths,
             cancellationToken);
@@ -202,12 +213,24 @@ public sealed class CvGenerationCommand
             async progress =>
             {
                 progress.BeginModule(CvGenerationModule.ComputingHeights);
-                var measurementSnapshot = await measurementService.MeasureAsync(
+                var measurementResult = await measurementService.MeasureAsync(
                     experienceDatabase,
                     currentModel,
                     templatePath,
                     progress.Reporter(CvGenerationModule.ComputingHeights),
+                    latexExecutionOptions,
                     cancellationToken);
+                var measurementSnapshot = measurementResult switch
+                {
+                    CvMeasurementSnapshot snapshot => snapshot,
+                    IncompleteLatexInstallation incomplete => throw ExpectedCliFailure.General(incomplete.Message),
+                    LatexCompilationFailure compilation => throw ExpectedCliFailure.General(compilation.Message),
+                    MeasurementDataFailure data => throw ExpectedCliFailure.General(
+                        $"LaTeX measurement data failed: {data.Diagnostic} Diagnostics: {data.DiagnosticDirectory}."),
+                    MeasurementLayoutFailure layout => throw ExpectedCliFailure.Validation(
+                        FormatMeasurementLayoutFailure(layout)),
+                    _ => throw new InvalidOperationException("The CV measurement result union is empty."),
+                };
                 progress.BeginModule(CvGenerationModule.MatchingExperiences);
                 var searchResult = searchConfiguration.Run(
                     experienceDatabase,
@@ -223,6 +246,7 @@ public sealed class CvGenerationCommand
                     searchConfiguration.PageCount,
                     searchConfiguration.PageLayout,
                     latexExecutables.Paths,
+                    latexExecutionOptions,
                     progress,
                     cancellationToken);
             },
@@ -314,6 +338,7 @@ public sealed class CvGenerationCommand
             CvPageCount pageCount,
             CvPageLayout? pageLayout,
             LatexExecutablePaths latexExecutables,
+            LatexExecutionOptions latexExecutionOptions,
             CvGenerationProgressContext progress,
             CancellationToken cancellationToken)
     {
@@ -321,6 +346,7 @@ public sealed class CvGenerationCommand
             Path.GetTempPath(),
             $"FindJobHelper-{Guid.NewGuid():N}");
         Directory.CreateDirectory(stagingDirectory);
+        var retainStagingDirectory = false;
 
         try
         {
@@ -353,15 +379,27 @@ public sealed class CvGenerationCommand
                                 PageCount = pageCount,
                                 PageLayout = pageLayout,
                                 LatexExecutables = latexExecutables,
+                                ExecutionOptions = latexExecutionOptions,
                             },
                             new(
                                 progress.Reporter(
                                     CvGenerationModule.CreatingTexFile),
                                 progress.Reporter(
                                     CvGenerationModule.RenderingPdf)));
+                        var generatedArtifacts = artifacts switch
+                        {
+                            GeneratedCvArtifacts success => success,
+                            IncompleteLatexInstallation incomplete => throw ExpectedCliFailure.General(incomplete.Message),
+                            LatexCompilationFailure compilation => throw ExpectedCliFailure.General(compilation.Message),
+                            RenderLayoutFailure layout => throw ExpectedCliFailure.Validation(
+                                FormatRenderLayoutFailure(layout)),
+                            RenderValidationFailure validation => throw ExpectedCliFailure.Validation(
+                                FormatRenderValidationFailure(validation)),
+                            _ => throw new InvalidOperationException("The CV rendering result union is empty."),
+                        };
                         stagedArtifactPaths.Add(
                             artifact.Kind,
-                            artifacts.PdfPath);
+                            generatedArtifacts.PdfPath);
                         break;
                     case CvArtifactKind.CleanMarkdown:
                     case CvArtifactKind.AnnotatedMarkdown:
@@ -417,11 +455,19 @@ public sealed class CvGenerationCommand
 
             return publishedArtifactPaths;
         }
+        catch (ExpectedCliFailure)
+        {
+            retainStagingDirectory = true;
+            throw;
+        }
         finally
         {
             try
             {
-                Directory.Delete(stagingDirectory, recursive: true);
+                if (!retainStagingDirectory)
+                {
+                    Directory.Delete(stagingDirectory, recursive: true);
+                }
             }
             catch (DirectoryNotFoundException)
             {
@@ -449,6 +495,64 @@ public sealed class CvGenerationCommand
         AppContext.BaseDirectory,
         "data",
         "cv-selection.example.json");
+
+    private static LatexExecutionOptions CreateLatexExecutionOptions() => new(
+        requirements:
+        [
+            new ExecutableLatexRequirement("xelatex"),
+            new ExecutableLatexRequirement("latexmk"),
+            new TexFileLatexRequirement("babel.sty"),
+            new TexFileLatexRequirement("xifthen.sty"),
+            new TexFileLatexRequirement("ifmtarg.sty"),
+            new TexFileLatexRequirement("moresize.sty"),
+            new TexFileLatexRequirement("zref-lastpage.sty"),
+            new TexFileLatexRequirement("needspace.sty"),
+            new TexFileLatexRequirement("multirow.sty"),
+            new TexFileLatexRequirement("wrapfig.sty"),
+            new TexFileLatexRequirement("varwidth.sty"),
+            new TexFileLatexRequirement("environ.sty"),
+            new FontLatexRequirement("Liberation Serif"),
+            new FontLatexRequirement("Liberation Sans"),
+            new BabelLanguageLatexRequirement("romanian"),
+        ],
+        setupCommandHint: "./scripts/setup-latex.sh");
+
+    private static string FormatMeasurementLayoutFailure(MeasurementLayoutFailure failure) => failure switch
+    {
+        FixedContentLayoutFailure value => value.Diagnostic,
+        RequiredHeadingLayoutFailure value => value.Diagnostic,
+        RequiredItemLayoutFailure value => value.Diagnostic,
+        SelectionCommitLayoutFailure value => value.Diagnostic,
+        PredictedPageCountLayoutFailure value => value.Diagnostic,
+        PageLayoutUnderfillFailure value => value.Diagnostic,
+        _ => throw new InvalidOperationException("The measurement layout failure union is empty."),
+    };
+
+    private static string FormatRenderLayoutFailure(RenderLayoutFailure failure) => failure switch
+    {
+        MetadataOverflowFailure value => value.Diagnostic,
+        SectionOverflowFailure value => value.Diagnostic,
+        EventOverflowFailure value => value.Diagnostic,
+        _ => throw new InvalidOperationException("The render layout failure union is empty."),
+    };
+
+    private static string FormatRenderValidationFailure(RenderValidationFailure failure) => failure switch
+    {
+        PageCountUnavailableFailure value => value.Diagnostic,
+        PageCountMismatchFailure value => value.Diagnostic,
+        PageLayoutMismatchFailure value => value.Diagnostic,
+        MissingPdfFailure value => value.Diagnostic,
+        _ => throw new InvalidOperationException("The render validation failure union is empty."),
+    };
+}
+
+internal sealed class ExpectedCliFailure(string message, int exitCode) : Exception(message)
+{
+    public int ExitCode { get; } = exitCode;
+
+    public static ExpectedCliFailure Validation(string message) => new(message, ExitCodes.ValidationError);
+
+    public static ExpectedCliFailure General(string message) => new(message, ExitCodes.Error);
 }
 
 public enum CvOutputFormat
