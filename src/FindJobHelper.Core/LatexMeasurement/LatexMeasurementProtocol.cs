@@ -21,6 +21,19 @@ internal interface ILatexMeasurementRunner
 
 internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
 {
+    private readonly LatexExecutablePaths _executables;
+
+    public XeLatexMeasurementRunner()
+        : this(LatexExecutablePaths.FromPath)
+    {
+    }
+
+    public XeLatexMeasurementRunner(LatexExecutablePaths executables)
+    {
+        ArgumentNullException.ThrowIfNull(executables);
+        _executables = executables;
+    }
+
     public async Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
@@ -57,7 +70,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             var progressParser = new LatexMeasurementCompletionParser(
                 requests,
                 progress);
-            var result = await Cli.Wrap("xelatex")
+            var result = await Cli.Wrap(_executables.XeLatex)
                 .WithArguments([
                     "-interaction=nonstopmode",
                     "-halt-on-error",

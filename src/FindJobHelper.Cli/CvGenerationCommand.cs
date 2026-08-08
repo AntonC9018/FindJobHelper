@@ -82,6 +82,7 @@ public sealed class CvGenerationCommand
                 outputFormat: arguments.OutputFormat,
                 isDebug: arguments.Debug,
                 openInOs: arguments.Open,
+                latexBinDirectory: arguments.LatexBinDirectory,
                 cancellationToken: cancellationToken);
         }
         catch (CvConfigurationException ex)
@@ -108,6 +109,7 @@ public sealed class CvGenerationCommand
         CvOutputFormat outputFormat,
         bool isDebug,
         bool openInOs,
+        string? latexBinDirectory,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
@@ -131,7 +133,13 @@ public sealed class CvGenerationCommand
             throw new FileNotFoundException("CV template file was not found.", templatePath);
         }
 
-        await using var serviceProvider = await AppConfiguration.CreateApp(cancellationToken);
+        var latexExecutables = LatexBinaryDirectoryResolver.Resolve(latexBinDirectory);
+        Console.WriteLine($"LaTeX tools selected by {latexExecutables.SelectionSource}: {latexExecutables.Directory}");
+        Console.WriteLine($"latexmk: {latexExecutables.Paths.Latexmk}");
+        Console.WriteLine($"xelatex: {latexExecutables.Paths.XeLatex}");
+        await using var serviceProvider = await AppConfiguration.CreateApp(
+            latexExecutables.Paths,
+            cancellationToken);
         var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
         var artifactPlan = CvArtifactPlan.Create(
             outputFormat,
@@ -214,6 +222,7 @@ public sealed class CvGenerationCommand
                     fullOutputDirectory,
                     searchConfiguration.PageCount,
                     searchConfiguration.PageLayout,
+                    latexExecutables.Paths,
                     progress,
                     cancellationToken);
             },
@@ -304,6 +313,7 @@ public sealed class CvGenerationCommand
             string outputDirectory,
             CvPageCount pageCount,
             CvPageLayout? pageLayout,
+            LatexExecutablePaths latexExecutables,
             CvGenerationProgressContext progress,
             CancellationToken cancellationToken)
     {
@@ -342,6 +352,7 @@ public sealed class CvGenerationCommand
                                 OutputDirectory = stagingDirectory,
                                 PageCount = pageCount,
                                 PageLayout = pageLayout,
+                                LatexExecutables = latexExecutables,
                             },
                             new(
                                 progress.Reporter(
@@ -479,4 +490,9 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
 
     [Option("open", Description = "Select the generated artifact after a successful generation.")]
     public bool Open { get; set; }
+
+    [Option(
+        "latex-bin-directory",
+        Description = "Directory containing both latexmk and xelatex. Overrides FINDJOBHELPER_LATEX_BIN_DIRECTORY and automatic discovery.")]
+    public string? LatexBinDirectory { get; set; }
 }
