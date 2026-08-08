@@ -42,13 +42,19 @@ internal static class CvLatexErrors
     public static bool ContainsEventPageOverflowMarker(string output)
         => output.Contains(EventPageOverflowMarker, StringComparison.Ordinal);
 
-    public static CvSectionPageOverflowException CreateSectionPageOverflowException(string output)
+    public static CvSectionPageOverflowException CreateSectionPageOverflowException(
+        string output,
+        CvDataModel? model = null)
     {
         var match = Regex.Match(
             output,
             @"FJH_SECTION_PAGE_OVERFLOW:\s*([^\r\n.]+)",
             RegexOptions.CultureInvariant);
         var label = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+        if (model is not null)
+        {
+            label = CompleteSectionName(label);
+        }
         return new(label.Length == 0 ? null : label);
     }
 
@@ -62,14 +68,12 @@ internal static class CvLatexErrors
             RegexOptions.CultureInvariant);
         var section = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
         var @event = match.Success ? match.Groups[2].Value.Trim() : string.Empty;
+        if (model is not null)
+        {
+            section = CompleteSectionName(section);
+        }
         if (model is not null
-            && Enum.TryParse<Section>(section, ignoreCase: false, out var parsedSection)
-            && int.TryParse(
-                @event,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var eventNumber)
-            && eventNumber > 0)
+            && Enum.TryParse<Section>(section, ignoreCase: false, out var parsedSection))
         {
             var events = parsedSection switch
             {
@@ -78,7 +82,17 @@ internal static class CvLatexErrors
                 Section.PersonalProjects => model.PersonalProjects,
                 _ => [],
             };
-            if (eventNumber <= events.Length)
+            if (@event.Length == 0 && events.Length == 1)
+            {
+                @event = events[0].Title.Value;
+            }
+            else if (int.TryParse(
+                    @event,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var eventNumber)
+                && eventNumber > 0
+                && eventNumber <= events.Length)
             {
                 @event = events[eventNumber - 1].Title.Value;
             }
@@ -87,6 +101,18 @@ internal static class CvLatexErrors
         return new(
             section.Length == 0 ? null : section,
             @event.Length == 0 ? null : @event);
+    }
+
+    private static string CompleteSectionName(string value)
+    {
+        if (value.Length == 0)
+        {
+            return value;
+        }
+
+        var names = Enum.GetNames<Section>();
+        var match = names.SingleOrDefault(name => name.StartsWith(value, StringComparison.Ordinal));
+        return match ?? value;
     }
 }
 
@@ -296,7 +322,13 @@ public static class CvTemplate
             renderProgressPlan);
         var executables = p.LatexExecutables ?? LatexExecutablePaths.FromPath;
         var latexmk = Cli.Wrap(executables.Latexmk);
-        latexmk = latexmk.WithArguments(["-xelatex", LatexFileName]);
+        latexmk = latexmk.WithArguments([
+            "-xelatex",
+            "-latexoption=-halt-on-error",
+            "-latexoption=-interaction=nonstopmode",
+            "-latexoption=-file-line-error",
+            LatexFileName,
+        ]);
         var binaryDirectory = Path.GetDirectoryName(executables.Latexmk);
         if (!string.IsNullOrEmpty(binaryDirectory))
         {
@@ -345,7 +377,8 @@ public static class CvTemplate
                     LatexExecutionPhase.FinalRendering,
                     exception.Message,
                     outputDirectory.FullName,
-                    null)
+                    null,
+                    p.ExecutionOptions)
                 : incomplete;
         }
 
@@ -367,20 +400,19 @@ public static class CvTemplate
             if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
             {
                 return new RenderLayoutFailure(
-                    new MetadataOverflowFailure(CvMetadataOverflowException.ErrorMessage));
+                    new MetadataOverflowFailure());
             }
             if (CvLatexErrors.ContainsSectionPageOverflowMarker(latexLog))
             {
-                var exception = CvLatexErrors.CreateSectionPageOverflowException(latexLog);
+                var exception = CvLatexErrors.CreateSectionPageOverflowException(latexLog, p.Model);
                 return new RenderLayoutFailure(
-                    new SectionOverflowFailure(exception.Message, exception.SectionLabel));
+                    new SectionOverflowFailure(exception.SectionLabel));
             }
             if (CvLatexErrors.ContainsEventPageOverflowMarker(latexLog))
             {
                 var exception = CvLatexErrors.CreateEventPageOverflowException(latexLog, p.Model);
                 return new RenderLayoutFailure(
                     new EventOverflowFailure(
-                        exception.Message,
                         exception.SectionLabel,
                         exception.EventLabel));
             }
@@ -389,7 +421,8 @@ public static class CvTemplate
                 LatexExecutionPhase.FinalRendering,
                 LatexFailureClassifier.FirstDiagnostic(latexLog, "LaTeX execution failed."),
                 outputDirectory.FullName,
-                result.ExitCode);
+                result.ExitCode,
+                p.ExecutionOptions);
         }
 
         var finalLatexLogPath = Path.Join(outputDirectory.FullName, "main.log");
@@ -405,7 +438,7 @@ public static class CvTemplate
             catch (RenderedPageLayoutMismatchException exception)
             {
                 return new RenderValidationFailure(
-                    new PageLayoutMismatchFailure(exception.Message, exception.Details));
+                    new PageLayoutMismatchFailure(exception.Details));
             }
         }
         else if (p.PageCount.ExactCount is { } requiredPageCount)
@@ -417,7 +450,7 @@ public static class CvTemplate
             {
                 var exception = new RenderedPageCountUnavailableException(requiredPageCount);
                 return new RenderValidationFailure(
-                    new PageCountUnavailableFailure(exception.Message, requiredPageCount));
+                    new PageCountUnavailableFailure(requiredPageCount));
             }
             if (renderedPageCount != requiredPageCount)
             {
@@ -426,7 +459,6 @@ public static class CvTemplate
                     renderedPageCount);
                 return new RenderValidationFailure(
                     new PageCountMismatchFailure(
-                        exception.Message,
                         requiredPageCount,
                         renderedPageCount));
             }
@@ -438,7 +470,7 @@ public static class CvTemplate
         {
             var exception = new CvPdfNotProducedException();
             return new RenderValidationFailure(
-                new MissingPdfFailure(exception.Message, pdfOutputPath));
+                new MissingPdfFailure(pdfOutputPath));
         }
 
         latexmkProgress.CompleteConversionAndValidation();

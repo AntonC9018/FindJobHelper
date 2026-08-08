@@ -9,13 +9,21 @@ public enum LatexExecutionPhase
     FinalRendering,
 }
 
-public sealed record ExecutableLatexRequirement(string Name);
+public readonly record struct LatexExecutableName(string Value);
 
-public sealed record TexFileLatexRequirement(string FileName);
+public readonly record struct LatexTexFileName(string Value);
 
-public sealed record FontLatexRequirement(string FamilyName);
+public readonly record struct LatexFontFamilyName(string Value);
 
-public sealed record BabelLanguageLatexRequirement(string LanguageName);
+public readonly record struct LatexLanguageName(string Value);
+
+public sealed record ExecutableLatexRequirement(LatexExecutableName Name);
+
+public sealed record TexFileLatexRequirement(LatexTexFileName FileName);
+
+public sealed record FontLatexRequirement(LatexFontFamilyName FamilyName);
+
+public sealed record BabelLanguageLatexRequirement(LatexLanguageName LanguageName);
 
 public union LatexRequirement(
     ExecutableLatexRequirement,
@@ -57,7 +65,7 @@ public sealed record IncompleteLatexInstallation
         LatexExecutionPhase phase,
         string diagnostic,
         string diagnosticDirectory,
-        string? setupCommandHint)
+        LatexExecutionOptions executionOptions)
     {
         if (missingRequirement.Value is null)
         {
@@ -72,68 +80,39 @@ public sealed record IncompleteLatexInstallation
         Phase = phase;
         Diagnostic = diagnostic;
         DiagnosticDirectory = diagnosticDirectory;
-        SetupCommandHint = string.IsNullOrWhiteSpace(setupCommandHint)
-            ? null
-            : setupCommandHint;
-        Message = $"Missing LaTeX requirement '{DisplayName(missingRequirement)}' during {DisplayPhase(phase)}. "
-            + $"{diagnostic} Diagnostics: {diagnosticDirectory}. "
-            + (SetupCommandHint is null
-                ? "Make sure all LaTeX dependencies are installed, then retry."
-                : $"Make sure all LaTeX dependencies are installed, run {SetupCommandHint}, then retry.");
+        ArgumentNullException.ThrowIfNull(executionOptions);
+        ExecutionOptions = executionOptions;
     }
 
     public LatexRequirement MissingRequirement { get; }
     public LatexExecutionPhase Phase { get; }
     public string Diagnostic { get; }
     public string DiagnosticDirectory { get; }
-    public string? SetupCommandHint { get; }
-    public string Message { get; }
-
-    private static string DisplayName(LatexRequirement requirement) => requirement switch
-    {
-        ExecutableLatexRequirement executable => executable.Name,
-        TexFileLatexRequirement texFile => texFile.FileName,
-        FontLatexRequirement font => font.FamilyName,
-        BabelLanguageLatexRequirement language => language.LanguageName,
-        _ => throw new InvalidOperationException("The LaTeX requirement union is empty."),
-    };
-
-    private static string DisplayPhase(LatexExecutionPhase phase) => phase switch
-    {
-        LatexExecutionPhase.HeightMeasurement => "height measurement",
-        LatexExecutionPhase.FinalRendering => "final rendering",
-        _ => throw new ArgumentOutOfRangeException(nameof(phase), phase, null),
-    };
+    public LatexExecutionOptions ExecutionOptions { get; }
 }
 
 public sealed record LatexCompilationFailure(
     LatexExecutionPhase Phase,
     string Diagnostic,
     string DiagnosticDirectory,
-    int? ExitCode)
-{
-    public string Message => $"LaTeX execution failed during {Phase}: {Diagnostic} Diagnostics: {DiagnosticDirectory}.";
-}
+    int? ExitCode,
+    LatexExecutionOptions ExecutionOptions);
 
 public sealed record MeasurementDataFailure(string Diagnostic, string DiagnosticDirectory);
 
-public sealed record FixedContentLayoutFailure(string Diagnostic);
+public sealed record FixedContentLayoutFailure;
 public sealed record RequiredHeadingLayoutFailure(
-    string Diagnostic,
     string Heading,
     string RejectionReason);
 public sealed record RequiredItemLayoutFailure(
-    string Diagnostic,
     string ExperienceTitle,
     string ItemText,
     string RejectionReason);
-public sealed record SelectionCommitLayoutFailure(string Diagnostic);
+public sealed record SelectionCommitLayoutFailure(string Reason);
 public sealed record PredictedPageCountLayoutFailure(
-    string Diagnostic,
     int ConfiguredPageCount,
     int PredictedPageCount);
 public sealed record PageLayoutUnderfillFailure(
-    string Diagnostic,
     string ConfiguredPages,
     int FirstPage,
     int LastPage,
@@ -156,19 +135,19 @@ public union CvMeasurementResult(
     MeasurementDataFailure,
     MeasurementLayoutFailure);
 
-public sealed record MetadataOverflowFailure(string Diagnostic);
-public sealed record SectionOverflowFailure(string Diagnostic, string? Section);
-public sealed record EventOverflowFailure(string Diagnostic, string? Section, string? Event);
+public sealed record MetadataOverflowFailure;
+public sealed record SectionOverflowFailure(string? Section);
+public sealed record EventOverflowFailure(string? Section, string? Event);
 
 public union RenderLayoutFailure(
     MetadataOverflowFailure,
     SectionOverflowFailure,
     EventOverflowFailure);
 
-public sealed record PageCountUnavailableFailure(string Diagnostic, int RequiredPageCount);
-public sealed record PageCountMismatchFailure(string Diagnostic, int RequiredPageCount, int RenderedPageCount);
-public sealed record PageLayoutMismatchFailure(string Diagnostic, string Details);
-public sealed record MissingPdfFailure(string Diagnostic, string ExpectedPath);
+public sealed record PageCountUnavailableFailure(int RequiredPageCount);
+public sealed record PageCountMismatchFailure(int RequiredPageCount, int RenderedPageCount);
+public sealed record PageLayoutMismatchFailure(string Details);
+public sealed record MissingPdfFailure(string ExpectedPath);
 
 public union RenderValidationFailure(
     PageCountUnavailableFailure,
@@ -182,6 +161,116 @@ public union CvRenderResult(
     LatexCompilationFailure,
     RenderLayoutFailure,
     RenderValidationFailure);
+
+public enum CvFailureDisposition
+{
+    General,
+    Validation,
+}
+
+public sealed record CvFailurePresentation(string Message, CvFailureDisposition Disposition);
+
+public static class CvFailurePresenter
+{
+    public static CvFailurePresentation Present(CvMeasurementResult result) => result switch
+    {
+        IncompleteLatexInstallation failure => General(Format(failure)),
+        LatexCompilationFailure failure => General(Format(failure)),
+        MeasurementDataFailure failure => General(
+            $"LaTeX measurement data failed: {failure.Diagnostic} Diagnostics: {failure.DiagnosticDirectory}."),
+        MeasurementLayoutFailure failure => Validation(Format(failure)),
+        CvMeasurementSnapshot => throw new InvalidOperationException("A successful CV measurement cannot be presented as a failure."),
+        _ => throw new InvalidOperationException("The CV measurement result union is empty."),
+    };
+
+    public static CvFailurePresentation Present(CvRenderResult result) => result switch
+    {
+        IncompleteLatexInstallation failure => General(Format(failure)),
+        LatexCompilationFailure failure => General(Format(failure)),
+        RenderLayoutFailure failure => Validation(Format(failure)),
+        RenderValidationFailure failure => Validation(Format(failure)),
+        GeneratedCvArtifacts => throw new InvalidOperationException("A successful CV render cannot be presented as a failure."),
+        _ => throw new InvalidOperationException("The CV render result union is empty."),
+    };
+
+    private static CvFailurePresentation General(string message) =>
+        new(message, CvFailureDisposition.General);
+
+    private static CvFailurePresentation Validation(string message) =>
+        new(message, CvFailureDisposition.Validation);
+
+    private static string Format(IncompleteLatexInstallation failure)
+    {
+        var requirement = failure.MissingRequirement switch
+        {
+            ExecutableLatexRequirement value => value.Name.Value,
+            TexFileLatexRequirement value => value.FileName.Value,
+            FontLatexRequirement value => value.FamilyName.Value,
+            BabelLanguageLatexRequirement value => value.LanguageName.Value,
+            _ => throw new InvalidOperationException("The LaTeX requirement union is empty."),
+        };
+        var phase = failure.Phase switch
+        {
+            LatexExecutionPhase.HeightMeasurement => "height measurement",
+            LatexExecutionPhase.FinalRendering => "final rendering",
+            _ => throw new ArgumentOutOfRangeException(nameof(failure), failure.Phase, null),
+        };
+        var guidance = failure.ExecutionOptions.SetupCommandHint is null
+            ? "Make sure all LaTeX dependencies are installed, then retry."
+            : $"Make sure all LaTeX dependencies are installed, run {failure.ExecutionOptions.SetupCommandHint}, then retry.";
+        return $"Missing LaTeX requirement '{requirement}' during {phase}. {failure.Diagnostic} "
+            + $"Diagnostics: {failure.DiagnosticDirectory}. {guidance}";
+    }
+
+    private static string Format(LatexCompilationFailure failure) =>
+        $"LaTeX execution failed during {failure.Phase}: {failure.Diagnostic} Diagnostics: {failure.DiagnosticDirectory}.";
+
+    private static string Format(MeasurementLayoutFailure failure) => failure switch
+    {
+        FixedContentLayoutFailure => CvMetadataOverflowException.ErrorMessage,
+        RequiredHeadingLayoutFailure value =>
+            new RequiredExperienceHeadingLayoutException(value.Heading, value.RejectionReason).Message,
+        RequiredItemLayoutFailure value =>
+            new RequiredExperienceItemLayoutException(
+                value.ExperienceTitle,
+                value.ItemText,
+                value.RejectionReason).Message,
+        SelectionCommitLayoutFailure value => value.Reason,
+        PredictedPageCountLayoutFailure value =>
+            new PredictedPageCountMismatchException(
+                value.ConfiguredPageCount,
+                value.PredictedPageCount).Message,
+        PageLayoutUnderfillFailure value => FormatPageLayoutUnderfill(value),
+        _ => throw new InvalidOperationException("The measurement layout failure union is empty."),
+    };
+
+    private static string FormatPageLayoutUnderfill(PageLayoutUnderfillFailure failure)
+    {
+        var sections = string.Join(
+            ", ",
+            failure.AssignedSections.Select(static section => section.ToDisplayString()));
+        return $"Explicit layout block {failure.ConfiguredPages} ({sections}) requires {failure.RequiredPageCount} page(s), "
+            + $"but its selected section content naturally occupies {failure.NaturallyOccupiedPageCount} page(s). "
+            + "Explicit layouts are not padded with blank pages.";
+    }
+
+    private static string Format(RenderLayoutFailure failure) => failure switch
+    {
+        MetadataOverflowFailure => CvMetadataOverflowException.ErrorMessage,
+        SectionOverflowFailure value => new CvSectionPageOverflowException(value.Section).Message,
+        EventOverflowFailure value => new CvEventPageOverflowException(value.Section, value.Event).Message,
+        _ => throw new InvalidOperationException("The render layout failure union is empty."),
+    };
+
+    private static string Format(RenderValidationFailure failure) => failure switch
+    {
+        PageCountUnavailableFailure value => new RenderedPageCountUnavailableException(value.RequiredPageCount).Message,
+        PageCountMismatchFailure value => new RenderedPageCountMismatchException(value.RequiredPageCount, value.RenderedPageCount).Message,
+        PageLayoutMismatchFailure value => new RenderedPageLayoutMismatchException(value.Details).Message,
+        MissingPdfFailure => new CvPdfNotProducedException().Message,
+        _ => throw new InvalidOperationException("The render validation failure union is empty."),
+    };
+}
 
 internal static partial class LatexFailureClassifier
 {
@@ -208,7 +297,7 @@ internal static partial class LatexFailureClassifier
         var requirement = options.Requirements.FirstOrDefault(
             requirement => requirement is ExecutableLatexRequirement executable
                 && string.Equals(
-                    Path.GetFileNameWithoutExtension(executable.Name),
+                    Path.GetFileNameWithoutExtension(executable.Name.Value),
                     normalizedExecutableName,
                     StringComparison.OrdinalIgnoreCase));
         return requirement.Value is null
@@ -218,7 +307,7 @@ internal static partial class LatexFailureClassifier
                 phase,
                 exception.Message,
                 diagnosticDirectory,
-                options.SetupCommandHint);
+                options);
     }
 
     public static IncompleteLatexInstallation? ClassifyLog(
@@ -228,93 +317,79 @@ internal static partial class LatexFailureClassifier
         LatexExecutionOptions options)
     {
         ArgumentNullException.ThrowIfNull(log);
-        var firstFatal = FatalDiagnosticRegex().Match(log);
-        var candidates = new List<(int Index, LatexRequirement Requirement, string Diagnostic)>();
-        AddTexFile();
-        AddFont();
-        AddLanguage();
-        if (candidates.Count == 0)
+        var rules = new LatexLogRequirementRule[]
+        {
+            new(
+                MissingTexFileRegex(),
+                static match => match.Groups[1].Value,
+                static (requirement, value) => requirement is TexFileLatexRequirement file
+                    && string.Equals(file.FileName.Value, value, StringComparison.OrdinalIgnoreCase)),
+            new(
+                MissingFontRegex(),
+                static match => match.Groups[1].Value,
+                static (requirement, value) => requirement is FontLatexRequirement font
+                    && string.Equals(font.FamilyName.Value, value, StringComparison.OrdinalIgnoreCase)),
+            new(
+                MissingBabelLanguageRegex(),
+                static match => match.Groups[1].Success
+                    ? match.Groups[1].Value
+                    : match.Groups[2].Value,
+                static (requirement, value) => requirement is BabelLanguageLatexRequirement language
+                    && string.Equals(language.LanguageName.Value, value, StringComparison.OrdinalIgnoreCase)),
+        };
+        var candidates = rules
+            .SelectMany(rule => rule.FindMatches(log, options.Requirements))
+            .OrderBy(static candidate => candidate.Index)
+            .ToArray();
+        if (candidates.Length == 0)
         {
             return null;
         }
 
-        var first = candidates.MinBy(static candidate => candidate.Index);
-        if (firstFatal.Success && firstFatal.Index < first.Index)
-        {
-            return null;
-        }
+        var first = candidates[0];
 
         return new(
             first.Requirement,
             phase,
             first.Diagnostic,
             diagnosticDirectory,
-            options.SetupCommandHint);
+            options);
 
-        void AddTexFile()
-        {
-            foreach (Match match in MissingTexFileRegex().Matches(log))
-            {
-                var value = match.Groups[1].Value;
-                var requirement = Find(static (item, expected) =>
-                    item is TexFileLatexRequirement file
-                    && string.Equals(file.FileName, expected, StringComparison.OrdinalIgnoreCase), value);
-                if (requirement.Value is not null)
-                {
-                    candidates.Add((match.Index, requirement, match.Value.Trim()));
-                }
-            }
-        }
-
-        void AddFont()
-        {
-            foreach (Match match in MissingFontRegex().Matches(log))
-            {
-                var value = match.Groups[1].Value;
-                var requirement = Find(static (item, expected) =>
-                    item is FontLatexRequirement font
-                    && string.Equals(font.FamilyName, expected, StringComparison.OrdinalIgnoreCase), value);
-                if (requirement.Value is not null)
-                {
-                    candidates.Add((match.Index, requirement, match.Value.Trim()));
-                }
-            }
-        }
-
-        void AddLanguage()
-        {
-            foreach (Match match in MissingBabelLanguageRegex().Matches(log))
-            {
-                var value = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
-                var requirement = Find(static (item, expected) =>
-                    item is BabelLanguageLatexRequirement language
-                    && string.Equals(language.LanguageName, expected, StringComparison.OrdinalIgnoreCase), value);
-                if (requirement.Value is not null)
-                {
-                    candidates.Add((match.Index, requirement, match.Value.Trim()));
-                }
-            }
-        }
-
-        LatexRequirement Find(
-            Func<LatexRequirement, string, bool> predicate,
-            string expected)
-        {
-            foreach (var requirement in options.Requirements)
-            {
-                if (predicate(requirement, expected))
-                {
-                    return requirement;
-                }
-            }
-
-            return default;
-        }
     }
 
     public static string FirstDiagnostic(string log, string fallback)
     {
         var match = FatalDiagnosticRegex().Match(log);
         return match.Success ? match.Value.Trim() : fallback;
+    }
+}
+
+internal sealed record LatexLogRequirementMatch(
+    int Index,
+    LatexRequirement Requirement,
+    string Diagnostic);
+
+internal sealed class LatexLogRequirementRule(
+    Regex pattern,
+    Func<Match, string> readIdentifier,
+    Func<LatexRequirement, string, bool> matchesRequirement)
+{
+    public IEnumerable<LatexLogRequirementMatch> FindMatches(
+        string log,
+        IEnumerable<LatexRequirement> requirements)
+    {
+        foreach (Match match in pattern.Matches(log))
+        {
+            var identifier = readIdentifier(match);
+            var requirement = requirements.FirstOrDefault(
+                item => matchesRequirement(item, identifier));
+            if (requirement.Value is not null)
+            {
+                yield return new(
+                    match.Index,
+                    requirement,
+                    match.Value.Trim());
+            }
+        }
     }
 }

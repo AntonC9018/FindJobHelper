@@ -4,7 +4,6 @@
         <RestoreLockedMode>true</RestoreLockedMode>
         <TargetFramework>net11.0</TargetFramework>
         <LangVersion>preview</LangVersion>
-        <NoWarn>$(NoWarn);NETSDK1059</NoWarn>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootPath>$(MSBuildThisFileDirectory)</RootPath>

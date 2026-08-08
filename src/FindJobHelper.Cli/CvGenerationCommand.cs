@@ -208,6 +208,7 @@ public sealed class CvGenerationCommand
         var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
         var progressPlan = CreateProgressPlan(artifactPlan);
         var progressDisplay = CvGenerationProgressDisplay.CreateDefault();
+        CvFailurePresentation? failurePresentation = null;
         var publishedArtifactPaths = await progressDisplay.RunAsync(
             progressPlan,
             async progress =>
@@ -220,17 +221,11 @@ public sealed class CvGenerationCommand
                     progress.Reporter(CvGenerationModule.ComputingHeights),
                     latexExecutionOptions,
                     cancellationToken);
-                var measurementSnapshot = measurementResult switch
+                if (measurementResult is not CvMeasurementSnapshot measurementSnapshot)
                 {
-                    CvMeasurementSnapshot snapshot => snapshot,
-                    IncompleteLatexInstallation incomplete => throw ExpectedCliFailure.General(incomplete.Message),
-                    LatexCompilationFailure compilation => throw ExpectedCliFailure.General(compilation.Message),
-                    MeasurementDataFailure data => throw ExpectedCliFailure.General(
-                        $"LaTeX measurement data failed: {data.Diagnostic} Diagnostics: {data.DiagnosticDirectory}."),
-                    MeasurementLayoutFailure layout => throw ExpectedCliFailure.Validation(
-                        FormatMeasurementLayoutFailure(layout)),
-                    _ => throw new InvalidOperationException("The CV measurement result union is empty."),
-                };
+                    failurePresentation = CvFailurePresenter.Present(measurementResult);
+                    return new Dictionary<CvArtifactKind, string>();
+                }
                 progress.BeginModule(CvGenerationModule.MatchingExperiences);
                 var searchResult = searchConfiguration.Run(
                     experienceDatabase,
@@ -238,7 +233,7 @@ public sealed class CvGenerationCommand
                     progress.Reporter(CvGenerationModule.MatchingExperiences));
 
                 searchConfiguration.Sections.Apply(searchResult, currentModel);
-                return await GenerateAndPublishArtifactsAsync(
+                var artifactResult = await GenerateAndPublishArtifactsAsync(
                     artifactPlan,
                     currentModel,
                     templatePath,
@@ -249,8 +244,26 @@ public sealed class CvGenerationCommand
                     latexExecutionOptions,
                     progress,
                     cancellationToken);
+                if (artifactResult is CvFailurePresentation failure)
+                {
+                    failurePresentation = failure;
+                    return new Dictionary<CvArtifactKind, string>();
+                }
+                if (artifactResult is PublishedArtifactPaths published)
+                {
+                    return published.Paths;
+                }
+                throw new InvalidOperationException("The artifact generation result union is empty.");
             },
             cancellationToken);
+
+        if (failurePresentation is not null)
+        {
+            Console.Error.WriteLine(failurePresentation.Message);
+            return failurePresentation.Disposition == CvFailureDisposition.Validation
+                ? ExitCodes.ValidationError
+                : ExitCodes.Error;
+        }
 
         foreach (var artifact in artifactPlan.Artifacts)
         {
@@ -329,7 +342,7 @@ public sealed class CvGenerationCommand
         return new(modules);
     }
 
-    private static async Task<Dictionary<CvArtifactKind, string>>
+    private static async Task<ArtifactGenerationResult>
         GenerateAndPublishArtifactsAsync(
             CvArtifactPlan artifactPlan,
             CvDataModel model,
@@ -386,17 +399,11 @@ public sealed class CvGenerationCommand
                                     CvGenerationModule.CreatingTexFile),
                                 progress.Reporter(
                                     CvGenerationModule.RenderingPdf)));
-                        var generatedArtifacts = artifacts switch
+                        if (artifacts is not GeneratedCvArtifacts generatedArtifacts)
                         {
-                            GeneratedCvArtifacts success => success,
-                            IncompleteLatexInstallation incomplete => throw ExpectedCliFailure.General(incomplete.Message),
-                            LatexCompilationFailure compilation => throw ExpectedCliFailure.General(compilation.Message),
-                            RenderLayoutFailure layout => throw ExpectedCliFailure.Validation(
-                                FormatRenderLayoutFailure(layout)),
-                            RenderValidationFailure validation => throw ExpectedCliFailure.Validation(
-                                FormatRenderValidationFailure(validation)),
-                            _ => throw new InvalidOperationException("The CV rendering result union is empty."),
-                        };
+                            retainStagingDirectory = true;
+                            return CvFailurePresenter.Present(artifacts);
+                        }
                         stagedArtifactPaths.Add(
                             artifact.Kind,
                             generatedArtifacts.PdfPath);
@@ -453,7 +460,7 @@ public sealed class CvGenerationCommand
                     publishedArtifactPath);
             }
 
-            return publishedArtifactPaths;
+            return new PublishedArtifactPaths(publishedArtifactPaths);
         }
         catch (ExpectedCliFailure)
         {
@@ -497,54 +504,34 @@ public sealed class CvGenerationCommand
         "cv-selection.example.json");
 
     private static LatexExecutionOptions CreateLatexExecutionOptions() => new(
+        // Keep this declaration synchronized with scripts/setup-latex.sh. A match
+        // means the supported installation is incomplete; custom resources that
+        // are not declared here remain ordinary LaTeX compilation failures.
         requirements:
         [
-            new ExecutableLatexRequirement("xelatex"),
-            new ExecutableLatexRequirement("latexmk"),
-            new TexFileLatexRequirement("babel.sty"),
-            new TexFileLatexRequirement("xifthen.sty"),
-            new TexFileLatexRequirement("ifmtarg.sty"),
-            new TexFileLatexRequirement("moresize.sty"),
-            new TexFileLatexRequirement("zref-lastpage.sty"),
-            new TexFileLatexRequirement("needspace.sty"),
-            new TexFileLatexRequirement("multirow.sty"),
-            new TexFileLatexRequirement("wrapfig.sty"),
-            new TexFileLatexRequirement("varwidth.sty"),
-            new TexFileLatexRequirement("environ.sty"),
-            new FontLatexRequirement("Liberation Serif"),
-            new FontLatexRequirement("Liberation Sans"),
-            new BabelLanguageLatexRequirement("romanian"),
+            new ExecutableLatexRequirement(new("xelatex")),
+            new ExecutableLatexRequirement(new("latexmk")),
+            new TexFileLatexRequirement(new("babel.sty")),
+            new TexFileLatexRequirement(new("xifthen.sty")),
+            new TexFileLatexRequirement(new("ifmtarg.sty")),
+            new TexFileLatexRequirement(new("moresize.sty")),
+            new TexFileLatexRequirement(new("zref-lastpage.sty")),
+            new TexFileLatexRequirement(new("needspace.sty")),
+            new TexFileLatexRequirement(new("multirow.sty")),
+            new TexFileLatexRequirement(new("wrapfig.sty")),
+            new TexFileLatexRequirement(new("varwidth.sty")),
+            new TexFileLatexRequirement(new("environ.sty")),
+            new FontLatexRequirement(new("Liberation Serif")),
+            new FontLatexRequirement(new("Liberation Sans")),
+            new BabelLanguageLatexRequirement(new("romanian")),
         ],
         setupCommandHint: "./scripts/setup-latex.sh");
 
-    private static string FormatMeasurementLayoutFailure(MeasurementLayoutFailure failure) => failure switch
-    {
-        FixedContentLayoutFailure value => value.Diagnostic,
-        RequiredHeadingLayoutFailure value => value.Diagnostic,
-        RequiredItemLayoutFailure value => value.Diagnostic,
-        SelectionCommitLayoutFailure value => value.Diagnostic,
-        PredictedPageCountLayoutFailure value => value.Diagnostic,
-        PageLayoutUnderfillFailure value => value.Diagnostic,
-        _ => throw new InvalidOperationException("The measurement layout failure union is empty."),
-    };
-
-    private static string FormatRenderLayoutFailure(RenderLayoutFailure failure) => failure switch
-    {
-        MetadataOverflowFailure value => value.Diagnostic,
-        SectionOverflowFailure value => value.Diagnostic,
-        EventOverflowFailure value => value.Diagnostic,
-        _ => throw new InvalidOperationException("The render layout failure union is empty."),
-    };
-
-    private static string FormatRenderValidationFailure(RenderValidationFailure failure) => failure switch
-    {
-        PageCountUnavailableFailure value => value.Diagnostic,
-        PageCountMismatchFailure value => value.Diagnostic,
-        PageLayoutMismatchFailure value => value.Diagnostic,
-        MissingPdfFailure value => value.Diagnostic,
-        _ => throw new InvalidOperationException("The render validation failure union is empty."),
-    };
 }
+
+internal sealed record PublishedArtifactPaths(Dictionary<CvArtifactKind, string> Paths);
+
+internal union ArtifactGenerationResult(PublishedArtifactPaths, CvFailurePresentation);
 
 internal sealed class ExpectedCliFailure(string message, int exitCode) : Exception(message)
 {

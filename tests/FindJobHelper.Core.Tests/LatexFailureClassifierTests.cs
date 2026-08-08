@@ -6,11 +6,11 @@ public sealed class LatexFailureClassifierTests
 {
     private static readonly LatexExecutionOptions Options = new(
         [
-            new ExecutableLatexRequirement("xelatex"),
-            new ExecutableLatexRequirement("latexmk"),
-            new TexFileLatexRequirement("needspace.sty"),
-            new FontLatexRequirement("Liberation Serif"),
-            new BabelLanguageLatexRequirement("romanian"),
+            new ExecutableLatexRequirement(new("xelatex")),
+            new ExecutableLatexRequirement(new("latexmk")),
+            new TexFileLatexRequirement(new("needspace.sty")),
+            new FontLatexRequirement(new("Liberation Serif")),
+            new BabelLanguageLatexRequirement(new("romanian")),
         ],
         "./scripts/setup-latex.sh");
 
@@ -31,12 +31,12 @@ public sealed class LatexFailureClassifierTests
         var failure = Assert.IsType<IncompleteLatexInstallation>(result);
         var requirement = Assert.IsType<ExecutableLatexRequirement>(
             failure.MissingRequirement.Value);
-        Assert.Equal(executable, requirement.Name);
+        Assert.Equal(executable, requirement.Name.Value);
         Assert.Equal(phase, failure.Phase);
         Assert.Equal("/diagnostics", failure.DiagnosticDirectory);
         Assert.EndsWith(
             "Make sure all LaTeX dependencies are installed, run ./scripts/setup-latex.sh, then retry.",
-            failure.Message,
+            CvFailurePresenter.Present(new CvMeasurementResult(failure)).Message,
             StringComparison.Ordinal);
     }
 
@@ -69,17 +69,29 @@ public sealed class LatexFailureClassifierTests
     }
 
     [Theory]
-    [InlineData("! Undefined control sequence.\n! LaTeX Error: File `needspace.sty' not found.")]
-    [InlineData("! FJH_EVENT_PAGE_OVERFLOW: WorkExperience / 1\n! LaTeX Error: File `needspace.sty' not found.")]
     [InlineData("! An unknown catastrophic TeX failure.")]
     [InlineData("Package fontspec Warning: Font shape unavailable; substituting.")]
-    public void EarlierMalformedOverflowUnknownAndWarningsAreNotSetupFailures(string log)
+    public void UnknownFailuresAndWarningsAreNotSetupFailures(string log)
     {
         Assert.Null(LatexFailureClassifier.ClassifyLog(
             log,
             LatexExecutionPhase.FinalRendering,
             "/diagnostics",
             Options));
+    }
+
+    [Theory]
+    [InlineData("! Undefined control sequence.\n! LaTeX Error: File `needspace.sty' not found.")]
+    [InlineData("! FJH_EVENT_PAGE_OVERFLOW: WorkExperience / 1\n! LaTeX Error: File `needspace.sty' not found.")]
+    public void DeclaredInstallationFailureHasPriorityOverOtherDiagnostics(string log)
+    {
+        var failure = LatexFailureClassifier.ClassifyLog(
+            log,
+            LatexExecutionPhase.FinalRendering,
+            "/diagnostics",
+            Options);
+
+        Assert.IsType<TexFileLatexRequirement>(failure!.MissingRequirement.Value);
     }
 
     [Fact]
@@ -108,7 +120,7 @@ public sealed class LatexFailureClassifierTests
     public void MessageWithoutHintUsesTheShortGuidance()
     {
         var options = new LatexExecutionOptions([
-            new TexFileLatexRequirement("needspace.sty"),
+            new TexFileLatexRequirement(new("needspace.sty")),
         ]);
         var failure = LatexFailureClassifier.ClassifyLog(
             "! LaTeX Error: File `needspace.sty' not found.",
@@ -118,7 +130,7 @@ public sealed class LatexFailureClassifierTests
 
         Assert.EndsWith(
             "Make sure all LaTeX dependencies are installed, then retry.",
-            failure!.Message,
+            CvFailurePresenter.Present(new CvMeasurementResult(failure!)).Message,
             StringComparison.Ordinal);
     }
 
@@ -131,10 +143,10 @@ public sealed class LatexFailureClassifierTests
 
         static string Describe(LatexRequirement value) => value switch
         {
-            ExecutableLatexRequirement executable => executable.Name,
-            TexFileLatexRequirement file => file.FileName,
-            FontLatexRequirement font => font.FamilyName,
-            BabelLanguageLatexRequirement language => language.LanguageName,
+            ExecutableLatexRequirement executable => executable.Name.Value,
+            TexFileLatexRequirement file => file.FileName.Value,
+            FontLatexRequirement font => font.FamilyName.Value,
+            BabelLanguageLatexRequirement language => language.LanguageName.Value,
             _ => throw new InvalidOperationException("The union is empty."),
         };
     }
@@ -142,8 +154,9 @@ public sealed class LatexFailureClassifierTests
     [Fact]
     public async Task MeasurementLaunchFailureRetainsItsDiagnosticDirectory()
     {
-        var runner = new XeLatexMeasurementRunner(
-            new LatexExecutablePaths("unused-latexmk", "missing-xelatex.exe"));
+        var runner = new XeLatexMeasurementRunnerBuilder()
+            .WithExecutables(new LatexExecutablePaths("unused-latexmk", "missing-xelatex.exe"))
+            .Build();
         var request = new LatexMeasurementRequest(
             new MeasurementCorrelationId(1),
             new LatexMeasurementCacheKey(
@@ -157,7 +170,7 @@ public sealed class LatexFailureClassifierTests
             [request],
             NoOpProgressReporter.Instance,
             new LatexExecutionOptions(
-                [new ExecutableLatexRequirement("missing-xelatex")],
+                [new ExecutableLatexRequirement(new("missing-xelatex"))],
                 "setup"),
             CancellationToken.None);
 
@@ -179,9 +192,10 @@ public sealed class LatexFailureClassifierTests
         var workingDirectory = Path.Combine(
             Path.GetTempPath(),
             $"fjh-cancel-cleanup-{Guid.NewGuid():N}");
-        var runner = new XeLatexMeasurementRunner(
-            new LatexExecutablePaths("unused-latexmk", "unused-xelatex"),
-            () => workingDirectory);
+        var runner = new XeLatexMeasurementRunnerBuilder()
+            .WithExecutables(new LatexExecutablePaths("unused-latexmk", "unused-xelatex"))
+            .WithWorkingDirectoryFactory(() => workingDirectory)
+            .Build();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
