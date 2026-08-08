@@ -227,14 +227,6 @@
         "resolved": "13.0.1",
         "contentHash": "ppPFpBcvxdsfUonNcvITKqLl3bqxWbDCZIzDWHzjpdAHRFfZe0Dw9HmA0+za13IdyrgJwpkDTDA9fHaxOrt20A=="
       },
-      "OpenAI": {
-        "type": "Transitive",
-        "resolved": "2.2.0",
-        "contentHash": "MSFrQXZsgdwcJq3b8159oA0sYRJk0Io5Rg+MhbNs1NFIhwQ7IlSP2jao7V0NqBqCRfVhvoNxPZeVOqgbOiZ/Nw==",
-        "dependencies": {
-          "System.ClientModel": "1.4.2"
-        }
-      },
       "SimpleInfoName": {
         "type": "Transitive",
         "resolved": "2.3.0",
@@ -288,14 +280,6 @@
           "SQLitePCLRaw.core": "3.0.2"
         }
       },
-      "System.ClientModel": {
-        "type": "Transitive",
-        "resolved": "1.4.2",
-        "contentHash": "goGitN7trB9hoQ01dIpxaSYcruI+lGt/xq471AUv8irFvsIX+4HCqk1pDT/4ZPTLmU6ZUuNzhCb4MJAIwG7+Uw==",
-        "dependencies": {
-          "System.Memory.Data": "6.0.1"
-        }
-      },
       "System.CodeDom": {
         "type": "Transitive",
         "resolved": "8.0.0",
@@ -313,11 +297,6 @@
         "dependencies": {
           "System.CodeDom": "8.0.0"
         }
-      },
-      "System.Memory.Data": {
-        "type": "Transitive",
-        "resolved": "6.0.1",
-        "contentHash": "yliDgLh9S9Mcy5hBIdZmX6yphYIW3NH+3HN1kV1m7V1e0s7LNTw/tHNjJP4U9nSMEgl3w1TzYv/KA1Tg9NYy6w=="
       },
       "xunit.abstractions": {
         "type": "Transitive",
@@ -371,7 +350,6 @@
           "Microsoft.Extensions.DependencyInjection": "[9.0.7, )",
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[9.0.7, )",
           "Microsoft.Extensions.Options.DataAnnotations": "[9.0.7, )",
-          "OpenAI": "[2.2.0, )",
           "Spectre.Console": "[0.57.2, )"
         }
       },
