@@ -22,57 +22,18 @@ internal union LatexMeasurementRunResult(
 
 internal interface ILatexMeasurementRunner
 {
-    Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
-        string templatePath,
-        IReadOnlyList<LatexMeasurementRequest> requests,
-        IProgressReporter progress,
-        CancellationToken cancellationToken);
-
     Task<LatexMeasurementRunResult> MeasureAsync(
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
         IProgressReporter progress,
         LatexExecutionOptions options,
-        CancellationToken cancellationToken)
-        => MeasureLegacyAsync(
-            this,
-            templatePath,
-            requests,
-            progress,
-            cancellationToken);
-
-    private static async Task<LatexMeasurementRunResult> MeasureLegacyAsync(
-        ILatexMeasurementRunner runner,
-        string templatePath,
-        IReadOnlyList<LatexMeasurementRequest> requests,
-        IProgressReporter progress,
-        CancellationToken cancellationToken)
-        => new SuccessfulLatexMeasurementRun(
-            await runner.MeasureAsync(
-                templatePath,
-                requests,
-                progress,
-                cancellationToken));
+        CancellationToken cancellationToken);
 }
 
 internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
 {
     private readonly LatexExecutablePaths _executables;
     private readonly Func<string> _workingDirectoryFactory;
-
-    public XeLatexMeasurementRunner()
-        : this(LatexExecutablePaths.FromPath)
-    {
-    }
-
-    public XeLatexMeasurementRunner(LatexExecutablePaths executables)
-        : this(
-            executables,
-            static () => Path.Combine(
-                Path.GetTempPath(),
-                $"FindJobHelper-measurement-{Guid.NewGuid():N}"))
-    {
-    }
 
     internal XeLatexMeasurementRunner(
         LatexExecutablePaths executables,
@@ -82,30 +43,6 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
         ArgumentNullException.ThrowIfNull(workingDirectoryFactory);
         _executables = executables;
         _workingDirectoryFactory = workingDirectoryFactory;
-    }
-
-    public async Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
-        string templatePath,
-        IReadOnlyList<LatexMeasurementRequest> requests,
-        IProgressReporter progress,
-        CancellationToken cancellationToken)
-    {
-        var result = await MeasureAsync(
-            templatePath,
-            requests,
-            progress,
-            LatexExecutionOptions.Empty,
-            cancellationToken);
-        return result switch
-        {
-            SuccessfulLatexMeasurementRun success => success.Measurements,
-            IncompleteLatexInstallation failure => throw new CvMeasurementException(failure.Message),
-            LatexCompilationFailure failure => throw new CvMeasurementException(failure.Message),
-            MeasurementDataFailure failure => throw new CvMeasurementException(failure.Diagnostic),
-            RenderLayoutFailure failure => throw new CvMeasurementException(
-                failure.Value?.ToString() ?? "LaTeX measurement layout failed."),
-            _ => throw new InvalidOperationException("The measurement runner result union is empty."),
-        };
     }
 
     public async Task<LatexMeasurementRunResult> MeasureAsync(
@@ -182,7 +119,8 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                         LatexExecutionPhase.HeightMeasurement,
                         exception.Message,
                         workingDirectory,
-                        null)
+                        null,
+                        options)
                     : incomplete);
             }
             if (!result.IsSuccess)
@@ -204,7 +142,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
                 {
                     return Retain(new RenderLayoutFailure(
-                        new MetadataOverflowFailure(CvMetadataOverflowException.ErrorMessage)));
+                        new MetadataOverflowFailure()));
                 }
                 return Retain(new LatexCompilationFailure(
                     LatexExecutionPhase.HeightMeasurement,
@@ -212,7 +150,8 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                         latexLog,
                         $"XeLaTeX exited with code {result.ExitCode}."),
                     workingDirectory,
-                    result.ExitCode));
+                    result.ExitCode,
+                    options));
             }
 
             var resultPath = Path.Combine(workingDirectory, resultFileName);
@@ -256,6 +195,33 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             return failure;
         }
     }
+}
+
+internal sealed class XeLatexMeasurementRunnerBuilder
+{
+    private LatexExecutablePaths _executables = LatexExecutablePaths.FromPath;
+    private Func<string> _workingDirectoryFactory = static () => Path.Combine(
+        Path.GetTempPath(),
+        $"FindJobHelper-measurement-{Guid.NewGuid():N}");
+
+    public XeLatexMeasurementRunnerBuilder WithExecutables(LatexExecutablePaths executables)
+    {
+        ArgumentNullException.ThrowIfNull(executables);
+        _executables = executables;
+        return this;
+    }
+
+    internal XeLatexMeasurementRunnerBuilder WithWorkingDirectoryFactory(
+        Func<string> workingDirectoryFactory)
+    {
+        ArgumentNullException.ThrowIfNull(workingDirectoryFactory);
+        _workingDirectoryFactory = workingDirectoryFactory;
+        return this;
+    }
+
+    public XeLatexMeasurementRunner Build() => new(
+        _executables,
+        _workingDirectoryFactory);
 }
 
 internal sealed class LatexMeasurementCompletionParser
