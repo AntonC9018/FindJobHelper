@@ -10,6 +10,16 @@ internal sealed record LatexMeasurementRequest(
     string RenderedFragment,
     LatexMeasurementMode Mode);
 
+internal sealed record SuccessfulLatexMeasurementRun(
+    IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> Measurements);
+
+internal union LatexMeasurementRunResult(
+    SuccessfulLatexMeasurementRun,
+    IncompleteLatexInstallation,
+    LatexCompilationFailure,
+    MeasurementDataFailure,
+    RenderLayoutFailure);
+
 internal interface ILatexMeasurementRunner
 {
     Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
@@ -17,11 +27,38 @@ internal interface ILatexMeasurementRunner
         IReadOnlyList<LatexMeasurementRequest> requests,
         IProgressReporter progress,
         CancellationToken cancellationToken);
+
+    Task<LatexMeasurementRunResult> MeasureAsync(
+        string templatePath,
+        IReadOnlyList<LatexMeasurementRequest> requests,
+        IProgressReporter progress,
+        LatexExecutionOptions options,
+        CancellationToken cancellationToken)
+        => MeasureLegacyAsync(
+            this,
+            templatePath,
+            requests,
+            progress,
+            cancellationToken);
+
+    private static async Task<LatexMeasurementRunResult> MeasureLegacyAsync(
+        ILatexMeasurementRunner runner,
+        string templatePath,
+        IReadOnlyList<LatexMeasurementRequest> requests,
+        IProgressReporter progress,
+        CancellationToken cancellationToken)
+        => new SuccessfulLatexMeasurementRun(
+            await runner.MeasureAsync(
+                templatePath,
+                requests,
+                progress,
+                cancellationToken));
 }
 
 internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
 {
     private readonly LatexExecutablePaths _executables;
+    private readonly Func<string> _workingDirectoryFactory;
 
     public XeLatexMeasurementRunner()
         : this(LatexExecutablePaths.FromPath)
@@ -29,9 +66,22 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
     }
 
     public XeLatexMeasurementRunner(LatexExecutablePaths executables)
+        : this(
+            executables,
+            static () => Path.Combine(
+                Path.GetTempPath(),
+                $"FindJobHelper-measurement-{Guid.NewGuid():N}"))
+    {
+    }
+
+    internal XeLatexMeasurementRunner(
+        LatexExecutablePaths executables,
+        Func<string> workingDirectoryFactory)
     {
         ArgumentNullException.ThrowIfNull(executables);
+        ArgumentNullException.ThrowIfNull(workingDirectoryFactory);
         _executables = executables;
+        _workingDirectoryFactory = workingDirectoryFactory;
     }
 
     public async Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
@@ -40,20 +90,47 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
         IProgressReporter progress,
         CancellationToken cancellationToken)
     {
+        var result = await MeasureAsync(
+            templatePath,
+            requests,
+            progress,
+            LatexExecutionOptions.Empty,
+            cancellationToken);
+        return result switch
+        {
+            SuccessfulLatexMeasurementRun success => success.Measurements,
+            IncompleteLatexInstallation failure => throw new CvMeasurementException(failure.Message),
+            LatexCompilationFailure failure => throw new CvMeasurementException(failure.Message),
+            MeasurementDataFailure failure => throw new CvMeasurementException(failure.Diagnostic),
+            RenderLayoutFailure failure => throw new CvMeasurementException(
+                failure.Value?.ToString() ?? "LaTeX measurement layout failed."),
+            _ => throw new InvalidOperationException("The measurement runner result union is empty."),
+        };
+    }
+
+    public async Task<LatexMeasurementRunResult> MeasureAsync(
+        string templatePath,
+        IReadOnlyList<LatexMeasurementRequest> requests,
+        IProgressReporter progress,
+        LatexExecutionOptions options,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(options);
         progress.Report(new(
             CompletedWorkUnits: 0,
             TotalWorkUnits: requests.Count,
             Detail: "Computing heights — running XeLaTeX measurements"));
         if (requests.Count == 0)
         {
-            return new Dictionary<MeasurementCorrelationId, LatexHeight>();
+            return new SuccessfulLatexMeasurementRun(
+                new Dictionary<MeasurementCorrelationId, LatexHeight>());
         }
 
-        var workingDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"FindJobHelper-measurement-{Guid.NewGuid():N}");
+        var workingDirectory = _workingDirectoryFactory();
+        ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
         Directory.CreateDirectory(workingDirectory);
+        var retainWorkingDirectory = false;
         const string texFileName = "measurement.tex";
         const string resultFileName = "measurement-results.txt";
         try
@@ -70,53 +147,113 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             var progressParser = new LatexMeasurementCompletionParser(
                 requests,
                 progress);
-            var result = await Cli.Wrap(_executables.XeLatex)
-                .WithArguments([
-                    "-interaction=nonstopmode",
-                    "-halt-on-error",
-                    "-file-line-error",
-                    texFileName,
-                ])
-                .WithWorkingDirectory(workingDirectory)
-                .WithValidation(CommandResultValidation.None)
-                .WithStandardOutputPipe(PipeTarget.Merge(
-                    PipeTarget.ToStringBuilder(standardOutput),
-                    PipeTarget.ToDelegate(progressParser.ParseLine)))
-                .WithStandardErrorPipe(PipeTarget.ToStringBuilder(standardError))
-                .ExecuteAsync(cancellationToken);
+            CommandResult result;
+            try
+            {
+                result = await Cli.Wrap(_executables.XeLatex)
+                    .WithArguments([
+                        "-interaction=nonstopmode",
+                        "-halt-on-error",
+                        "-file-line-error",
+                        texFileName,
+                    ])
+                    .WithWorkingDirectory(workingDirectory)
+                    .WithValidation(CommandResultValidation.None)
+                    .WithStandardOutputPipe(PipeTarget.Merge(
+                        PipeTarget.ToStringBuilder(standardOutput),
+                        PipeTarget.ToDelegate(progressParser.ParseLine)))
+                    .WithStandardErrorPipe(PipeTarget.ToStringBuilder(standardError))
+                    .ExecuteAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                var incomplete = LatexFailureClassifier.ClassifyLaunchFailure(
+                    Path.GetFileName(_executables.XeLatex),
+                    LatexExecutionPhase.HeightMeasurement,
+                    exception,
+                    workingDirectory,
+                    options);
+                return Retain(incomplete is null
+                    ? new LatexCompilationFailure(
+                        LatexExecutionPhase.HeightMeasurement,
+                        exception.Message,
+                        workingDirectory,
+                        null)
+                    : incomplete);
+            }
             if (!result.IsSuccess)
             {
-                if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(
-                        $"{standardError}{Environment.NewLine}{standardOutput}"))
+                var output = $"{standardError}{Environment.NewLine}{standardOutput}";
+                var latexLogPath = Path.Combine(workingDirectory, "measurement.log");
+                var latexLog = File.Exists(latexLogPath)
+                    ? await File.ReadAllTextAsync(latexLogPath, cancellationToken)
+                    : output;
+                var incomplete = LatexFailureClassifier.ClassifyLog(
+                    latexLog,
+                    LatexExecutionPhase.HeightMeasurement,
+                    workingDirectory,
+                    options);
+                if (incomplete is not null)
                 {
-                    throw new CvMetadataOverflowException();
+                    return Retain(incomplete);
                 }
-
-                throw new CvMeasurementException(
-                    $"XeLaTeX height measurement failed with exit code {result.ExitCode}: {standardError}{Environment.NewLine}{standardOutput}");
+                if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
+                {
+                    return Retain(new RenderLayoutFailure(
+                        new MetadataOverflowFailure(CvMetadataOverflowException.ErrorMessage)));
+                }
+                return Retain(new LatexCompilationFailure(
+                    LatexExecutionPhase.HeightMeasurement,
+                    LatexFailureClassifier.FirstDiagnostic(
+                        latexLog,
+                        $"XeLaTeX exited with code {result.ExitCode}."),
+                    workingDirectory,
+                    result.ExitCode));
             }
 
             var resultPath = Path.Combine(workingDirectory, resultFileName);
             if (!File.Exists(resultPath))
             {
-                throw new CvMeasurementException(
-                    "XeLaTeX completed without producing the height result file.");
+                return Retain(new MeasurementDataFailure(
+                    "XeLaTeX completed without producing the height result file.",
+                    workingDirectory));
             }
 
             var lines = await File.ReadAllLinesAsync(resultPath, cancellationToken);
-            var parsed = LatexMeasurementResultParser.ParseAndValidate(lines, requests);
+            IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> parsed;
+            try
+            {
+                parsed = LatexMeasurementResultParser.ParseAndValidate(lines, requests);
+            }
+            catch (CvMeasurementException exception)
+            {
+                return Retain(new MeasurementDataFailure(exception.Message, workingDirectory));
+            }
             progressParser.CompleteMissingMeasurements();
-            return parsed;
+            return new SuccessfulLatexMeasurementRun(parsed);
         }
         finally
         {
             try
             {
-                Directory.Delete(workingDirectory, recursive: true);
+                if (!retainWorkingDirectory)
+                {
+                    Directory.Delete(workingDirectory, recursive: true);
+                }
             }
             catch (DirectoryNotFoundException)
             {
             }
+        }
+
+        LatexMeasurementRunResult Retain(LatexMeasurementRunResult failure)
+        {
+            retainWorkingDirectory = true;
+            return failure;
         }
     }
 }

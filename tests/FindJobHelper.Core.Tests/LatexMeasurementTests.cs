@@ -926,17 +926,18 @@ public sealed class LatexMeasurementTests
             var texProgress = new ProgressTestReporter();
             var pdfProgress = new ProgressTestReporter();
 
-            var exception = await Assert.ThrowsAsync<CvSectionPageOverflowException>(() =>
-                CvTemplate.Generate(new()
+            var result = await CvTemplate.Generate(new()
                 {
                     ConfigFilePath = ProductionTemplatePath,
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,
-                }, new(texProgress, pdfProgress)));
+                }, new(texProgress, pdfProgress));
+            var exception = Assert.IsType<SectionOverflowFailure>(
+                Assert.IsType<RenderLayoutFailure>(result.Value).Value);
 
-            Assert.Contains("WorkExperience", exception.Message, StringComparison.Ordinal);
-            Assert.Contains("single page", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("WorkExperience", exception.Diagnostic, StringComparison.Ordinal);
+            Assert.Contains("single page", exception.Diagnostic, StringComparison.Ordinal);
             Assert.Equal(
                 texProgress.Last.TotalWorkUnits,
                 texProgress.Last.CompletedWorkUnits);
@@ -986,8 +987,7 @@ public sealed class LatexMeasurementTests
                 new(1, 1, [Section.WorkExperience]),
             ]);
 
-            var exception = await Assert.ThrowsAsync<CvEventPageOverflowException>(() =>
-                CvTemplate.Generate(new()
+            var result = await CvTemplate.Generate(new()
                 {
                     ConfigFilePath = ProductionTemplatePath,
                     OutputDirectory = outputDirectory,
@@ -995,13 +995,15 @@ public sealed class LatexMeasurementTests
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.OnePage,
                     PageLayout = layout,
-                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
+            var exception = Assert.IsType<EventOverflowFailure>(
+                Assert.IsType<RenderLayoutFailure>(result.Value).Value);
 
-            Assert.Equal("WorkExperience", exception.SectionLabel);
-            Assert.Equal("Indivisible oversized job", exception.EventLabel);
+            Assert.Equal("WorkExperience", exception.Section);
+            Assert.Equal("Indivisible oversized job", exception.Event);
             Assert.Contains(
                 "Indivisible oversized job",
-                exception.Message,
+                exception.Diagnostic,
                 StringComparison.Ordinal);
             var log = File.ReadAllText(Path.Combine(outputDirectory, "main.log"));
             Assert.Contains(
@@ -1027,18 +1029,19 @@ public sealed class LatexMeasurementTests
         {
             var onePageModel = CreateEmptyModel();
             onePageModel.SectionOrder = [];
-            var tooFew = await Assert.ThrowsAsync<RenderedPageCountMismatchException>(() =>
-                CvTemplate.Generate(new()
+            var tooFewResult = await CvTemplate.Generate(new()
                 {
                     ConfigFilePath = ProductionTemplatePath,
                     OutputDirectory = tooFewDirectory,
                     Model = onePageModel,
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.Exact(2),
-                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
+            var tooFew = Assert.IsType<PageCountMismatchFailure>(
+                Assert.IsType<RenderValidationFailure>(tooFewResult.Value).Value);
             Assert.Equal(
                 "Configured pageCount 2, but the rendered PDF contains 1 pages",
-                tooFew.Message);
+                tooFew.Diagnostic);
 
             var twoPageModel = CreateEmptyModel();
             twoPageModel.SectionOrder =
@@ -1048,18 +1051,19 @@ public sealed class LatexMeasurementTests
             ];
             twoPageModel.WorkExperiences = CreateRenderedEvents("Work", 12);
             twoPageModel.PersonalProjects = CreateRenderedEvents("Project", 12);
-            var tooMany = await Assert.ThrowsAsync<RenderedPageCountMismatchException>(() =>
-                CvTemplate.Generate(new()
+            var tooManyResult = await CvTemplate.Generate(new()
                 {
                     ConfigFilePath = ProductionTemplatePath,
                     OutputDirectory = tooManyDirectory,
                     Model = twoPageModel,
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.OnePage,
-                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
+            var tooMany = Assert.IsType<PageCountMismatchFailure>(
+                Assert.IsType<RenderValidationFailure>(tooManyResult.Value).Value);
             Assert.Equal(
                 "Configured pageCount 1, but the rendered PDF contains 2 pages",
-                tooMany.Message);
+                tooMany.Diagnostic);
         }
         finally
         {
@@ -1157,16 +1161,17 @@ public sealed class LatexMeasurementTests
             ];
             model.CategorizedInfos = [new(Category.Location, "Example City, Example Country")];
 
-            var exception = await Assert.ThrowsAsync<CvMetadataOverflowException>(() =>
-                CvTemplate.Generate(new()
+            var result = await CvTemplate.Generate(new()
                 {
                     ConfigFilePath = ProductionTemplatePath,
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,
-                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance)));
+                }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
+            var exception = Assert.IsType<MetadataOverflowFailure>(
+                Assert.IsType<RenderLayoutFailure>(result.Value).Value);
 
-            Assert.Equal(CvLatexErrors.MetadataLeftOverflowMessage, exception.Message);
+            Assert.Equal(CvLatexErrors.MetadataLeftOverflowMessage, exception.Diagnostic);
         }
         finally
         {
