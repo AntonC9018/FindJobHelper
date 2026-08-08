@@ -20,6 +20,7 @@ public record struct GenerateParams()
     public required CancellationToken CancellationToken;
     public CvPageCount PageCount;
     public CvPageLayout? PageLayout;
+    public LatexExecutablePaths? LatexExecutables;
 }
 
 public sealed record GeneratedCvArtifacts(string PdfPath);
@@ -292,8 +293,20 @@ public static class CvTemplate
         var latexmkProgress = new LatexmkProgressParser(
             progress,
             renderProgressPlan);
-        var latexmk = Cli.Wrap("latexmk");
+        var executables = p.LatexExecutables ?? LatexExecutablePaths.FromPath;
+        var latexmk = Cli.Wrap(executables.Latexmk);
         latexmk = latexmk.WithArguments(["-xelatex", LatexFileName]);
+        var binaryDirectory = Path.GetDirectoryName(executables.Latexmk);
+        if (!string.IsNullOrEmpty(binaryDirectory))
+        {
+            latexmk = latexmk.WithEnvironmentVariables(environment =>
+                environment.Set(
+                    "PATH",
+                    string.Join(
+                        Path.PathSeparator,
+                        binaryDirectory,
+                        Environment.GetEnvironmentVariable("PATH"))));
+        }
 
         {
             var logFile = Path.Join(outputDirectory.FullName, "log-stdout.txt");

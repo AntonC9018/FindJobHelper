@@ -11,6 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="content\**\*" Pack="true" PackagePath="content" />
+    <Content Include="..\..\scripts\setup-latex.sh" Pack="true" PackagePath="content\scripts\setup-latex.sh" Link="content\scripts\setup-latex.sh" />
     <Compile Remove="content\**\*.cs" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>

@@ -8,10 +8,10 @@ public sealed class LatexMeasurementService
     private readonly ILatexMeasurementRunner _runner;
     private readonly int _ruleVersion;
 
-    public LatexMeasurementService()
+    public LatexMeasurementService(LatexExecutablePaths executables)
         : this(
             LatexHeightCache.DefaultPath,
-            new XeLatexMeasurementRunner(),
+            new XeLatexMeasurementRunner(executables),
             LatexMeasurementRules.CurrentVersion)
     {
     }

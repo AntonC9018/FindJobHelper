@@ -22,6 +22,43 @@ dotnet test .\FindJobHelper.sln --no-build
 
 TheirStack projects are retained for future development but are not referenced by the CLI and are never included in the published packages.
 
+## LaTeX toolchain (Linux and WSL)
+
+PDF generation requires TeX Live 2026 and Liberation Serif/Sans. Install the
+minimal user-local toolchain before the first generation:
+
+```bash
+./scripts/setup-latex.sh
+source "$HOME/.local/share/findjobhelper/texlive/2026/findjobhelper-env.sh"
+./scripts/setup-latex.sh --check
+```
+
+The default root is `$HOME/.local/share/findjobhelper/texlive/2026`. Use
+`--install-root PATH` (or `FINDJOBHELPER_TEXLIVE_ROOT`) to select another root;
+the option wins over the environment variable. `--check` is non-mutating, and a
+normal rerun safely fills missing requirements without updating installed
+packages. Setup downloads TeX Live's rolling 2026 repository and the Liberation
+Fonts 2.1.5 TTF archive, so allow network access and several GB of user-owned disk
+space.
+
+The fonts come from Liberation Fonts 2.1.5 under the SIL Open Font License. The
+script downloads the [upstream archive](https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz),
+requires SHA-256 `7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0`,
+and installs it under `$HOME/.local/share/fonts/findjobhelper`.
+
+The script prints an exact current-session `PATH` command and never edits a shell
+profile. Existing compatible distributions can be selected with
+`--latex-bin-directory PATH` or `FINDJOBHELPER_LATEX_BIN_DIRECTORY`; the CLI option
+wins. The selected directory must provide both `latexmk` and `xelatex`, so tools
+are never mixed between installations.
+
+To remove the default installation, delete only
+`$HOME/.local/share/findjobhelper/texlive/2026` and
+`$HOME/.local/share/fonts/findjobhelper/liberation-fonts-2.1.5`, then run
+`fc-cache -f`. The installer supports Linux and WSL (Linux x86-64 is CI-tested).
+Native Windows setup is unsupported; users may still select an existing compatible
+LaTeX binary directory.
+
 ## Create a fictional Workspace
 
 ```powershell

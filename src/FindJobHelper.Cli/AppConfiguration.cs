@@ -11,7 +11,9 @@ using OpenAI.Models;
 
 internal static class AppConfiguration
 {
-    public static ValueTask<ServiceProvider> CreateApp(CancellationToken cancellationToken)
+    public static ValueTask<ServiceProvider> CreateApp(
+        LatexExecutablePaths latexExecutables,
+        CancellationToken cancellationToken)
     {
         _ = cancellationToken;
         var configBuilder = new ConfigurationBuilder();
@@ -22,6 +24,7 @@ internal static class AppConfiguration
 
         var services = new ServiceCollection();
         services.AddSingleton(config);
+        services.AddSingleton(latexExecutables);
         services
             .AddOptions<OpenApiOptions>()
             .Bind(config.GetRequiredSection(OpenApiOptions.SectionName))
