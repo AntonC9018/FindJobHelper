@@ -6,18 +6,18 @@ namespace FindJobHelper.Core.Tests;
 
 public sealed partial class GeneratedPdfFontTests
 {
-    private const string MainSentinel = "MAINROLESENTINEL";
-    private const string SansSentinel = "SANSROLESENTINEL";
-    private const string MonoSentinel = "MONOROLESENTINEL";
+    private static readonly string[] Sentinels =
+        ["MAINROLESENTINEL", "SANSROLESENTINEL", "MONOROLESENTINEL"];
 
     [Fact]
     public async Task GeneratedPdf_EmbedsEachConfiguredFontForItsFamilyRole()
     {
         using var fixture = new GeneratedPdfFixture();
-        var fonts = new LatexFontOptions(
-            mainFontFamily: new("Liberation Sans"),
-            sansFontFamily: new("Liberation Serif"),
-            monoFontFamily: new("Latin Modern Mono"));
+        var fonts = new LatexFontOptions([
+            new("Liberation Sans"),
+            new("Liberation Serif"),
+            new("Latin Modern Mono"),
+        ]);
 
         var result = await CvTemplate.Generate(new()
         {
@@ -32,9 +32,10 @@ public sealed partial class GeneratedPdfFontTests
         using var document = PdfDocument.Open(artifacts.PdfPath);
         var words = document.GetPages().SelectMany(static page => page.GetWords()).ToArray();
 
-        AssertSentinelUsesFont(words, MainSentinel, fonts.MainFontFamily);
-        AssertSentinelUsesFont(words, SansSentinel, fonts.SansFontFamily);
-        AssertSentinelUsesFont(words, MonoSentinel, fonts.MonoFontFamily);
+        foreach (var role in LatexFontRoles.All)
+        {
+            AssertSentinelUsesFont(words, Sentinels[(int)role], fonts[role]);
+        }
     }
 
     private static void AssertSentinelUsesFont(
@@ -94,14 +95,14 @@ public sealed partial class GeneratedPdfFontTests
                     "data",
                     "cv_template_config.tex")
                 .Replace('\\', '/');
+            var sentinelContent = string.Join('\n', LatexFontRoles.All.Select(role =>
+                $"  {{\\{LatexFontRoles.FamilyCommands[(int)role]} {Sentinels[(int)role]}\\par}}%"));
             File.WriteAllText(
                 TemplatePath,
                 $$"""
                 \input{{{productionTemplatePath}}}
                 \AtBeginDocument{%
-                  {\rmfamily {{MainSentinel}}\par}%
-                  {\sffamily {{SansSentinel}}\par}%
-                  {\ttfamily {{MonoSentinel}}\par}%
+                {{sentinelContent}}
                 }
                 """);
         }

@@ -452,18 +452,9 @@ public sealed class LatexMeasurementTests
         var runner = new RecordingRunner();
         var service = new LatexMeasurementService(fixture.CachePath, runner, ruleVersion: 23);
         var original = LatexFontOptions.Default;
-        var changedMain = new LatexFontOptions(
-            mainFontFamily: new("Noto Serif"),
-            sansFontFamily: original.SansFontFamily,
-            monoFontFamily: original.MonoFontFamily);
-        var changedSans = new LatexFontOptions(
-            mainFontFamily: original.MainFontFamily,
-            sansFontFamily: new("Noto Sans"),
-            monoFontFamily: original.MonoFontFamily);
-        var changedMono = new LatexFontOptions(
-            mainFontFamily: original.MainFontFamily,
-            sansFontFamily: original.SansFontFamily,
-            monoFontFamily: new("Noto Sans Mono"));
+        var changedMain = WithFont(original, LatexFontRole.Main, "Noto Serif");
+        var changedSans = WithFont(original, LatexFontRole.Sans, "Noto Sans");
+        var changedMono = WithFont(original, LatexFontRole.Mono, "Noto Sans Mono");
 
         foreach (var fonts in new[] { original, original, changedMain, changedSans, changedMono, original })
         {
@@ -513,6 +504,16 @@ public sealed class LatexMeasurementTests
         Assert.Contains(contexts, context => context.Main == "Noto Serif");
         Assert.Contains(contexts, context => context.Sans == "Noto Sans");
         Assert.Contains(contexts, context => context.Mono == "Noto Sans Mono");
+    }
+
+    private static LatexFontOptions WithFont(
+        LatexFontOptions original,
+        LatexFontRole role,
+        string familyName)
+    {
+        var families = original.Families.ToArray();
+        families[(int)role] = new(familyName);
+        return new(families);
     }
 
     [Fact]
