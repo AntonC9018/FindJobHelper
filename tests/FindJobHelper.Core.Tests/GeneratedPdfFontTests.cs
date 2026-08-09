@@ -6,18 +6,19 @@ namespace FindJobHelper.Core.Tests;
 
 public sealed partial class GeneratedPdfFontTests
 {
-    private static readonly string[] Sentinels =
-        ["MAINROLESENTINEL", "SANSROLESENTINEL", "MONOROLESENTINEL"];
+    private static readonly LatexFontRoleArray<string> Sentinels = new(
+        ["MAINROLESENTINEL", "SANSROLESENTINEL", "MONOROLESENTINEL"]);
 
     [Fact]
     public async Task GeneratedPdf_EmbedsEachConfiguredFontForItsFamilyRole()
     {
         using var fixture = new GeneratedPdfFixture();
-        var fonts = new LatexFontOptions([
+        var fonts = new LatexFontOptions(new(
+        [
             new("Liberation Sans"),
             new("Liberation Serif"),
             new("Latin Modern Mono"),
-        ]);
+        ]));
 
         var result = await CvTemplate.Generate(new()
         {
@@ -34,7 +35,7 @@ public sealed partial class GeneratedPdfFontTests
 
         foreach (var role in LatexFontRoles.All)
         {
-            AssertSentinelUsesFont(words, Sentinels[(int)role], fonts[role]);
+            AssertSentinelUsesFont(words, Sentinels[role], fonts[role]);
         }
     }
 
@@ -96,7 +97,7 @@ public sealed partial class GeneratedPdfFontTests
                     "cv_template_config.tex")
                 .Replace('\\', '/');
             var sentinelContent = string.Join('\n', LatexFontRoles.All.Select(role =>
-                $"  {{\\{LatexFontRoles.FamilyCommands[(int)role]} {Sentinels[(int)role]}\\par}}%"));
+                $"  {{\\{LatexFontRoles.FamilyCommands[role]} {Sentinels[role]}\\par}}%"));
             File.WriteAllText(
                 TemplatePath,
                 $$"""

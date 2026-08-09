@@ -21,8 +21,8 @@ public sealed class LatexFontConfigurationResolverTests
         bool throws)
     {
         ResolvedLatexFontConfiguration Resolve() => LatexFontConfigurationResolver.Resolve(
-            flags: flags,
-            environments: environments);
+            flags: new(flags),
+            environments: new(environments));
 
         if (throws)
         {
@@ -31,7 +31,7 @@ public sealed class LatexFontConfigurationResolverTests
         }
 
         var result = Resolve();
-        Assert.Equal(expectedFamilies, result.Options.Families.Select(static family => family.Value));
-        Assert.Equal(expectedManuallySpecified, result.ManuallySpecified);
+        Assert.Equal(expectedFamilies, result.Options.Families.Values.Select(static family => family.Value));
+        Assert.Equal(expectedManuallySpecified, result.ManuallySpecified.Values);
     }
 }

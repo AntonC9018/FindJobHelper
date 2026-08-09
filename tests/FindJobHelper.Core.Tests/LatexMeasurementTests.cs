@@ -511,9 +511,9 @@ public sealed class LatexMeasurementTests
         LatexFontRole role,
         string familyName)
     {
-        var families = original.Families.ToArray();
+        var families = original.Families.Values.ToArray();
         families[(int)role] = new(familyName);
-        return new(families);
+        return new(new(families));
     }
 
     [Fact]
