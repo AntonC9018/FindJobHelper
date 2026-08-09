@@ -5,6 +5,7 @@ using System.Xml.Linq;
 using CliWrap;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
+using Microsoft.Data.Sqlite;
 
 namespace FindJobHelper.Core.Tests;
 
@@ -436,6 +437,111 @@ public sealed class LatexMeasurementTests
         Assert.Equal(cold.DocumentFooter, warm.DocumentFooter);
         Assert.Equal(cold.CurrentPageSectionChrome, warm.CurrentPageSectionChrome);
         Assert.Equal(cold.FreshPageSectionChrome, warm.FreshPageSectionChrome);
+    }
+
+    [Fact]
+    public async Task CacheScopesMeasurementsByEffectiveFontTupleAndReusesEarlierContext()
+    {
+        using var fixture = new CacheFixture();
+        var database = CreateDatabase(CreateRichText(new PlainText { Text = "font-sensitive" }));
+        var model = CreateEmptyModel();
+        var runner = new RecordingRunner();
+        var service = new LatexMeasurementService(fixture.CachePath, runner, ruleVersion: 23);
+        var original = LatexFontOptions.Default;
+        var changedMain = new LatexFontOptions(
+            mainFontFamily: new("Noto Serif"),
+            sansFontFamily: original.SansFontFamily,
+            monoFontFamily: original.MonoFontFamily);
+        var changedSans = new LatexFontOptions(
+            mainFontFamily: original.MainFontFamily,
+            sansFontFamily: new("Noto Sans"),
+            monoFontFamily: original.MonoFontFamily);
+        var changedMono = new LatexFontOptions(
+            mainFontFamily: original.MainFontFamily,
+            sansFontFamily: original.SansFontFamily,
+            monoFontFamily: new("Noto Sans Mono"));
+
+        foreach (var fonts in new[] { original, original, changedMain, changedSans, changedMono, original })
+        {
+            var result = await service.MeasureAsync(
+                database,
+                model,
+                fixture.TemplatePath,
+                NoOpProgressReporter.Instance,
+                fonts,
+                LatexExecutionOptions.Empty,
+                CancellationToken.None);
+            Assert.IsType<CvMeasurementSnapshot>(result);
+        }
+
+        Assert.Equal(4, runner.CallCount);
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = fixture.CachePath,
+            Pooling = false,
+        }.ToString());
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT run.run_id, run.rule_version, run.main_font, run.sans_font, run.mono_font,
+                   COUNT(height.run_id)
+            FROM latex_measurement_run AS run
+            INNER JOIN latex_height_measurement AS height ON height.run_id = run.run_id
+            GROUP BY run.run_id
+            ORDER BY run.run_id;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        var contexts = new List<(long Id, int Rule, string Main, string Sans, string Mono, long Heights)>();
+        while (await reader.ReadAsync())
+        {
+            contexts.Add((reader.GetInt64(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3),
+                reader.GetString(4), reader.GetInt64(5)));
+        }
+
+        Assert.Equal(4, contexts.Count);
+        Assert.All(contexts, context =>
+        {
+            Assert.Equal(23, context.Rule);
+            Assert.True(context.Heights > 0);
+        });
+        Assert.Contains(contexts, context => context.Main == "Liberation Serif"
+            && context.Sans == "Liberation Sans" && context.Mono == "Latin Modern Mono");
+        Assert.Contains(contexts, context => context.Main == "Noto Serif");
+        Assert.Contains(contexts, context => context.Sans == "Noto Sans");
+        Assert.Contains(contexts, context => context.Mono == "Noto Sans Mono");
+    }
+
+    [Fact]
+    public async Task VersionOneCacheIsRecreatedWithoutReusingUnsafeHeights()
+    {
+        using var fixture = new CacheFixture();
+        await using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = fixture.CachePath,
+            Pooling = false,
+        }.ToString()))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE latex_height_measurement (
+                    rule_version INTEGER NOT NULL,
+                    measurement_kind TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    height_sp INTEGER NOT NULL,
+                    PRIMARY KEY (rule_version, measurement_kind, content_hash));
+                INSERT INTO latex_height_measurement VALUES (31, 'ExperienceItem', 'unsafe', 42);
+                PRAGMA user_version=1;
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var cache = new LatexHeightCache(fixture.CachePath, ruleVersion: 31);
+        await cache.InitializeAsync(CancellationToken.None);
+        var key = new LatexMeasurementCacheKey(31, LatexMeasurementKind.ExperienceItem, "unsafe");
+        var loaded = await cache.LoadAsync([key], LatexFontOptions.Default, CancellationToken.None);
+
+        Assert.Empty(loaded);
     }
 
     [Fact]

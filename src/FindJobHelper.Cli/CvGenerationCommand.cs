@@ -219,6 +219,7 @@ public sealed class CvGenerationCommand
                     currentModel,
                     templatePath,
                     progress.Reporter(CvGenerationModule.ComputingHeights),
+                    LatexFontOptions.Default,
                     latexExecutionOptions,
                     cancellationToken);
                 if (measurementResult is not CvMeasurementSnapshot measurementSnapshot)

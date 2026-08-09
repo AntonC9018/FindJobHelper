@@ -40,12 +40,14 @@ public sealed class LatexMeasurementService
         CvDataModel currentModel,
         string templatePath,
         IProgressReporter progress,
+        LatexFontOptions fontOptions,
         LatexExecutionOptions executionOptions,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(currentModel);
         ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(fontOptions);
         ArgumentNullException.ThrowIfNull(executionOptions);
         ArgumentException.ThrowIfNullOrWhiteSpace(templatePath);
         if (!File.Exists(templatePath))
@@ -62,7 +64,7 @@ public sealed class LatexMeasurementService
             TotalWorkUnits: totalWorkUnits,
             Detail: "Computing heights"));
         await _cache.InitializeAsync(cancellationToken);
-        var hits = await _cache.LoadAsync(graph.WorkItems.Keys.ToArray(), cancellationToken);
+        var hits = await _cache.LoadAsync(graph.WorkItems.Keys.ToArray(), fontOptions, cancellationToken);
 
         var completedWorkUnits = 0;
         foreach (var workItem in graph.WorkItems.Values)
@@ -145,7 +147,7 @@ public sealed class LatexMeasurementService
                 cacheValues.Add(request.CacheKey, measured[request.CorrelationId]);
             }
 
-            await _cache.StoreAsync(cacheValues, cancellationToken);
+            await _cache.StoreAsync(cacheValues, fontOptions, cancellationToken);
             foreach (var miss in misses)
             {
                 graph.Populate(miss.Destinations, cacheValues[miss.Key]);

@@ -17,6 +17,7 @@ internal static class LatexResultTestExtensions
             model,
             templatePath,
             progress,
+            LatexFontOptions.Default,
             LatexExecutionOptions.Empty,
             cancellationToken);
         return Assert.IsType<CvMeasurementSnapshot>(result);
