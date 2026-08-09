@@ -53,4 +53,4 @@ jobs:
             --output-directory real-render \
             --latex-bin-directory "$(dirname "$(command -v latexmk)")"
           test -s real-render/ExampleAlex.pdf
-          test -s "$HOME/.local/share/findjobhelper/latex-height-cache.sqlite3"
+          test -s "$HOME/.local/share/FindJobHelper/latex-height-cache.sqlite3"
