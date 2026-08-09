@@ -21,7 +21,9 @@ public sealed record ExecutableLatexRequirement(LatexExecutableName Name) : ILat
 
 public sealed record TexFileLatexRequirement(LatexTexFileName FileName) : ILatexRequirement;
 
-public sealed record FontLatexRequirement(LatexFontFamilyName FamilyName) : ILatexRequirement;
+public sealed record FontLatexRequirement(
+    LatexFontFamilyName FamilyName,
+    bool IsManuallySpecified = false) : ILatexRequirement;
 
 public sealed record BabelLanguageLatexRequirement(LatexLanguageName LanguageName) : ILatexRequirement;
 
@@ -175,6 +177,11 @@ public static class CvFailurePresenter
 
     private static string Format(IncompleteLatexInstallation failure)
     {
+        if (failure.MissingRequirement is FontLatexRequirement { IsManuallySpecified: true } font)
+        {
+            return $"Manually specified LaTeX font is missing: “{font.FamilyName.Value}”.";
+        }
+
         var requirement = failure.MissingRequirement switch
         {
             ExecutableLatexRequirement value => value.Name.Value,
@@ -299,11 +306,6 @@ internal static partial class LatexFailureClassifier
                 static (requirement, value) => requirement is TexFileLatexRequirement file
                     && string.Equals(file.FileName.Value, value, StringComparison.OrdinalIgnoreCase)),
             new(
-                MissingFontRegex(),
-                static match => match.Groups[1].Value,
-                static (requirement, value) => requirement is FontLatexRequirement font
-                    && string.Equals(font.FamilyName.Value, value, StringComparison.OrdinalIgnoreCase)),
-            new(
                 MissingBabelLanguageRegex(),
                 static match => match.Groups[1].Success
                     ? match.Groups[1].Value
@@ -313,6 +315,7 @@ internal static partial class LatexFailureClassifier
         };
         var candidates = rules
             .SelectMany(rule => rule.FindMatches(log, options.Requirements))
+            .Concat(FindFirstMissingFont(log, options.Requirements))
             .OrderBy(static candidate => candidate.Index)
             .ToArray();
         if (candidates.Length == 0)
@@ -329,6 +332,26 @@ internal static partial class LatexFailureClassifier
             diagnosticDirectory,
             options);
 
+    }
+
+    private static IEnumerable<LatexLogRequirementMatch> FindFirstMissingFont(
+        string log,
+        IEnumerable<ILatexRequirement> requirements)
+    {
+        var match = MissingFontRegex().Match(log);
+        if (!match.Success)
+        {
+            yield break;
+        }
+
+        var familyName = match.Groups[1].Value;
+        var requirement = requirements.FirstOrDefault(
+            item => item is FontLatexRequirement font
+                && string.Equals(font.FamilyName.Value, familyName, StringComparison.OrdinalIgnoreCase));
+        if (requirement is not null)
+        {
+            yield return new(match.Index, requirement, match.Value.Trim());
+        }
     }
 
     public static string FirstDiagnostic(string log, string fallback)

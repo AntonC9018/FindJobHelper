@@ -81,6 +81,59 @@ public sealed class LatexFailureClassifierTests
     }
 
     [Theory]
+    [InlineData("Custom Main")]
+    [InlineData("Custom Sans")]
+    [InlineData("Custom Mono")]
+    public void ManuallySpecifiedMissingFontHasFocusedPresentation(string familyName)
+    {
+        var options = new LatexExecutionOptions([
+            new FontLatexRequirement(new(familyName), IsManuallySpecified: true),
+        ]);
+
+        var failure = LatexFailureClassifier.ClassifyLog(
+            $"Package fontspec Error:\nThe font \"{familyName}\" cannot be found.",
+            LatexExecutionPhase.FinalRendering,
+            "/diagnostics",
+            options);
+
+        Assert.Equal(
+            $"Manually specified LaTeX font is missing: “{familyName}”.",
+            CvFailurePresenter.Present((ICvRenderResult)failure!).Message);
+    }
+
+    [Fact]
+    public void DefaultMissingFontRetainsInstallationPresentation()
+    {
+        var failure = LatexFailureClassifier.ClassifyLog(
+            "Package fontspec Error:\nThe font \"Liberation Serif\" cannot be found.",
+            LatexExecutionPhase.FinalRendering,
+            "/diagnostics",
+            Options);
+
+        var message = CvFailurePresenter.Present((ICvRenderResult)failure!).Message;
+        Assert.StartsWith(
+            "Missing LaTeX requirement 'Liberation Serif' during final rendering.",
+            message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OnlyFirstMissingFontCanBeClassified()
+    {
+        var options = new LatexExecutionOptions([
+            new FontLatexRequirement(new("Manual Font"), IsManuallySpecified: true),
+        ]);
+        var log = "Package fontspec Error: The font \"Unmatched Font\" cannot be found.\n"
+            + "Package fontspec Error: The font \"Manual Font\" cannot be found.";
+
+        Assert.Null(LatexFailureClassifier.ClassifyLog(
+            log,
+            LatexExecutionPhase.FinalRendering,
+            "/diagnostics",
+            options));
+    }
+
+    [Theory]
     [InlineData("! Undefined control sequence.\n! LaTeX Error: File `needspace.sty' not found.")]
     [InlineData("! FJH_EVENT_PAGE_OVERFLOW: WorkExperience / 1\n! LaTeX Error: File `needspace.sty' not found.")]
     public void DeclaredInstallationFailureHasPriorityOverOtherDiagnostics(string log)
