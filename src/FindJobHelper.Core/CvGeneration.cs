@@ -103,10 +103,8 @@ internal static class LatexProcessEnvironment
     public const string MaxPrintLine = "999";
 
     public static Command DisableOutputWrapping(this Command command) =>
-        OperatingSystem.IsWindows()
-            ? command
-            : command.WithEnvironmentVariables(environment =>
-                environment.Set("max_print_line", MaxPrintLine));
+        command.WithEnvironmentVariables(environment =>
+            environment.Set("max_print_line", MaxPrintLine));
 }
 
 internal static partial class LatexLogPageCountParser
