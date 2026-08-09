@@ -12,7 +12,7 @@ public readonly record struct LatexHeight(long ScaledPoints)
     public static LatexHeight Zero { get; } = new(0);
 }
 
-public sealed record CvMeasurementSnapshot
+public sealed record CvMeasurementSnapshot : ICvMeasurementResult
 {
     public CvMeasurementSnapshot(
         IReadOnlyDictionary<ExperienceItemId, LatexHeight> experienceItems,

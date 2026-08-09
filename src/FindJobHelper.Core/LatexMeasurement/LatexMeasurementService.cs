@@ -35,7 +35,7 @@ public sealed class LatexMeasurementService
         _ruleVersion = ruleVersion;
     }
 
-    public async Task<CvMeasurementResult> MeasureAsync(
+    public async Task<ICvMeasurementResult> MeasureAsync(
         ExperienceDatabase database,
         CvDataModel currentModel,
         string templatePath,
@@ -117,15 +117,14 @@ public sealed class LatexMeasurementService
                     return compilation;
                 case MeasurementDataFailure data:
                     return data;
-                case RenderLayoutFailure { Value: MetadataOverflowFailure }:
-                    return new MeasurementLayoutFailure(
-                        new FixedContentLayoutFailure());
-                case RenderLayoutFailure:
+                case MetadataOverflowFailure:
+                    return new FixedContentLayoutFailure();
+                case IRenderLayoutFailure:
                     throw new InvalidOperationException(
                         "The measurement runner returned an unsupported rendering layout failure.");
                 default:
                     throw new InvalidOperationException(
-                        "The measurement runner result union is empty.");
+                        $"Unsupported measurement runner result implementation '{runResult.GetType().FullName}'.");
             }
             try
             {

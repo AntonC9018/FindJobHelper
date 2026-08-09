@@ -10,19 +10,14 @@ internal sealed record LatexMeasurementRequest(
     string RenderedFragment,
     LatexMeasurementMode Mode);
 
-internal sealed record SuccessfulLatexMeasurementRun(
-    IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> Measurements);
+internal interface ILatexMeasurementRunResult;
 
-internal union LatexMeasurementRunResult(
-    SuccessfulLatexMeasurementRun,
-    IncompleteLatexInstallation,
-    LatexCompilationFailure,
-    MeasurementDataFailure,
-    RenderLayoutFailure);
+internal sealed record SuccessfulLatexMeasurementRun(
+    IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> Measurements) : ILatexMeasurementRunResult;
 
 internal interface ILatexMeasurementRunner
 {
-    Task<LatexMeasurementRunResult> MeasureAsync(
+    Task<ILatexMeasurementRunResult> MeasureAsync(
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
         IProgressReporter progress,
@@ -45,7 +40,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
         _workingDirectoryFactory = workingDirectoryFactory;
     }
 
-    public async Task<LatexMeasurementRunResult> MeasureAsync(
+    public async Task<ILatexMeasurementRunResult> MeasureAsync(
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
         IProgressReporter progress,
@@ -141,8 +136,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 }
                 if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
                 {
-                    return Retain(new RenderLayoutFailure(
-                        new MetadataOverflowFailure()));
+                    return Retain(new MetadataOverflowFailure());
                 }
                 return Retain(new LatexCompilationFailure(
                     LatexExecutionPhase.HeightMeasurement,
@@ -189,7 +183,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             }
         }
 
-        LatexMeasurementRunResult Retain(LatexMeasurementRunResult failure)
+        ILatexMeasurementRunResult Retain(ILatexMeasurementRunResult failure)
         {
             retainWorkingDirectory = true;
             return failure;

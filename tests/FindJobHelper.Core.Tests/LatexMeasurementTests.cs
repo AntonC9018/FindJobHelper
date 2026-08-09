@@ -933,8 +933,7 @@ public sealed class LatexMeasurementTests
                     Model = model,
                     CancellationToken = CancellationToken.None,
                 }, new(texProgress, pdfProgress));
-            var exception = Assert.IsType<SectionOverflowFailure>(
-                Assert.IsType<RenderLayoutFailure>(result.Value).Value);
+            var exception = Assert.IsType<SectionOverflowFailure>(result);
 
             var presentation = CvFailurePresenter.Present(result);
             Assert.Contains("WorkExperience", presentation.Message, StringComparison.Ordinal);
@@ -997,8 +996,7 @@ public sealed class LatexMeasurementTests
                     PageCount = CvPageCount.OnePage,
                     PageLayout = layout,
                 }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
-            var exception = Assert.IsType<EventOverflowFailure>(
-                Assert.IsType<RenderLayoutFailure>(result.Value).Value);
+            var exception = Assert.IsType<EventOverflowFailure>(result);
 
             Assert.Equal("WorkExperience", exception.Section);
             Assert.Equal("Indivisible oversized job", exception.Event);
@@ -1038,8 +1036,7 @@ public sealed class LatexMeasurementTests
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.Exact(2),
                 }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
-            var tooFew = Assert.IsType<PageCountMismatchFailure>(
-                Assert.IsType<RenderValidationFailure>(tooFewResult.Value).Value);
+            var tooFew = Assert.IsType<PageCountMismatchFailure>(tooFewResult);
             Assert.Equal(
                 "Configured pageCount 2, but the rendered PDF contains 1 pages",
                 CvFailurePresenter.Present(tooFewResult).Message);
@@ -1060,8 +1057,7 @@ public sealed class LatexMeasurementTests
                     CancellationToken = CancellationToken.None,
                     PageCount = CvPageCount.OnePage,
                 }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
-            var tooMany = Assert.IsType<PageCountMismatchFailure>(
-                Assert.IsType<RenderValidationFailure>(tooManyResult.Value).Value);
+            var tooMany = Assert.IsType<PageCountMismatchFailure>(tooManyResult);
             Assert.Equal(
                 "Configured pageCount 1, but the rendered PDF contains 2 pages",
                 CvFailurePresenter.Present(tooManyResult).Message);
@@ -1169,8 +1165,7 @@ public sealed class LatexMeasurementTests
                     Model = model,
                     CancellationToken = CancellationToken.None,
                 }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
-            var exception = Assert.IsType<MetadataOverflowFailure>(
-                Assert.IsType<RenderLayoutFailure>(result.Value).Value);
+            var exception = Assert.IsType<MetadataOverflowFailure>(result);
 
             Assert.Equal(
                 CvLatexErrors.MetadataLeftOverflowMessage,
@@ -1425,7 +1420,7 @@ public sealed class LatexMeasurementTests
         public int CallCount { get; private set; }
         public List<IReadOnlyList<LatexMeasurementRequest>> Batches { get; } = [];
 
-        public Task<LatexMeasurementRunResult> MeasureAsync(
+        public Task<ILatexMeasurementRunResult> MeasureAsync(
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
             IProgressReporter progress,
@@ -1445,7 +1440,7 @@ public sealed class LatexMeasurementTests
             {
                 progress.Report(new(i + 1, requests.Count));
             }
-            return Task.FromResult<LatexMeasurementRunResult>(
+            return Task.FromResult<ILatexMeasurementRunResult>(
                 new SuccessfulLatexMeasurementRun(result));
         }
     }
@@ -1454,7 +1449,7 @@ public sealed class LatexMeasurementTests
     {
         public int RequestCount { get; private set; }
 
-        public Task<LatexMeasurementRunResult> MeasureAsync(
+        public Task<ILatexMeasurementRunResult> MeasureAsync(
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
             IProgressReporter progress,
@@ -1474,7 +1469,7 @@ public sealed class LatexMeasurementTests
     {
         public int RequestCount { get; private set; }
 
-        public Task<LatexMeasurementRunResult> MeasureAsync(
+        public Task<ILatexMeasurementRunResult> MeasureAsync(
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
             IProgressReporter progress,
@@ -1494,7 +1489,7 @@ public sealed class LatexMeasurementTests
                 progress.Report(new(i + 1, requests.Count));
             }
             cancellation.Cancel();
-            return Task.FromResult<LatexMeasurementRunResult>(
+            return Task.FromResult<ILatexMeasurementRunResult>(
                 new SuccessfulLatexMeasurementRun(result));
         }
     }

@@ -244,16 +244,17 @@ public sealed class CvGenerationCommand
                     latexExecutionOptions,
                     progress,
                     cancellationToken);
-                if (artifactResult is CvFailurePresentation failure)
+                if (artifactResult is ArtifactGenerationFailure failure)
                 {
-                    failurePresentation = failure;
+                    failurePresentation = failure.Presentation;
                     return new Dictionary<CvArtifactKind, string>();
                 }
                 if (artifactResult is PublishedArtifactPaths published)
                 {
                     return published.Paths;
                 }
-                throw new InvalidOperationException("The artifact generation result union is empty.");
+                throw new InvalidOperationException(
+                    $"Unsupported artifact generation result implementation '{artifactResult.GetType().FullName}'.");
             },
             cancellationToken);
 
@@ -342,7 +343,7 @@ public sealed class CvGenerationCommand
         return new(modules);
     }
 
-    private static async Task<ArtifactGenerationResult>
+    private static async Task<IArtifactGenerationResult>
         GenerateAndPublishArtifactsAsync(
             CvArtifactPlan artifactPlan,
             CvDataModel model,
@@ -402,7 +403,8 @@ public sealed class CvGenerationCommand
                         if (artifacts is not GeneratedCvArtifacts generatedArtifacts)
                         {
                             retainStagingDirectory = true;
-                            return CvFailurePresenter.Present(artifacts);
+                            return new ArtifactGenerationFailure(
+                                CvFailurePresenter.Present(artifacts));
                         }
                         stagedArtifactPaths.Add(
                             artifact.Kind,
@@ -529,9 +531,11 @@ public sealed class CvGenerationCommand
 
 }
 
-internal sealed record PublishedArtifactPaths(Dictionary<CvArtifactKind, string> Paths);
+internal interface IArtifactGenerationResult;
 
-internal union ArtifactGenerationResult(PublishedArtifactPaths, CvFailurePresentation);
+internal sealed record PublishedArtifactPaths(Dictionary<CvArtifactKind, string> Paths) : IArtifactGenerationResult;
+
+internal sealed record ArtifactGenerationFailure(CvFailurePresentation Presentation) : IArtifactGenerationResult;
 
 internal sealed class ExpectedCliFailure(string message, int exitCode) : Exception(message)
 {

@@ -19,7 +19,7 @@ internal static class LatexResultTestExtensions
             progress,
             LatexExecutionOptions.Empty,
             cancellationToken);
-        return Assert.IsType<CvMeasurementSnapshot>(result.Value);
+        return Assert.IsType<CvMeasurementSnapshot>(result);
     }
 
     public static async Task<IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight>> MeasureAsync(
@@ -35,6 +35,6 @@ internal static class LatexResultTestExtensions
             progress,
             LatexExecutionOptions.Empty,
             cancellationToken);
-        return Assert.IsType<SuccessfulLatexMeasurementRun>(result.Value).Measurements;
+        return Assert.IsType<SuccessfulLatexMeasurementRun>(result).Measurements;
     }
 }

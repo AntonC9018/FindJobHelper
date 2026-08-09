@@ -30,13 +30,13 @@ public sealed class LatexFailureClassifierTests
 
         var failure = Assert.IsType<IncompleteLatexInstallation>(result);
         var requirement = Assert.IsType<ExecutableLatexRequirement>(
-            failure.MissingRequirement.Value);
+            failure.MissingRequirement);
         Assert.Equal(executable, requirement.Name.Value);
         Assert.Equal(phase, failure.Phase);
         Assert.Equal("/diagnostics", failure.DiagnosticDirectory);
         Assert.EndsWith(
             "Make sure all LaTeX dependencies are installed, run ./scripts/setup-latex.sh, then retry.",
-            CvFailurePresenter.Present(new CvMeasurementResult(failure)).Message,
+            CvFailurePresenter.Present((ICvMeasurementResult)failure).Message,
             StringComparison.Ordinal);
     }
 
@@ -63,7 +63,7 @@ public sealed class LatexFailureClassifierTests
                 Options);
 
             Assert.NotNull(failure);
-            Assert.IsType(expectedRequirementType, failure.MissingRequirement.Value);
+            Assert.IsType(expectedRequirementType, failure.MissingRequirement);
             Assert.False(string.IsNullOrWhiteSpace(failure.Diagnostic));
         }
     }
@@ -91,7 +91,7 @@ public sealed class LatexFailureClassifierTests
             "/diagnostics",
             Options);
 
-        Assert.IsType<TexFileLatexRequirement>(failure!.MissingRequirement.Value);
+        Assert.IsType<TexFileLatexRequirement>(failure!.MissingRequirement);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public sealed class LatexFailureClassifierTests
             "/diagnostics",
             Options);
 
-        Assert.IsType<TexFileLatexRequirement>(failure!.MissingRequirement.Value);
+        Assert.IsType<TexFileLatexRequirement>(failure!.MissingRequirement);
     }
 
     [Fact]
@@ -130,24 +130,24 @@ public sealed class LatexFailureClassifierTests
 
         Assert.EndsWith(
             "Make sure all LaTeX dependencies are installed, then retry.",
-            CvFailurePresenter.Present(new CvMeasurementResult(failure!)).Message,
+            CvFailurePresenter.Present((ICvMeasurementResult)failure!).Message,
             StringComparison.Ordinal);
     }
 
     [Fact]
-    public void EmptyNestedUnionIsRejectedAtConsumptionBoundary()
+    public void UnknownRequirementIsRejectedAtConsumptionBoundary()
     {
-        LatexRequirement requirement = default;
+        ILatexRequirement requirement = new UnsupportedRequirement();
 
         Assert.Throws<InvalidOperationException>(() => Describe(requirement));
 
-        static string Describe(LatexRequirement value) => value switch
+        static string Describe(ILatexRequirement value) => value switch
         {
             ExecutableLatexRequirement executable => executable.Name.Value,
             TexFileLatexRequirement file => file.FileName.Value,
             FontLatexRequirement font => font.FamilyName.Value,
             BabelLanguageLatexRequirement language => language.LanguageName.Value,
-            _ => throw new InvalidOperationException("The union is empty."),
+            _ => throw new InvalidOperationException($"Unsupported requirement '{value.GetType().FullName}'."),
         };
     }
 
@@ -174,7 +174,7 @@ public sealed class LatexFailureClassifierTests
                 "setup"),
             CancellationToken.None);
 
-        var failure = Assert.IsType<IncompleteLatexInstallation>(result.Value);
+        var failure = Assert.IsType<IncompleteLatexInstallation>(result);
         try
         {
             Assert.True(Directory.Exists(failure.DiagnosticDirectory));
@@ -215,4 +215,6 @@ public sealed class LatexFailureClassifierTests
 
         Assert.False(Directory.Exists(workingDirectory));
     }
+
+    private sealed class UnsupportedRequirement : ILatexRequirement;
 }
