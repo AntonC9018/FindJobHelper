@@ -8,37 +8,47 @@
     <ContentTargetFolders>content</ContentTargetFolders>
     <NoDefaultExcludes>true</NoDefaultExcludes>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-    <TemplateStagingDirectory>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\template-content\</TemplateStagingDirectory>
+    <TemplateProviderProjectDirectory>src\FindJobWorkspace.Provider</TemplateProviderProjectDirectory>
+    <TemplateProviderProjectName>FindJobWorkspace.Provider.csproj</TemplateProviderProjectName>
+    <TemplateProviderProject>$(TemplateProviderProjectDirectory)\$(TemplateProviderProjectName)</TemplateProviderProject>
+    <TemplateToolManifestDirectory>.config</TemplateToolManifestDirectory>
+    <TemplateToolManifestName>dotnet-tools.json</TemplateToolManifestName>
+    <TemplateToolManifest>$(TemplateToolManifestDirectory)\$(TemplateToolManifestName)</TemplateToolManifest>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="All" />
+    <Content Include="content\**\*"
+             Exclude="content\$(TemplateProviderProject);content\$(TemplateToolManifest)"
+             Pack="true"
+             PackagePath="content" />
     <Content Include="..\..\scripts\setup-latex.sh" Pack="true" PackagePath="content\scripts\setup-latex.sh" Link="content\scripts\setup-latex.sh" />
     <Compile Remove="content\**\*.cs" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
+  <!-- Stamp the exact Engine package version into staged copies so packing never modifies tracked template source. -->
   <Target Name="StageVersionedTemplateContent" BeforeTargets="_GetPackageFiles" DependsOnTargets="MinVer">
-    <RemoveDir Directories="$(TemplateStagingDirectory)" />
-    <ItemGroup>
-      <_TemplateSource Include="content\**\*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(_TemplateSource)"
-          DestinationFiles="@(_TemplateSource->'$(TemplateStagingDirectory)%(RecursiveDir)%(Filename)%(Extension)')" />
     <PropertyGroup>
-      <_StagedProviderProject>$(TemplateStagingDirectory)src\FindJobWorkspace.Provider\FindJobWorkspace.Provider.csproj</_StagedProviderProject>
-      <_StagedToolManifest>$(TemplateStagingDirectory).config\dotnet-tools.json</_StagedToolManifest>
+      <_VersionedTemplateDirectory>$(MSBuildProjectDirectory)\obj\$(Configuration)\versioned-template\</_VersionedTemplateDirectory>
+      <_StagedProviderProject>$(_VersionedTemplateDirectory)$(TemplateProviderProject)</_StagedProviderProject>
+      <_StagedToolManifest>$(_VersionedTemplateDirectory)$(TemplateToolManifest)</_StagedToolManifest>
     </PropertyGroup>
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_StagedProviderProject)'));$([System.IO.Path]::GetDirectoryName('$(_StagedToolManifest)'))" />
+    <Copy SourceFiles="content\$(TemplateProviderProject)"
+          DestinationFiles="$(_StagedProviderProject)" />
+    <Copy SourceFiles="content\$(TemplateToolManifest)"
+          DestinationFiles="$(_StagedToolManifest)" />
     <XmlPoke XmlInputPath="$(_StagedProviderProject)"
              Query="/Project/ItemGroup/PackageReference[@Include='Anton.FindJobHelper.Core']/@Version"
              Value="[$(PackageVersion)]" />
-    <PropertyGroup>
-      <_ToolManifestContents>$([System.IO.File]::ReadAllText('$(_StagedToolManifest)').Replace('&quot;version&quot;: &quot;0.1.0&quot;', '&quot;version&quot;: &quot;$(PackageVersion)&quot;'))</_ToolManifestContents>
-    </PropertyGroup>
-    <WriteLinesToFile File="$(_StagedToolManifest)"
-                      Lines="$(_ToolManifestContents)"
-                      Overwrite="true" />
+    <JsonPoke ContentPath="$(_StagedToolManifest)"
+              Query="$.tools['anton.findjobhelper.cli'].version"
+              Value="$(PackageVersion)" />
     <ItemGroup>
-      <_StagedTemplateContent Include="$(TemplateStagingDirectory)**\*" />
-      <Content Include="@(_StagedTemplateContent)" Pack="true" PackagePath="content">
-        <Link>%(_StagedTemplateContent.RecursiveDir)%(_StagedTemplateContent.Filename)%(_StagedTemplateContent.Extension)</Link>
+      <Content Include="$(_StagedProviderProject)" Pack="true" PackagePath="content\$(TemplateProviderProjectDirectory)">
+        <Link>$(TemplateProviderProjectName)</Link>
+      </Content>
+      <Content Include="$(_StagedToolManifest)" Pack="true" PackagePath="content\$(TemplateToolManifestDirectory)">
+        <Link>$(TemplateToolManifestName)</Link>
       </Content>
     </ItemGroup>
   </Target>
