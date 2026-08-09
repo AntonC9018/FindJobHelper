@@ -34,6 +34,7 @@ internal static class LatexResultTestExtensions
             templatePath,
             requests,
             progress,
+            LatexFontOptions.Default,
             LatexExecutionOptions.Empty,
             cancellationToken);
         return Assert.IsType<SuccessfulLatexMeasurementRun>(result).Measurements;

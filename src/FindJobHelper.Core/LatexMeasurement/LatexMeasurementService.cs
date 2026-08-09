@@ -105,6 +105,7 @@ public sealed class LatexMeasurementService
                     offset: completedWorkUnits,
                     length: requests.Length,
                     targetTotal: totalWorkUnits),
+                fontOptions,
                 executionOptions,
                 cancellationToken);
             IReadOnlyDictionary<MeasurementCorrelationId, LatexHeight> measured;

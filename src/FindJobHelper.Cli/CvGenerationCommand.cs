@@ -93,6 +93,13 @@ public sealed class CvGenerationCommand
                 isDebug: arguments.Debug,
                 openInOs: arguments.Open,
                 latexBinDirectory: arguments.LatexBinDirectory,
+                fontConfiguration: LatexFontConfigurationResolver.Resolve(
+                    mainFlag: arguments.MainFont,
+                    sansFlag: arguments.SansFont,
+                    monoFlag: arguments.MonoFont,
+                    mainEnvironment: Environment.GetEnvironmentVariable(LatexFontConfigurationResolver.MainFontEnvironmentVariable),
+                    sansEnvironment: Environment.GetEnvironmentVariable(LatexFontConfigurationResolver.SansFontEnvironmentVariable),
+                    monoEnvironment: Environment.GetEnvironmentVariable(LatexFontConfigurationResolver.MonoFontEnvironmentVariable)),
                 cancellationToken: cancellationToken);
         }
         catch (CvConfigurationException ex)
@@ -103,6 +110,11 @@ public sealed class CvGenerationCommand
         catch (ExperienceDatabaseProviderLoadException ex)
         {
             Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
+        catch (LatexFontConfigurationException ex)
+        {
+            Console.Error.WriteLine($"Configuration error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
         catch (Exception ex)
@@ -120,6 +132,7 @@ public sealed class CvGenerationCommand
         bool isDebug,
         bool openInOs,
         string? latexBinDirectory,
+        ResolvedLatexFontConfiguration fontConfiguration,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
@@ -219,7 +232,7 @@ public sealed class CvGenerationCommand
                     currentModel,
                     templatePath,
                     progress.Reporter(CvGenerationModule.ComputingHeights),
-                    LatexFontOptions.Default,
+                    fontConfiguration.Options,
                     latexExecutionOptions,
                     cancellationToken);
                 if (measurementResult is not CvMeasurementSnapshot measurementSnapshot)
@@ -242,6 +255,7 @@ public sealed class CvGenerationCommand
                     searchConfiguration.PageCount,
                     searchConfiguration.PageLayout,
                     latexExecutables.Paths,
+                    fontConfiguration.Options,
                     latexExecutionOptions,
                     progress,
                     cancellationToken);
@@ -353,6 +367,7 @@ public sealed class CvGenerationCommand
             CvPageCount pageCount,
             CvPageLayout? pageLayout,
             LatexExecutablePaths latexExecutables,
+            LatexFontOptions fontOptions,
             LatexExecutionOptions latexExecutionOptions,
             CvGenerationProgressContext progress,
             CancellationToken cancellationToken)
@@ -394,6 +409,7 @@ public sealed class CvGenerationCommand
                                 PageCount = pageCount,
                                 PageLayout = pageLayout,
                                 LatexExecutables = latexExecutables,
+                                FontOptions = fontOptions,
                                 ExecutionOptions = latexExecutionOptions,
                             },
                             new(
@@ -601,4 +617,89 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
         "latex-bin-directory",
         Description = "Directory containing both latexmk and xelatex. Overrides FINDJOBHELPER_LATEX_BIN_DIRECTORY and automatic discovery.")]
     public string? LatexBinDirectory { get; set; }
+
+    [Option("main-font", Description = "LaTeX main font family.")]
+    public string? MainFont { get; set; }
+
+    [Option("sans-font", Description = "LaTeX sans-serif font family.")]
+    public string? SansFont { get; set; }
+
+    [Option("mono-font", Description = "LaTeX monospaced font family.")]
+    public string? MonoFont { get; set; }
+}
+
+internal sealed record ResolvedLatexFontConfiguration(
+    LatexFontOptions Options,
+    ManuallySpecifiedLatexFontRoles ManuallySpecifiedRoles);
+
+internal sealed class LatexFontConfigurationException(string message) : Exception(message);
+
+internal static class LatexFontConfigurationResolver
+{
+    public const string MainFontEnvironmentVariable = "CV_MAIN_FONT";
+    public const string SansFontEnvironmentVariable = "CV_SANS_FONT";
+    public const string MonoFontEnvironmentVariable = "CV_MONO_FONT";
+
+    public static ResolvedLatexFontConfiguration Resolve(
+        string? mainFlag,
+        string? sansFlag,
+        string? monoFlag,
+        string? mainEnvironment,
+        string? sansEnvironment,
+        string? monoEnvironment)
+    {
+        var roles = ManuallySpecifiedLatexFontRoles.None;
+        var main = ResolveRole(
+            flag: mainFlag, environment: mainEnvironment,
+            defaultValue: LatexFontOptions.Default.MainFontFamily,
+            flagName: "--main-font", environmentName: MainFontEnvironmentVariable,
+            role: ManuallySpecifiedLatexFontRoles.Main, roles: ref roles);
+        var sans = ResolveRole(
+            flag: sansFlag, environment: sansEnvironment,
+            defaultValue: LatexFontOptions.Default.SansFontFamily,
+            flagName: "--sans-font", environmentName: SansFontEnvironmentVariable,
+            role: ManuallySpecifiedLatexFontRoles.Sans, roles: ref roles);
+        var mono = ResolveRole(
+            flag: monoFlag, environment: monoEnvironment,
+            defaultValue: LatexFontOptions.Default.MonoFontFamily,
+            flagName: "--mono-font", environmentName: MonoFontEnvironmentVariable,
+            role: ManuallySpecifiedLatexFontRoles.Mono, roles: ref roles);
+        return new(
+            new LatexFontOptions(
+                mainFontFamily: main,
+                sansFontFamily: sans,
+                monoFontFamily: mono),
+            roles);
+    }
+
+    private static LatexFontFamilyName ResolveRole(
+        string? flag,
+        string? environment,
+        LatexFontFamilyName defaultValue,
+        string flagName,
+        string environmentName,
+        ManuallySpecifiedLatexFontRoles role,
+        ref ManuallySpecifiedLatexFontRoles roles)
+    {
+        var value = flag ?? environment;
+        if (value is null)
+        {
+            return defaultValue;
+        }
+        var source = flag is not null ? flagName : environmentName;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new LatexFontConfigurationException($"{source} must not be blank.");
+        }
+        try
+        {
+            var family = new LatexFontFamilyName(value);
+            roles = ManuallySpecifiedLatexFontRolesHelper.Add(roles, role);
+            return family;
+        }
+        catch (ArgumentException exception)
+        {
+            throw new LatexFontConfigurationException($"Invalid value for {source}: {exception.Message}");
+        }
+    }
 }

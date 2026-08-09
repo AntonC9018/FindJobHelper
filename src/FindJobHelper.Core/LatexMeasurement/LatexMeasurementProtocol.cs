@@ -21,6 +21,7 @@ internal interface ILatexMeasurementRunner
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
         IProgressReporter progress,
+        LatexFontOptions fontOptions,
         LatexExecutionOptions options,
         CancellationToken cancellationToken);
 }
@@ -44,10 +45,12 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
         string templatePath,
         IReadOnlyList<LatexMeasurementRequest> requests,
         IProgressReporter progress,
+        LatexFontOptions fontOptions,
         LatexExecutionOptions options,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(fontOptions);
         ArgumentNullException.ThrowIfNull(options);
         progress.Report(new(
             CompletedWorkUnits: 0,
@@ -67,7 +70,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
         const string resultFileName = "measurement-results.txt";
         try
         {
-            var source = LatexMeasurementDocument.Generate(templatePath, resultFileName, requests);
+            var source = LatexMeasurementDocument.Generate(templatePath, resultFileName, requests, fontOptions);
             await File.WriteAllTextAsync(
                 Path.Combine(workingDirectory, texFileName),
                 source,
@@ -294,11 +297,14 @@ internal static class LatexMeasurementDocument
     public static string Generate(
         string templatePath,
         string resultFileName,
-        IReadOnlyList<LatexMeasurementRequest> requests)
+        IReadOnlyList<LatexMeasurementRequest> requests,
+        LatexFontOptions fontOptions)
     {
+        ArgumentNullException.ThrowIfNull(fontOptions);
         var normalizedTemplatePath = templatePath.Replace('\\', '/');
         var source = new StringBuilder();
         source.Append("\\input{").Append(normalizedTemplatePath).AppendLine("}");
+        source.AppendLine(LatexFontConfigurationRenderer.Render(fontOptions));
         source.AppendLine(@"\begin{document}");
         source.AppendLine(@"\pagestyle{fancy}");
         source.AppendLine(@"\newwrite\fjhmeasurementresults");
