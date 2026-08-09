@@ -59,6 +59,25 @@ To remove the default installation, delete only
 Native Windows setup is unsupported; users may still select an existing compatible
 LaTeX binary directory.
 
+### LaTeX font configuration
+
+PDF generation uses XeLaTeX and supports choosing an installed font family for
+each LaTeX role:
+
+| Role | CLI option | Environment variable | Default |
+| --- | --- | --- | --- |
+| Main (serif) | `--main-font` | `CV_MAIN_FONT` | `Liberation Serif` |
+| Sans serif | `--sans-font` | `CV_SANS_FONT` | `Liberation Sans` |
+| Monospaced | `--mono-font` | `CV_MONO_FONT` | `Latin Modern Mono` |
+
+Each role is resolved independently. A CLI option takes precedence over its
+environment variable, and the environment variable takes precedence over the
+code default. A supplied option or environment variable must not be blank.
+
+Values must be installed font family names. Font file paths, `.otf`, `.ttf`, or
+`.ttc` inputs, and arbitrary `fontspec` expressions are unsupported. XeLaTeX is
+the supported engine for PDF generation.
+
 ## Create a fictional Workspace
 
 ```powershell
