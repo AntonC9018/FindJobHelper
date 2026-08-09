@@ -4,6 +4,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="PdfPig" Version="0.1.15" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="..\..\src\FindJobHelper.Cli\data\cv_template_config.tex"
               Link="data\cv_template_config.tex"
               CopyToOutputDirectory="Always" />
