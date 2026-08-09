@@ -83,6 +83,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
             try
             {
                 result = await Cli.Wrap(_executables.XeLatex)
+                    .DisableOutputWrapping()
                     .WithArguments([
                         "-interaction=nonstopmode",
                         "-halt-on-error",
@@ -179,6 +180,12 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 }
             }
             catch (DirectoryNotFoundException)
+            {
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
             {
             }
         }

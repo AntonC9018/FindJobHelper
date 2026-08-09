@@ -403,8 +403,12 @@ public sealed class CvGenerationCommand
                         if (artifacts is not GeneratedCvArtifacts generatedArtifacts)
                         {
                             retainStagingDirectory = true;
+                            var presentation = CvFailurePresenter.Present(artifacts);
                             return new ArtifactGenerationFailure(
-                                CvFailurePresenter.Present(artifacts));
+                                presentation with
+                                {
+                                    Message = $"{presentation.Message} Retained generation files: '{stagingDirectory}'.",
+                                });
                         }
                         stagedArtifactPaths.Add(
                             artifact.Kind,
@@ -464,9 +468,15 @@ public sealed class CvGenerationCommand
 
             return new PublishedArtifactPaths(publishedArtifactPaths);
         }
-        catch (ExpectedCliFailure)
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
         {
             retainStagingDirectory = true;
+            Console.Error.WriteLine(
+                $"Retained generation files: '{stagingDirectory}'.");
             throw;
         }
         finally

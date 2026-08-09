@@ -13,8 +13,8 @@ public sealed class CvFailurePresenterTests
         var failure = new IncompleteLatexInstallation(
             new TexFileLatexRequirement(new("needspace.sty")),
             LatexExecutionPhase.FinalRendering,
-            "missing file",
-            "/diagnostics",
+            diagnostic: "missing file",
+            diagnosticDirectory: "/diagnostics",
             options);
 
         var presentation = CvFailurePresenter.Present((ICvRenderResult)failure);
@@ -28,7 +28,9 @@ public sealed class CvFailurePresenterTests
     [Fact]
     public void RenderLayoutFailureUsesFactsAndValidationDisposition()
     {
-        ICvRenderResult result = new EventOverflowFailure("Work Experience", "Large event");
+        ICvRenderResult result = new EventOverflowFailure(
+            Section: "Work Experience",
+            Event: "Large event");
 
         var presentation = CvFailurePresenter.Present(result);
 

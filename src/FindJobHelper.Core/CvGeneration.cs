@@ -43,18 +43,13 @@ internal static class CvLatexErrors
         => output.Contains(EventPageOverflowMarker, StringComparison.Ordinal);
 
     public static CvSectionPageOverflowException CreateSectionPageOverflowException(
-        string output,
-        CvDataModel? model = null)
+        string output)
     {
         var match = Regex.Match(
             output,
             @"FJH_SECTION_PAGE_OVERFLOW:\s*([^\r\n.]+)",
             RegexOptions.CultureInvariant);
         var label = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
-        if (model is not null)
-        {
-            label = CompleteSectionName(label);
-        }
         return new(label.Length == 0 ? null : label);
     }
 
@@ -68,10 +63,6 @@ internal static class CvLatexErrors
             RegexOptions.CultureInvariant);
         var section = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
         var @event = match.Success ? match.Groups[2].Value.Trim() : string.Empty;
-        if (model is not null)
-        {
-            section = CompleteSectionName(section);
-        }
         if (model is not null
             && Enum.TryParse<Section>(section, ignoreCase: false, out var parsedSection))
         {
@@ -103,17 +94,19 @@ internal static class CvLatexErrors
             @event.Length == 0 ? null : @event);
     }
 
-    private static string CompleteSectionName(string value)
-    {
-        if (value.Length == 0)
-        {
-            return value;
-        }
+}
 
-        var names = Enum.GetNames<Section>();
-        var match = names.SingleOrDefault(name => name.StartsWith(value, StringComparison.Ordinal));
-        return match ?? value;
-    }
+internal static class LatexProcessEnvironment
+{
+    // TeX folds output at max_print_line. 999 is the documented effectively
+    // unbounded value and remains portable across supported TeX distributions.
+    public const string MaxPrintLine = "999";
+
+    public static Command DisableOutputWrapping(this Command command) =>
+        OperatingSystem.IsWindows()
+            ? command
+            : command.WithEnvironmentVariables(environment =>
+                environment.Set("max_print_line", MaxPrintLine));
 }
 
 internal static partial class LatexLogPageCountParser
@@ -321,7 +314,8 @@ public static class CvTemplate
             progress,
             renderProgressPlan);
         var executables = p.LatexExecutables ?? LatexExecutablePaths.FromPath;
-        var latexmk = Cli.Wrap(executables.Latexmk);
+        var latexmk = Cli.Wrap(executables.Latexmk)
+            .DisableOutputWrapping();
         latexmk = latexmk.WithArguments([
             "-xelatex",
             "-latexoption=-halt-on-error",
@@ -403,7 +397,7 @@ public static class CvTemplate
             }
             if (CvLatexErrors.ContainsSectionPageOverflowMarker(latexLog))
             {
-                var exception = CvLatexErrors.CreateSectionPageOverflowException(latexLog, p.Model);
+                var exception = CvLatexErrors.CreateSectionPageOverflowException(latexLog);
                 return new SectionOverflowFailure(exception.SectionLabel);
             }
             if (CvLatexErrors.ContainsEventPageOverflowMarker(latexLog))
