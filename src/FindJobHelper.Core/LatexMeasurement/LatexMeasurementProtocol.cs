@@ -85,6 +85,7 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                 result = await Cli.Wrap(_executables.XeLatex)
                     .DisableOutputWrapping()
                     .WithArguments([
+                        .. LatexProcessEnvironment.XeLatexArguments,
                         "-interaction=nonstopmode",
                         "-halt-on-error",
                         "-file-line-error",
