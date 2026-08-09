@@ -13,8 +13,6 @@ public readonly record struct LatexExecutableName(string Value);
 
 public readonly record struct LatexTexFileName(string Value);
 
-public readonly record struct LatexFontFamilyName(string Value);
-
 public readonly record struct LatexLanguageName(string Value);
 
 public interface ILatexRequirement;
