@@ -7,7 +7,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootPath>$(MSBuildThisFileDirectory)</RootPath>
-        <Version>0.1.0</Version>
+        <MinVerTagPrefix>v</MinVerTagPrefix>
+        <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
         <Authors>Anton C.</Authors>
         <Company>AntonC9018</Company>
         <RepositoryType>git</RepositoryType>
@@ -18,6 +19,7 @@
         <Deterministic>true</Deterministic>
     </PropertyGroup>
     <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="All" />
         <None Include="$(RootPath)README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 </Project>

@@ -1,0 +1,27 @@
+profile = "custom"
+
+[msbuild]
+project = [
+  "src/FindJobHelper.Core/FindJobHelper.Core.csproj",
+  "templates/FindJobWorkspace/Anton.FindJobHelper.Templates.csproj",
+  "src/FindJobHelper.Cli/FindJobHelper.Cli.csproj",
+]
+configuration = "Release"
+
+[msbuild.properties]
+ContinuousIntegrationBuild = true
+
+[test]
+enable = false
+run_tests = false
+run_tests_for_debug = false
+
+[github]
+user = "AntonC9018"
+repo = "FindJobHelper"
+version_prefix = "v"
+branches = ["main"]
+
+[nuget]
+trusted_publishing = true
+user = "AntonC9018"

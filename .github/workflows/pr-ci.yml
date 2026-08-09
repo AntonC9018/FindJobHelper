@@ -1,0 +1,23 @@
+name: Pull request CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Restore, build, and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore FindJobHelper.sln
+      - run: dotnet build FindJobHelper.sln -c Release --no-restore -p:ContinuousIntegrationBuild=true
+      - name: Run inexpensive tests
+        run: dotnet test FindJobHelper.sln -c Release --no-build --no-restore --filter 'FullyQualifiedName!~LatexMeasurementTests&FullyQualifiedName!~CvGenerationCliEndToEndTests'

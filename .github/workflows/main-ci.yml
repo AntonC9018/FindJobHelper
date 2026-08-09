@@ -1,0 +1,54 @@
+name: Main CI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Build, test, and real render
+    runs-on: ubuntu-latest
+    env:
+      PersonalInfo__FirstName: Alex
+      PersonalInfo__LastName: Example
+      PersonalInfo__Profession: Example Software Engineer
+      PersonalInfo__City: Example City
+      PersonalInfo__Country: Example Country
+      PersonalInfo__Email: alex@example.test
+      PersonalInfo__Phone: 202-555-0100
+      PersonalInfo__GitHub: https://example.test/github
+      PersonalInfo__LinkedIn: https://example.test/linkedin
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install and verify the canonical LaTeX toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/setup-latex.sh
+          source "$HOME/.local/share/findjobhelper/texlive/2026/findjobhelper-env.sh"
+          printf '%s\n' "$(dirname "$(command -v latexmk)")" >> "$GITHUB_PATH"
+          ./scripts/setup-latex.sh --check
+      - run: dotnet restore FindJobHelper.sln
+      - run: dotnet build FindJobHelper.sln -c Release --no-restore -p:ContinuousIntegrationBuild=true
+      - name: Run complete test suite
+        run: dotnet test FindJobHelper.sln -c Release --no-build --no-restore
+      - name: Render a fictional CV through the real CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p real-render
+          dotnet run --project src/FindJobHelper.Cli/FindJobHelper.Cli.csproj -c Release --no-build --no-restore -- \
+            --config tests/FindJobHelper.Cli.Tests/data/cli-e2e-config.json \
+            --experience-database tests/ProviderFixtures/SyntheticProvider/bin/Release/net11.0/SyntheticProvider.dll \
+            --output-directory real-render \
+            --latex-bin-directory "$(dirname "$(command -v latexmk)")"
+          test -s real-render/ExampleAlex.pdf
+          test -s "$HOME/.local/share/findjobhelper/latex-height-cache.sqlite3"
