@@ -345,9 +345,14 @@ internal static partial class LatexFailureClassifier
         }
 
         var familyName = match.Groups[1].Value;
-        var requirement = requirements.FirstOrDefault(
-            item => item is FontLatexRequirement font
-                && string.Equals(font.FamilyName.Value, familyName, StringComparison.OrdinalIgnoreCase));
+        var requirement = requirements
+            .OfType<FontLatexRequirement>()
+            .Where(font => string.Equals(
+                font.FamilyName.Value,
+                familyName,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(static font => font.IsManuallySpecified)
+            .FirstOrDefault();
         if (requirement is not null)
         {
             yield return new(match.Index, requirement, match.Value.Trim());

@@ -102,6 +102,25 @@ public sealed class LatexFailureClassifierTests
     }
 
     [Fact]
+    public void DuplicateMissingFontPrefersManuallySpecifiedRequirement()
+    {
+        var options = new LatexExecutionOptions([
+            new FontLatexRequirement(new("Liberation Serif")),
+            new FontLatexRequirement(new("liberation serif"), IsManuallySpecified: true),
+        ]);
+
+        var failure = LatexFailureClassifier.ClassifyLog(
+            "Package fontspec Error:\nThe font \"Liberation Serif\" cannot be found.",
+            LatexExecutionPhase.FinalRendering,
+            "/diagnostics",
+            options);
+
+        Assert.Equal(
+            "Manually specified LaTeX font is missing: “liberation serif”.",
+            CvFailurePresenter.Present((ICvRenderResult)failure!).Message);
+    }
+
+    [Fact]
     public void DefaultMissingFontRetainsInstallationPresentation()
     {
         var failure = LatexFailureClassifier.ClassifyLog(
