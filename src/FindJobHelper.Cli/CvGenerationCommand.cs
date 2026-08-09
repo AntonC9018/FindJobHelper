@@ -160,7 +160,7 @@ public sealed class CvGenerationCommand
         Console.WriteLine($"LaTeX tools selected by {latexExecutables.SelectionSource}: {latexExecutables.Directory}");
         Console.WriteLine($"latexmk: {latexExecutables.Paths.Latexmk}");
         Console.WriteLine($"xelatex: {latexExecutables.Paths.XeLatex}");
-        var latexExecutionOptions = CreateLatexExecutionOptions();
+        var latexExecutionOptions = CreateLatexExecutionOptions(fontConfiguration);
         await using var serviceProvider = await AppConfiguration.CreateApp(
             latexExecutables.Paths,
             cancellationToken);
@@ -532,7 +532,8 @@ public sealed class CvGenerationCommand
         "data",
         "cv-selection.example.json");
 
-    private static LatexExecutionOptions CreateLatexExecutionOptions() => new(
+    private static LatexExecutionOptions CreateLatexExecutionOptions(
+        ResolvedLatexFontConfiguration fontConfiguration) => new(
         // Keep this declaration synchronized with scripts/setup-latex.sh. A match
         // means the supported installation is incomplete; custom resources that
         // are not declared here remain ordinary LaTeX compilation failures.
@@ -550,8 +551,21 @@ public sealed class CvGenerationCommand
             new TexFileLatexRequirement(new("wrapfig.sty")),
             new TexFileLatexRequirement(new("varwidth.sty")),
             new TexFileLatexRequirement(new("environ.sty")),
-            new FontLatexRequirement(new("Liberation Serif")),
-            new FontLatexRequirement(new("Liberation Sans")),
+            new FontLatexRequirement(
+                fontConfiguration.Options.MainFontFamily,
+                IsManuallySpecified: ManuallySpecifiedLatexFontRolesHelper.Contains(
+                    fontConfiguration.ManuallySpecifiedRoles,
+                    ManuallySpecifiedLatexFontRoles.Main)),
+            new FontLatexRequirement(
+                fontConfiguration.Options.SansFontFamily,
+                IsManuallySpecified: ManuallySpecifiedLatexFontRolesHelper.Contains(
+                    fontConfiguration.ManuallySpecifiedRoles,
+                    ManuallySpecifiedLatexFontRoles.Sans)),
+            new FontLatexRequirement(
+                fontConfiguration.Options.MonoFontFamily,
+                IsManuallySpecified: ManuallySpecifiedLatexFontRolesHelper.Contains(
+                    fontConfiguration.ManuallySpecifiedRoles,
+                    ManuallySpecifiedLatexFontRoles.Mono)),
             new BabelLanguageLatexRequirement(new("romanian")),
         ],
         setupCommandHint: "./scripts/setup-latex.sh");
