@@ -95,9 +95,9 @@ public sealed class CvGenerationCommand
                 latexBinDirectory: arguments.LatexBinDirectory,
                 fontConfiguration: LatexFontConfigurationResolver.Resolve(
                     flags: arguments.FontFlags,
-                    environments: LatexFontConfigurationResolver.Settings
+                    environments: new(LatexFontConfigurationResolver.Settings.Values
                         .Select(setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable))
-                        .ToArray()),
+                        .ToArray())),
                 cancellationToken: cancellationToken);
         }
         catch (CvConfigurationException ex)
@@ -554,7 +554,7 @@ public sealed class CvGenerationCommand
         ];
         requirements.AddRange(LatexFontRoles.All.Select(role => new FontLatexRequirement(
             fontConfiguration.Options[role],
-            IsManuallySpecified: fontConfiguration.ManuallySpecified[(int)role])));
+            IsManuallySpecified: fontConfiguration.ManuallySpecified[role])));
         return new(requirements, setupCommandHint: "./scripts/setup-latex.sh");
     }
 
@@ -635,38 +635,38 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
         Description = "Installed LaTeX monospaced font family. Overrides CV_MONO_FONT; default: Latin Modern Mono.")]
     public string? MonoFont { get; set; }
 
-    public IReadOnlyList<string?> FontFlags => [MainFont, SansFont, MonoFont];
+    public LatexFontRoleArray<string?> FontFlags => new([MainFont, SansFont, MonoFont]);
 }
 
 internal sealed record ResolvedLatexFontConfiguration(
     LatexFontOptions Options,
-    IReadOnlyList<bool> ManuallySpecified);
+    LatexFontRoleArray<bool> ManuallySpecified);
 
 internal sealed class LatexFontConfigurationException(string message) : Exception(message);
 
 internal static class LatexFontConfigurationResolver
 {
-    public static IReadOnlyList<LatexFontSetting> Settings { get; } =
+    public static LatexFontRoleArray<LatexFontSetting> Settings { get; } = new(
     [
         new(LatexFontRole.Main, "--main-font", "CV_MAIN_FONT"),
         new(LatexFontRole.Sans, "--sans-font", "CV_SANS_FONT"),
         new(LatexFontRole.Mono, "--mono-font", "CV_MONO_FONT"),
-    ];
+    ]);
 
     public static ResolvedLatexFontConfiguration Resolve(
-        IReadOnlyList<string?> flags,
-        IReadOnlyList<string?> environments)
+        LatexFontRoleArray<string?> flags,
+        LatexFontRoleArray<string?> environments)
     {
-        ValidateValueCount(flags, nameof(flags));
-        ValidateValueCount(environments, nameof(environments));
-        var manuallySpecified = new bool[Settings.Count];
-        var families = Settings.Select(setting => ResolveRole(
-            flag: flags[(int)setting.Role],
-            environment: environments[(int)setting.Role],
+        var manuallySpecified = new bool[LatexFontRoles.All.Length];
+        var families = Settings.Values.Select(setting => ResolveRole(
+            flag: flags[setting.Role],
+            environment: environments[setting.Role],
             defaultValue: LatexFontOptions.Default[setting.Role],
             setting: setting,
             manuallySpecified: manuallySpecified)).ToArray();
-        return new(new LatexFontOptions(families), manuallySpecified);
+        return new(
+            new LatexFontOptions(new(families)),
+            new LatexFontRoleArray<bool>(manuallySpecified));
     }
 
     private static LatexFontFamilyName ResolveRole(
@@ -698,14 +698,6 @@ internal static class LatexFontConfigurationResolver
         }
     }
 
-    private static void ValidateValueCount(IReadOnlyList<string?> values, string parameterName)
-    {
-        ArgumentNullException.ThrowIfNull(values, parameterName);
-        if (values.Count != Settings.Count)
-        {
-            throw new ArgumentException($"Expected {Settings.Count} font values.", parameterName);
-        }
-    }
 }
 
 internal sealed record LatexFontSetting(

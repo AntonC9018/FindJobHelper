@@ -46,45 +46,54 @@ public enum LatexFontRole
     Mono,
 }
 
+public readonly record struct LatexFontRoleArray<T>
+{
+    public LatexFontRoleArray(T[] values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Length != LatexFontRoles.All.Length)
+        {
+            throw new ArgumentException(
+                $"Expected {LatexFontRoles.All.Length} values, but received {values.Length}.",
+                nameof(values));
+        }
+
+        Values = values;
+    }
+
+    public T[] Values { get; }
+
+    public T this[LatexFontRole role] => Values[(int)role];
+}
+
 public static class LatexFontRoles
 {
-    public static IReadOnlyList<LatexFontRole> All { get; } = Enum.GetValues<LatexFontRole>();
-    public static IReadOnlyList<string> SetCommands { get; } =
-        ["setmainfont", "setsansfont", "setmonofont"];
-    public static IReadOnlyList<string> FamilyCommands { get; } =
-        ["rmfamily", "sffamily", "ttfamily"];
+    public static LatexFontRole[] All { get; } = Enum.GetValues<LatexFontRole>();
+    public static LatexFontRoleArray<string> SetCommands { get; } = new(
+        ["setmainfont", "setsansfont", "setmonofont"]);
+    public static LatexFontRoleArray<string> FamilyCommands { get; } = new(
+        ["rmfamily", "sffamily", "ttfamily"]);
 }
 
 public sealed record LatexFontOptions
 {
-    public static LatexFontOptions Default { get; } = new([
-        new("Liberation Serif"),
-        new("Liberation Sans"),
-        new("Latin Modern Mono"),
-    ]);
+    public static LatexFontOptions Default { get; } = new(new LatexFontRoleArray<LatexFontFamilyName>(
+        [new("Liberation Serif"), new("Liberation Sans"), new("Latin Modern Mono")]));
 
-    private readonly LatexFontFamilyName[] _families;
-
-    public LatexFontOptions(IReadOnlyList<LatexFontFamilyName> families)
+    public LatexFontOptions(LatexFontRoleArray<LatexFontFamilyName> families)
     {
-        ArgumentNullException.ThrowIfNull(families);
-        if (families.Count != LatexFontRoles.All.Count)
-        {
-            throw new ArgumentException(
-                $"Expected {LatexFontRoles.All.Count} LaTeX font families, but received {families.Count}.",
-                nameof(families));
-        }
-        if (families.Any(static family => family is null))
+        ArgumentNullException.ThrowIfNull(families.Values);
+        if (families.Values.Any(static family => family is null))
         {
             throw new ArgumentException("LaTeX font families cannot contain null.", nameof(families));
         }
 
-        _families = [.. families];
+        Families = families;
     }
 
-    public IReadOnlyList<LatexFontFamilyName> Families => _families;
+    public LatexFontRoleArray<LatexFontFamilyName> Families { get; }
 
-    public LatexFontFamilyName this[LatexFontRole role] => _families[(int)role];
+    public LatexFontFamilyName this[LatexFontRole role] => Families[role];
 }
 
 public static class LatexFontConfigurationRenderer
@@ -93,6 +102,6 @@ public static class LatexFontConfigurationRenderer
     {
         ArgumentNullException.ThrowIfNull(options);
         return string.Join('\n', LatexFontRoles.All.Select(
-            role => $"\\{LatexFontRoles.SetCommands[(int)role]}{{{options[role].Value}}}"));
+            role => $"\\{LatexFontRoles.SetCommands[role]}{{{options[role].Value}}}"));
     }
 }

@@ -5,7 +5,8 @@ namespace FindJobHelper.CVGeneration;
 internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
 {
     private const int SchemaVersion = 2;
-    private static readonly string[] FontParameterNames = ["$main_font", "$sans_font", "$mono_font"];
+    private static readonly LatexFontRoleArray<string> FontParameterNames = new(
+        ["$main_font", "$sans_font", "$mono_font"]);
     private readonly string _databasePath = databasePath;
     private readonly int _ruleVersion = ruleVersion;
 
@@ -160,7 +161,7 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
         command.Parameters.AddWithValue("$rule_version", _ruleVersion);
         foreach (var role in LatexFontRoles.All)
         {
-            command.Parameters.AddWithValue(FontParameterNames[(int)role], fonts[role].Value);
+            command.Parameters.AddWithValue(FontParameterNames[role], fonts[role].Value);
         }
     }
 
