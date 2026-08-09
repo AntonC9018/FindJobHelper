@@ -171,6 +171,7 @@ public sealed class LatexFailureClassifierTests
             "template.tex",
             [request],
             NoOpProgressReporter.Instance,
+            LatexFontOptions.Default,
             new LatexExecutionOptions(
                 [new ExecutableLatexRequirement(new("missing-xelatex"))],
                 "setup"),
@@ -214,6 +215,7 @@ public sealed class LatexFailureClassifierTests
                 "text",
                 LatexMeasurementMode.Box)],
             NoOpProgressReporter.Instance,
+            LatexFontOptions.Default,
             Options,
             cancellation.Token));
 

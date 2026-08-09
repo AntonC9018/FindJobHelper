@@ -64,6 +64,17 @@ public sealed record LatexFontOptions
     public LatexFontFamilyName MonoFontFamily { get; }
 }
 
+public static class LatexFontConfigurationRenderer
+{
+    public static string Render(LatexFontOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return $"\\setmainfont{{{options.MainFontFamily.Value}}}\n" +
+               $"\\setsansfont{{{options.SansFontFamily.Value}}}\n" +
+               $"\\setmonofont{{{options.MonoFontFamily.Value}}}";
+    }
+}
+
 [Flags]
 public enum ManuallySpecifiedLatexFontRoles
 {

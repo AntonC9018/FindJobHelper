@@ -22,6 +22,7 @@ public record struct GenerateParams()
     public CvPageLayout? PageLayout;
     public LatexExecutablePaths? LatexExecutables;
     public LatexExecutionOptions ExecutionOptions = LatexExecutionOptions.Empty;
+    public LatexFontOptions FontOptions = LatexFontOptions.Default;
 }
 
 public sealed record GeneratedCvArtifacts(string PdfPath) : ICvRenderResult;
@@ -220,6 +221,7 @@ public static class CvTemplate
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(p.ConfigFilePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(p.OutputDirectory);
+        ArgumentNullException.ThrowIfNull(p.FontOptions);
         ArgumentNullException.ThrowIfNull(progress.Tex);
         ArgumentNullException.ThrowIfNull(progress.Pdf);
         var outputDirectory = new DirectoryInfo(p.OutputDirectory);
@@ -277,6 +279,7 @@ public static class CvTemplate
 
         writer.Write($$$$"""
         \input{{{{{p.ConfigFilePath.Replace('\\', '/')}}}}}
+        {{{{LatexFontConfigurationRenderer.Render(p.FontOptions)}}}}
 
         \begin{document}
 

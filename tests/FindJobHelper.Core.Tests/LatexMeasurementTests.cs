@@ -154,7 +154,8 @@ public sealed class LatexMeasurementTests
     {
         var requests = CreateProtocolRequests();
 
-        var source = LatexMeasurementDocument.Generate("C:/template.tex", "results.txt", requests);
+        var source = LatexMeasurementDocument.Generate(
+            "C:/template.tex", "results.txt", requests, LatexFontOptions.Default);
 
         Assert.Contains(@"\input{C:/template.tex}", source);
         Assert.Contains(@"\cvsetmeasurementbox{", source);
@@ -173,7 +174,9 @@ public sealed class LatexMeasurementTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("enumitem", source);
         Assert.DoesNotContain("geometry", source);
-        Assert.DoesNotContain("setmainfont", source);
+        Assert.Contains(@"\setmainfont{Liberation Serif}", source);
+        Assert.Contains(@"\setsansfont{Liberation Sans}", source);
+        Assert.Contains(@"\setmonofont{Latin Modern Mono}", source);
     }
 
     [Fact]
@@ -188,7 +191,8 @@ public sealed class LatexMeasurementTests
         var source = LatexMeasurementDocument.Generate(
             "C:/template.tex",
             "results.txt",
-            [request]);
+            [request],
+            LatexFontOptions.Default);
 
         Assert.Contains(@"\nointerlineskip\vbox{}", source, StringComparison.Ordinal);
         Assert.DoesNotContain(@"\cvmeasurementsentinelsection", source, StringComparison.Ordinal);
@@ -1530,10 +1534,12 @@ public sealed class LatexMeasurementTests
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
             IProgressReporter progress,
+            LatexFontOptions fontOptions,
             LatexExecutionOptions options,
             CancellationToken cancellationToken)
         {
             _ = templatePath;
+            _ = fontOptions;
             _ = options;
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report(new(0, requests.Count));
@@ -1559,10 +1565,12 @@ public sealed class LatexMeasurementTests
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
             IProgressReporter progress,
+            LatexFontOptions fontOptions,
             LatexExecutionOptions options,
             CancellationToken cancellationToken)
         {
             _ = templatePath;
+            _ = fontOptions;
             _ = options;
             _ = cancellationToken;
             progress.Report(new(0, requests.Count));
@@ -1579,10 +1587,12 @@ public sealed class LatexMeasurementTests
             string templatePath,
             IReadOnlyList<LatexMeasurementRequest> requests,
             IProgressReporter progress,
+            LatexFontOptions fontOptions,
             LatexExecutionOptions options,
             CancellationToken cancellationToken)
         {
             _ = templatePath;
+            _ = fontOptions;
             _ = options;
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report(new(0, requests.Count));
