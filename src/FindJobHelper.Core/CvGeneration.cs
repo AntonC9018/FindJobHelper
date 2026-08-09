@@ -102,9 +102,21 @@ internal static class LatexProcessEnvironment
     // unbounded value and remains portable across supported TeX distributions.
     public const string MaxPrintLine = "999";
 
+    public static IEnumerable<string> LatexmkArguments =>
+        OperatingSystem.IsWindows()
+            ? ["-latexoption=--max-print-line=" + MaxPrintLine]
+            : [];
+
+    public static IEnumerable<string> XeLatexArguments =>
+        OperatingSystem.IsWindows()
+            ? ["--max-print-line=" + MaxPrintLine]
+            : [];
+
     public static Command DisableOutputWrapping(this Command command) =>
-        command.WithEnvironmentVariables(environment =>
-            environment.Set("max_print_line", MaxPrintLine));
+        OperatingSystem.IsWindows()
+            ? command
+            : command.WithEnvironmentVariables(environment =>
+                environment.Set("max_print_line", MaxPrintLine));
 }
 
 internal static partial class LatexLogPageCountParser
@@ -315,6 +327,7 @@ public static class CvTemplate
         var latexmk = Cli.Wrap(executables.Latexmk)
             .DisableOutputWrapping();
         latexmk = latexmk.WithArguments([
+            .. LatexProcessEnvironment.LatexmkArguments,
             "-xelatex",
             "-latexoption=-halt-on-error",
             "-latexoption=-interaction=nonstopmode",
