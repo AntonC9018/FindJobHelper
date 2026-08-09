@@ -632,13 +632,19 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
         Description = "Directory containing both latexmk and xelatex. Overrides FINDJOBHELPER_LATEX_BIN_DIRECTORY and automatic discovery.")]
     public string? LatexBinDirectory { get; set; }
 
-    [Option("main-font", Description = "LaTeX main font family.")]
+    [Option(
+        "main-font",
+        Description = "Installed LaTeX main font family. Overrides CV_MAIN_FONT; default: Liberation Serif.")]
     public string? MainFont { get; set; }
 
-    [Option("sans-font", Description = "LaTeX sans-serif font family.")]
+    [Option(
+        "sans-font",
+        Description = "Installed LaTeX sans-serif font family. Overrides CV_SANS_FONT; default: Liberation Sans.")]
     public string? SansFont { get; set; }
 
-    [Option("mono-font", Description = "LaTeX monospaced font family.")]
+    [Option(
+        "mono-font",
+        Description = "Installed LaTeX monospaced font family. Overrides CV_MONO_FONT; default: Latin Modern Mono.")]
     public string? MonoFont { get; set; }
 }
 
