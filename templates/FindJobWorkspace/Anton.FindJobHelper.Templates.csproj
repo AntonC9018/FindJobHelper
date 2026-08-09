@@ -8,11 +8,38 @@
     <ContentTargetFolders>content</ContentTargetFolders>
     <NoDefaultExcludes>true</NoDefaultExcludes>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <TemplateStagingDirectory>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\template-content\</TemplateStagingDirectory>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="content\**\*" Pack="true" PackagePath="content" />
     <Content Include="..\..\scripts\setup-latex.sh" Pack="true" PackagePath="content\scripts\setup-latex.sh" Link="content\scripts\setup-latex.sh" />
     <Compile Remove="content\**\*.cs" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
+  <Target Name="StageVersionedTemplateContent" BeforeTargets="_GetPackageFiles" DependsOnTargets="MinVer">
+    <RemoveDir Directories="$(TemplateStagingDirectory)" />
+    <ItemGroup>
+      <_TemplateSource Include="content\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_TemplateSource)"
+          DestinationFiles="@(_TemplateSource->'$(TemplateStagingDirectory)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <PropertyGroup>
+      <_StagedProviderProject>$(TemplateStagingDirectory)src\FindJobWorkspace.Provider\FindJobWorkspace.Provider.csproj</_StagedProviderProject>
+      <_StagedToolManifest>$(TemplateStagingDirectory).config\dotnet-tools.json</_StagedToolManifest>
+    </PropertyGroup>
+    <XmlPoke XmlInputPath="$(_StagedProviderProject)"
+             Query="/Project/ItemGroup/PackageReference[@Include='Anton.FindJobHelper.Core']/@Version"
+             Value="[$(PackageVersion)]" />
+    <PropertyGroup>
+      <_ToolManifestContents>$([System.IO.File]::ReadAllText('$(_StagedToolManifest)').Replace('&quot;version&quot;: &quot;0.1.0&quot;', '&quot;version&quot;: &quot;$(PackageVersion)&quot;'))</_ToolManifestContents>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_StagedToolManifest)"
+                      Lines="$(_ToolManifestContents)"
+                      Overwrite="true" />
+    <ItemGroup>
+      <_StagedTemplateContent Include="$(TemplateStagingDirectory)**\*" />
+      <Content Include="@(_StagedTemplateContent)" Pack="true" PackagePath="content">
+        <Link>%(_StagedTemplateContent.RecursiveDir)%(_StagedTemplateContent.Filename)%(_StagedTemplateContent.Extension)</Link>
+      </Content>
+    </ItemGroup>
+  </Target>
 </Project>

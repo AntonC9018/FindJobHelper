@@ -341,7 +341,7 @@
       "Anton.FindJobHelper.Cli": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )",
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
           "CodegenCS.Core": "[3.5.0, )",
           "CommandDotNet": "[8.1.1, )",
           "Microsoft.Extensions.Configuration.Binder": "[9.0.7, )",
@@ -365,37 +365,37 @@
       "constructorthrows": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
       "createthrows": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
       "multipleproviders": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
       "noconstructor": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
       "nullresult": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
       "syntheticprovider": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[0.1.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       }
     }
