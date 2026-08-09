@@ -36,6 +36,12 @@ public sealed class LatexBinaryDirectoryResolverTests
     }
 
     [Fact]
+    public void MalformedPathDirectoryIsSkipped()
+    {
+        Assert.Null(LatexBinaryDirectoryResolver.TryNormalizePathDirectory("\0"));
+    }
+
+    [Fact]
     public void TemplatePackageLinksTheCanonicalInstallerDirectly()
     {
         var root = FindRepositoryRoot();

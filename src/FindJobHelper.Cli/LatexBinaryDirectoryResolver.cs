@@ -54,9 +54,15 @@ internal static class LatexBinaryDirectoryResolver
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         foreach (var directory in pathDirectories)
         {
+            var fullDirectory = TryNormalizePathDirectory(directory);
+            if (fullDirectory is null)
+            {
+                continue;
+            }
+
             var result = TryResolveFromDirectory(
                 "PATH environment variable",
-                Path.GetFullPath(directory));
+                fullDirectory);
             if (result is not null)
             {
                 return result;
@@ -65,6 +71,21 @@ internal static class LatexBinaryDirectoryResolver
 
         throw new InvalidOperationException(
             "Could not find one directory containing both latexmk and xelatex. Run scripts/setup-latex.sh or specify --latex-bin-directory.");
+    }
+
+    internal static string? TryNormalizePathDirectory(string directory)
+    {
+        try
+        {
+            return Path.GetFullPath(directory);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException
+                or PathTooLongException
+                or NotSupportedException)
+        {
+            return null;
+        }
     }
 
     private static ResolvedLatexExecutables FromDirectory(

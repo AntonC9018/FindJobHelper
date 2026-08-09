@@ -155,7 +155,9 @@ public sealed class LatexFailureClassifierTests
     public async Task MeasurementLaunchFailureRetainsItsDiagnosticDirectory()
     {
         var runner = new XeLatexMeasurementRunnerBuilder()
-            .WithExecutables(new LatexExecutablePaths("unused-latexmk", "missing-xelatex.exe"))
+            .WithExecutables(new LatexExecutablePaths(
+                Latexmk: "unused-latexmk",
+                XeLatex: "missing-xelatex.exe"))
             .Build();
         var request = new LatexMeasurementRequest(
             new MeasurementCorrelationId(1),
@@ -193,7 +195,9 @@ public sealed class LatexFailureClassifierTests
             Path.GetTempPath(),
             $"fjh-cancel-cleanup-{Guid.NewGuid():N}");
         var runner = new XeLatexMeasurementRunnerBuilder()
-            .WithExecutables(new LatexExecutablePaths("unused-latexmk", "unused-xelatex"))
+            .WithExecutables(new LatexExecutablePaths(
+                Latexmk: "unused-latexmk",
+                XeLatex: "unused-xelatex"))
             .WithWorkingDirectoryFactory(() => workingDirectory)
             .Build();
         using var cancellation = new CancellationTokenSource();
