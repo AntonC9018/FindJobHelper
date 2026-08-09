@@ -32,6 +32,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes poppler-utils
           ./scripts/setup-latex.sh
           source "$HOME/.local/share/findjobhelper/texlive/2026/findjobhelper-env.sh"
           printf '%s\n' "$(dirname "$(command -v latexmk)")" >> "$GITHUB_PATH"
