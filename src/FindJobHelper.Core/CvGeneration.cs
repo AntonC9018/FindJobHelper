@@ -24,7 +24,7 @@ public record struct GenerateParams()
     public LatexExecutionOptions ExecutionOptions = LatexExecutionOptions.Empty;
 }
 
-public sealed record GeneratedCvArtifacts(string PdfPath);
+public sealed record GeneratedCvArtifacts(string PdfPath) : ICvRenderResult;
 
 internal static class CvLatexErrors
 {
@@ -211,7 +211,7 @@ public static class CvTemplate
     public const int ExpectedXeLatexPassCount = 2;
     public const int ExpectedPdfConversionPassCount = 1;
 
-    public static async Task<CvRenderResult> Generate(
+    public static async Task<ICvRenderResult> Generate(
         GenerateParams p,
         LatexProgressReporters progress)
     {
@@ -311,7 +311,7 @@ public static class CvTemplate
         }
     }
 
-    private static async Task<CvRenderResult> CompileAsync(
+    private static async Task<ICvRenderResult> CompileAsync(
         GenerateParams p,
         DirectoryInfo outputDirectory,
         IProgressReporter progress,
@@ -399,22 +399,19 @@ public static class CvTemplate
             }
             if (CvLatexErrors.ContainsMetadataLeftOverflowMarker(latexLog))
             {
-                return new RenderLayoutFailure(
-                    new MetadataOverflowFailure());
+                return new MetadataOverflowFailure();
             }
             if (CvLatexErrors.ContainsSectionPageOverflowMarker(latexLog))
             {
                 var exception = CvLatexErrors.CreateSectionPageOverflowException(latexLog, p.Model);
-                return new RenderLayoutFailure(
-                    new SectionOverflowFailure(exception.SectionLabel));
+                return new SectionOverflowFailure(exception.SectionLabel);
             }
             if (CvLatexErrors.ContainsEventPageOverflowMarker(latexLog))
             {
                 var exception = CvLatexErrors.CreateEventPageOverflowException(latexLog, p.Model);
-                return new RenderLayoutFailure(
-                    new EventOverflowFailure(
-                        exception.SectionLabel,
-                        exception.EventLabel));
+                return new EventOverflowFailure(
+                    exception.SectionLabel,
+                    exception.EventLabel);
             }
 
             return new LatexCompilationFailure(
@@ -437,8 +434,7 @@ public static class CvTemplate
             }
             catch (RenderedPageLayoutMismatchException exception)
             {
-                return new RenderValidationFailure(
-                    new PageLayoutMismatchFailure(exception.Details));
+                return new PageLayoutMismatchFailure(exception.Details);
             }
         }
         else if (p.PageCount.ExactCount is { } requiredPageCount)
@@ -449,18 +445,16 @@ public static class CvTemplate
                     out var renderedPageCount))
             {
                 var exception = new RenderedPageCountUnavailableException(requiredPageCount);
-                return new RenderValidationFailure(
-                    new PageCountUnavailableFailure(requiredPageCount));
+                return new PageCountUnavailableFailure(requiredPageCount);
             }
             if (renderedPageCount != requiredPageCount)
             {
                 var exception = new RenderedPageCountMismatchException(
                     requiredPageCount,
                     renderedPageCount);
-                return new RenderValidationFailure(
-                    new PageCountMismatchFailure(
-                        requiredPageCount,
-                        renderedPageCount));
+                return new PageCountMismatchFailure(
+                    requiredPageCount,
+                    renderedPageCount);
             }
         }
 
@@ -469,8 +463,7 @@ public static class CvTemplate
         if (!File.Exists(pdfOutputPath))
         {
             var exception = new CvPdfNotProducedException();
-            return new RenderValidationFailure(
-                new MissingPdfFailure(pdfOutputPath));
+            return new MissingPdfFailure(pdfOutputPath);
         }
 
         latexmkProgress.CompleteConversionAndValidation();

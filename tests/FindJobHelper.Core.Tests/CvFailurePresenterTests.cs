@@ -17,7 +17,7 @@ public sealed class CvFailurePresenterTests
             "/diagnostics",
             options);
 
-        var presentation = CvFailurePresenter.Present(new CvRenderResult(failure));
+        var presentation = CvFailurePresenter.Present((ICvRenderResult)failure);
 
         Assert.Same(options, failure.ExecutionOptions);
         Assert.Equal(CvFailureDisposition.General, presentation.Disposition);
@@ -28,8 +28,7 @@ public sealed class CvFailurePresenterTests
     [Fact]
     public void RenderLayoutFailureUsesFactsAndValidationDisposition()
     {
-        CvRenderResult result = new RenderLayoutFailure(
-            new EventOverflowFailure("Work Experience", "Large event"));
+        ICvRenderResult result = new EventOverflowFailure("Work Experience", "Large event");
 
         var presentation = CvFailurePresenter.Present(result);
 
@@ -40,11 +39,9 @@ public sealed class CvFailurePresenterTests
     }
 
     [Fact]
-    public void SuccessAndDefaultUnionsAreInvariantViolations()
+    public void SuccessNullAndUnsupportedImplementationsAreInvariantViolations()
     {
-        CvMeasurementResult emptyMeasurement = default;
-        CvRenderResult emptyRender = default;
-        CvMeasurementResult successfulMeasurement = CvMeasurementSnapshot.CreateFrozen(
+        ICvMeasurementResult successfulMeasurement = CvMeasurementSnapshot.CreateFrozen(
             experienceItems: new Dictionary<ExperienceItemId, LatexHeight>(),
             experienceHeadings: new Dictionary<ExperienceListId, LatexHeight>(),
             experienceChrome: new Dictionary<ExperienceListId, LatexHeight>(),
@@ -60,11 +57,24 @@ public sealed class CvFailurePresenterTests
             documentHeader: LatexHeight.Zero,
             documentFooter: LatexHeight.Zero,
             usablePageHeight: LatexHeight.Zero);
-        CvRenderResult successfulRender = new GeneratedCvArtifacts("cv.pdf");
+        ICvRenderResult successfulRender = new GeneratedCvArtifacts("cv.pdf");
 
-        Assert.Throws<InvalidOperationException>(() => CvFailurePresenter.Present(emptyMeasurement));
-        Assert.Throws<InvalidOperationException>(() => CvFailurePresenter.Present(emptyRender));
+        Assert.Throws<ArgumentNullException>(() => CvFailurePresenter.Present((ICvMeasurementResult)null!));
+        Assert.Throws<ArgumentNullException>(() => CvFailurePresenter.Present((ICvRenderResult)null!));
+        Assert.Contains(
+            typeof(UnsupportedMeasurementResult).FullName!,
+            Assert.Throws<InvalidOperationException>(
+                () => CvFailurePresenter.Present(new UnsupportedMeasurementResult())).Message,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            typeof(UnsupportedRenderResult).FullName!,
+            Assert.Throws<InvalidOperationException>(
+                () => CvFailurePresenter.Present(new UnsupportedRenderResult())).Message,
+            StringComparison.Ordinal);
         Assert.Throws<InvalidOperationException>(() => CvFailurePresenter.Present(successfulMeasurement));
         Assert.Throws<InvalidOperationException>(() => CvFailurePresenter.Present(successfulRender));
     }
+
+    private sealed class UnsupportedMeasurementResult : ICvMeasurementResult;
+    private sealed class UnsupportedRenderResult : ICvRenderResult;
 }

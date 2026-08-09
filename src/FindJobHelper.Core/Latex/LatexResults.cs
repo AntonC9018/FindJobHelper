@@ -17,34 +17,30 @@ public readonly record struct LatexFontFamilyName(string Value);
 
 public readonly record struct LatexLanguageName(string Value);
 
-public sealed record ExecutableLatexRequirement(LatexExecutableName Name);
+public interface ILatexRequirement;
 
-public sealed record TexFileLatexRequirement(LatexTexFileName FileName);
+public sealed record ExecutableLatexRequirement(LatexExecutableName Name) : ILatexRequirement;
 
-public sealed record FontLatexRequirement(LatexFontFamilyName FamilyName);
+public sealed record TexFileLatexRequirement(LatexTexFileName FileName) : ILatexRequirement;
 
-public sealed record BabelLanguageLatexRequirement(LatexLanguageName LanguageName);
+public sealed record FontLatexRequirement(LatexFontFamilyName FamilyName) : ILatexRequirement;
 
-public union LatexRequirement(
-    ExecutableLatexRequirement,
-    TexFileLatexRequirement,
-    FontLatexRequirement,
-    BabelLanguageLatexRequirement);
+public sealed record BabelLanguageLatexRequirement(LatexLanguageName LanguageName) : ILatexRequirement;
 
 public sealed record LatexExecutionOptions
 {
     public static LatexExecutionOptions Empty { get; } = new([]);
 
     public LatexExecutionOptions(
-        IEnumerable<LatexRequirement> requirements,
+        IEnumerable<ILatexRequirement> requirements,
         string? setupCommandHint = null)
     {
         ArgumentNullException.ThrowIfNull(requirements);
         Requirements = requirements.ToImmutableArray();
-        if (Requirements.Any(static requirement => requirement.Value is null))
+        if (Requirements.Any(static requirement => requirement is null))
         {
             throw new ArgumentException(
-                "LaTeX requirements cannot contain an empty union.",
+                "LaTeX requirements cannot contain null.",
                 nameof(requirements));
         }
 
@@ -53,26 +49,21 @@ public sealed record LatexExecutionOptions
             : setupCommandHint;
     }
 
-    public ImmutableArray<LatexRequirement> Requirements { get; }
+    public ImmutableArray<ILatexRequirement> Requirements { get; }
 
     public string? SetupCommandHint { get; }
 }
 
-public sealed record IncompleteLatexInstallation
+public sealed record IncompleteLatexInstallation : ICvMeasurementResult, ICvRenderResult, ILatexMeasurementRunResult
 {
     public IncompleteLatexInstallation(
-        LatexRequirement missingRequirement,
+        ILatexRequirement missingRequirement,
         LatexExecutionPhase phase,
         string diagnostic,
         string diagnosticDirectory,
         LatexExecutionOptions executionOptions)
     {
-        if (missingRequirement.Value is null)
-        {
-            throw new ArgumentException(
-                "The missing requirement union must have a value.",
-                nameof(missingRequirement));
-        }
+        ArgumentNullException.ThrowIfNull(missingRequirement);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(diagnostic);
         ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticDirectory);
@@ -84,7 +75,7 @@ public sealed record IncompleteLatexInstallation
         ExecutionOptions = executionOptions;
     }
 
-    public LatexRequirement MissingRequirement { get; }
+    public ILatexRequirement MissingRequirement { get; }
     public LatexExecutionPhase Phase { get; }
     public string Diagnostic { get; }
     public string DiagnosticDirectory { get; }
@@ -96,71 +87,45 @@ public sealed record LatexCompilationFailure(
     string Diagnostic,
     string DiagnosticDirectory,
     int? ExitCode,
-    LatexExecutionOptions ExecutionOptions);
+    LatexExecutionOptions ExecutionOptions) : ICvMeasurementResult, ICvRenderResult, ILatexMeasurementRunResult;
 
-public sealed record MeasurementDataFailure(string Diagnostic, string DiagnosticDirectory);
+public sealed record MeasurementDataFailure(string Diagnostic, string DiagnosticDirectory) : ICvMeasurementResult, ILatexMeasurementRunResult;
 
-public sealed record FixedContentLayoutFailure;
+public interface ICvMeasurementResult;
+public interface IMeasurementLayoutFailure : ICvMeasurementResult;
+
+public sealed record FixedContentLayoutFailure : IMeasurementLayoutFailure;
 public sealed record RequiredHeadingLayoutFailure(
     string Heading,
-    string RejectionReason);
+    string RejectionReason) : IMeasurementLayoutFailure;
 public sealed record RequiredItemLayoutFailure(
     string ExperienceTitle,
     string ItemText,
-    string RejectionReason);
-public sealed record SelectionCommitLayoutFailure(string Reason);
+    string RejectionReason) : IMeasurementLayoutFailure;
+public sealed record SelectionCommitLayoutFailure(string Reason) : IMeasurementLayoutFailure;
 public sealed record PredictedPageCountLayoutFailure(
     int ConfiguredPageCount,
-    int PredictedPageCount);
+    int PredictedPageCount) : IMeasurementLayoutFailure;
 public sealed record PageLayoutUnderfillFailure(
     string ConfiguredPages,
     int FirstPage,
     int LastPage,
     ImmutableArray<Section> AssignedSections,
     int RequiredPageCount,
-    int NaturallyOccupiedPageCount);
+    int NaturallyOccupiedPageCount) : IMeasurementLayoutFailure;
 
-public union MeasurementLayoutFailure(
-    FixedContentLayoutFailure,
-    RequiredHeadingLayoutFailure,
-    RequiredItemLayoutFailure,
-    SelectionCommitLayoutFailure,
-    PredictedPageCountLayoutFailure,
-    PageLayoutUnderfillFailure);
+public interface ICvRenderResult;
+public interface IRenderLayoutFailure : ICvRenderResult;
+public interface IRenderValidationFailure : ICvRenderResult;
 
-public union CvMeasurementResult(
-    CvMeasurementSnapshot,
-    IncompleteLatexInstallation,
-    LatexCompilationFailure,
-    MeasurementDataFailure,
-    MeasurementLayoutFailure);
+public sealed record MetadataOverflowFailure : IRenderLayoutFailure, ILatexMeasurementRunResult;
+public sealed record SectionOverflowFailure(string? Section) : IRenderLayoutFailure, ILatexMeasurementRunResult;
+public sealed record EventOverflowFailure(string? Section, string? Event) : IRenderLayoutFailure, ILatexMeasurementRunResult;
 
-public sealed record MetadataOverflowFailure;
-public sealed record SectionOverflowFailure(string? Section);
-public sealed record EventOverflowFailure(string? Section, string? Event);
-
-public union RenderLayoutFailure(
-    MetadataOverflowFailure,
-    SectionOverflowFailure,
-    EventOverflowFailure);
-
-public sealed record PageCountUnavailableFailure(int RequiredPageCount);
-public sealed record PageCountMismatchFailure(int RequiredPageCount, int RenderedPageCount);
-public sealed record PageLayoutMismatchFailure(string Details);
-public sealed record MissingPdfFailure(string ExpectedPath);
-
-public union RenderValidationFailure(
-    PageCountUnavailableFailure,
-    PageCountMismatchFailure,
-    PageLayoutMismatchFailure,
-    MissingPdfFailure);
-
-public union CvRenderResult(
-    GeneratedCvArtifacts,
-    IncompleteLatexInstallation,
-    LatexCompilationFailure,
-    RenderLayoutFailure,
-    RenderValidationFailure);
+public sealed record PageCountUnavailableFailure(int RequiredPageCount) : IRenderValidationFailure;
+public sealed record PageCountMismatchFailure(int RequiredPageCount, int RenderedPageCount) : IRenderValidationFailure;
+public sealed record PageLayoutMismatchFailure(string Details) : IRenderValidationFailure;
+public sealed record MissingPdfFailure(string ExpectedPath) : IRenderValidationFailure;
 
 public enum CvFailureDisposition
 {
@@ -172,26 +137,37 @@ public sealed record CvFailurePresentation(string Message, CvFailureDisposition 
 
 public static class CvFailurePresenter
 {
-    public static CvFailurePresentation Present(CvMeasurementResult result) => result switch
+    public static CvFailurePresentation Present(ICvMeasurementResult result)
     {
+        ArgumentNullException.ThrowIfNull(result);
+        return result switch
+        {
         IncompleteLatexInstallation failure => General(Format(failure)),
         LatexCompilationFailure failure => General(Format(failure)),
         MeasurementDataFailure failure => General(
             $"LaTeX measurement data failed: {failure.Diagnostic} Diagnostics: {failure.DiagnosticDirectory}."),
-        MeasurementLayoutFailure failure => Validation(Format(failure)),
+        IMeasurementLayoutFailure failure => Validation(Format(failure)),
         CvMeasurementSnapshot => throw new InvalidOperationException("A successful CV measurement cannot be presented as a failure."),
-        _ => throw new InvalidOperationException("The CV measurement result union is empty."),
-    };
+        _ => throw Unsupported(result),
+        };
+    }
 
-    public static CvFailurePresentation Present(CvRenderResult result) => result switch
+    public static CvFailurePresentation Present(ICvRenderResult result)
     {
+        ArgumentNullException.ThrowIfNull(result);
+        return result switch
+        {
         IncompleteLatexInstallation failure => General(Format(failure)),
         LatexCompilationFailure failure => General(Format(failure)),
-        RenderLayoutFailure failure => Validation(Format(failure)),
-        RenderValidationFailure failure => Validation(Format(failure)),
+        IRenderLayoutFailure failure => Validation(Format(failure)),
+        IRenderValidationFailure failure => Validation(Format(failure)),
         GeneratedCvArtifacts => throw new InvalidOperationException("A successful CV render cannot be presented as a failure."),
-        _ => throw new InvalidOperationException("The CV render result union is empty."),
-    };
+        _ => throw Unsupported(result),
+        };
+    }
+
+    private static InvalidOperationException Unsupported(object value) => new(
+        $"Unsupported result implementation '{value.GetType().FullName}'.");
 
     private static CvFailurePresentation General(string message) =>
         new(message, CvFailureDisposition.General);
@@ -207,7 +183,7 @@ public static class CvFailurePresenter
             TexFileLatexRequirement value => value.FileName.Value,
             FontLatexRequirement value => value.FamilyName.Value,
             BabelLanguageLatexRequirement value => value.LanguageName.Value,
-            _ => throw new InvalidOperationException("The LaTeX requirement union is empty."),
+            _ => throw Unsupported(failure.MissingRequirement),
         };
         var phase = failure.Phase switch
         {
@@ -225,7 +201,7 @@ public static class CvFailurePresenter
     private static string Format(LatexCompilationFailure failure) =>
         $"LaTeX execution failed during {failure.Phase}: {failure.Diagnostic} Diagnostics: {failure.DiagnosticDirectory}.";
 
-    private static string Format(MeasurementLayoutFailure failure) => failure switch
+    private static string Format(IMeasurementLayoutFailure failure) => failure switch
     {
         FixedContentLayoutFailure => CvMetadataOverflowException.ErrorMessage,
         RequiredHeadingLayoutFailure value =>
@@ -241,7 +217,7 @@ public static class CvFailurePresenter
                 value.ConfiguredPageCount,
                 value.PredictedPageCount).Message,
         PageLayoutUnderfillFailure value => FormatPageLayoutUnderfill(value),
-        _ => throw new InvalidOperationException("The measurement layout failure union is empty."),
+        _ => throw Unsupported(failure),
     };
 
     private static string FormatPageLayoutUnderfill(PageLayoutUnderfillFailure failure)
@@ -254,21 +230,21 @@ public static class CvFailurePresenter
             + "Explicit layouts are not padded with blank pages.";
     }
 
-    private static string Format(RenderLayoutFailure failure) => failure switch
+    private static string Format(IRenderLayoutFailure failure) => failure switch
     {
         MetadataOverflowFailure => CvMetadataOverflowException.ErrorMessage,
         SectionOverflowFailure value => new CvSectionPageOverflowException(value.Section).Message,
         EventOverflowFailure value => new CvEventPageOverflowException(value.Section, value.Event).Message,
-        _ => throw new InvalidOperationException("The render layout failure union is empty."),
+        _ => throw Unsupported(failure),
     };
 
-    private static string Format(RenderValidationFailure failure) => failure switch
+    private static string Format(IRenderValidationFailure failure) => failure switch
     {
         PageCountUnavailableFailure value => new RenderedPageCountUnavailableException(value.RequiredPageCount).Message,
         PageCountMismatchFailure value => new RenderedPageCountMismatchException(value.RequiredPageCount, value.RenderedPageCount).Message,
         PageLayoutMismatchFailure value => new RenderedPageLayoutMismatchException(value.Details).Message,
         MissingPdfFailure => new CvPdfNotProducedException().Message,
-        _ => throw new InvalidOperationException("The render validation failure union is empty."),
+        _ => throw Unsupported(failure),
     };
 }
 
@@ -300,7 +276,7 @@ internal static partial class LatexFailureClassifier
                     Path.GetFileNameWithoutExtension(executable.Name.Value),
                     normalizedExecutableName,
                     StringComparison.OrdinalIgnoreCase));
-        return requirement.Value is null
+        return requirement is null
             ? null
             : new(
                 requirement,
@@ -366,24 +342,24 @@ internal static partial class LatexFailureClassifier
 
 internal sealed record LatexLogRequirementMatch(
     int Index,
-    LatexRequirement Requirement,
+    ILatexRequirement Requirement,
     string Diagnostic);
 
 internal sealed class LatexLogRequirementRule(
     Regex pattern,
     Func<Match, string> readIdentifier,
-    Func<LatexRequirement, string, bool> matchesRequirement)
+    Func<ILatexRequirement, string, bool> matchesRequirement)
 {
     public IEnumerable<LatexLogRequirementMatch> FindMatches(
         string log,
-        IEnumerable<LatexRequirement> requirements)
+        IEnumerable<ILatexRequirement> requirements)
     {
         foreach (Match match in pattern.Matches(log))
         {
             var identifier = readIdentifier(match);
             var requirement = requirements.FirstOrDefault(
                 item => matchesRequirement(item, identifier));
-            if (requirement.Value is not null)
+            if (requirement is not null)
             {
                 yield return new(
                     match.Index,

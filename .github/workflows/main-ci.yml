@@ -47,7 +47,7 @@ jobs:
           mkdir -p real-render
           dotnet run --project src/FindJobHelper.Cli/FindJobHelper.Cli.csproj -c Release --no-build --no-restore -- \
             --config tests/FindJobHelper.Cli.Tests/data/cli-e2e-config.json \
-            --experience-database tests/ProviderFixtures/SyntheticProvider/bin/Release/net11.0/SyntheticProvider.dll \
+            --experience-database tests/ProviderFixtures/SyntheticProvider/bin/Release/net10.0/SyntheticProvider.dll \
             --output-directory real-render \
             --latex-bin-directory "$(dirname "$(command -v latexmk)")"
           test -s real-render/ExampleAlex.pdf
