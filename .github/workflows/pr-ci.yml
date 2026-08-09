@@ -20,4 +20,4 @@ jobs:
       - run: dotnet restore FindJobHelper.sln
       - run: dotnet build FindJobHelper.sln -c Release --no-restore -p:ContinuousIntegrationBuild=true
       - name: Run inexpensive tests
-        run: dotnet test FindJobHelper.sln -c Release --no-build --no-restore --filter 'FullyQualifiedName!~LatexMeasurementTests&FullyQualifiedName!~CvGenerationCliEndToEndTests'
+        run: dotnet test FindJobHelper.sln -c Release --no-build --no-restore --filter 'FullyQualifiedName!~LatexMeasurementTests&FullyQualifiedName!~CvGenerationCliEndToEndTests&FullyQualifiedName!~GeneratedPdfFontTests'

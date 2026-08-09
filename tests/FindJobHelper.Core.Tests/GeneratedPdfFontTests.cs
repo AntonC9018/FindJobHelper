@@ -97,7 +97,7 @@ public sealed partial class GeneratedPdfFontTests
             File.WriteAllText(
                 TemplatePath,
                 $$"""
-                \input{ {{productionTemplatePath}} }
+                \input{{{productionTemplatePath}}}
                 \AtBeginDocument{%
                   {\rmfamily {{MainSentinel}}\par}%
                   {\sffamily {{SansSentinel}}\par}%
