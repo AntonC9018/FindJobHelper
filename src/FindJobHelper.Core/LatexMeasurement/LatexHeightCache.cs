@@ -6,7 +6,9 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
 {
     private const int SchemaVersion = 2;
     private static readonly LatexFontRoleArray<string> FontParameterNames = new(
-        ["$main_font", "$sans_font", "$mono_font"]);
+        main: "$main_font",
+        sans: "$sans_font",
+        monospace: "$mono_font");
     private readonly string _databasePath = databasePath;
     private readonly int _ruleVersion = ruleVersion;
 
