@@ -6,7 +6,22 @@
   "name": "FindJobHelper fictional Workspace",
   "shortName": "findjob-workspace",
   "sourceName": "FindJobWorkspace",
+  "guids": [ "3d10e187-d43d-44b5-96ae-c78077e83d91" ],
   "preferNameDirectory": true,
+  "postActions": [
+    {
+      "condition": "(OS != \"Windows_NT\")",
+      "description": "Make run.sh executable",
+      "manualInstructions": [
+        { "text": "Run 'chmod +x run.sh'." }
+      ],
+      "actionId": "cb9a6cf3-4f5c-4860-b9d2-03a574959774",
+      "args": {
+        "+x": "run.sh"
+      },
+      "continueOnError": false
+    }
+  ],
   "tags": {
     "language": "C#",
     "type": "project"

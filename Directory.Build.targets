@@ -14,7 +14,7 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <ExtensionsVersion>9.0.7</ExtensionsVersion>
+        <ExtensionsVersion>10.0.10</ExtensionsVersion>
     </PropertyGroup>
     <ItemGroup Condition="'$(IncludeUserSecrets)' == 'true'">
         <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="$(ExtensionsVersion)" />

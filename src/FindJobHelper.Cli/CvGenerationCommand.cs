@@ -15,8 +15,7 @@ public sealed class CvGenerationCommand
     [Command("example-config", Description = "Print an example JSON CV selection configuration.")]
     public void PrintExampleConfig()
     {
-        var examplePath = GetExampleConfigPath();
-        Console.Write(File.ReadAllText(examplePath));
+        Console.Write(File.ReadAllText(ExampleConfigPath));
     }
 
     [Command("new-config", Description = "Write an example configuration to config.json.")]
@@ -36,7 +35,7 @@ public sealed class CvGenerationCommand
             return ExitCodes.Error;
         }
 
-        File.Copy(GetExampleConfigPath(), outputPath);
+        File.Copy(ExampleConfigPath, outputPath);
         Console.WriteLine($"Created '{outputPath}'.");
         return ExitCodes.Success;
     }
@@ -44,10 +43,10 @@ public sealed class CvGenerationCommand
     [Command("list-tags", Description = "List all tags available for CV selection.")]
     public int ListTags(ExperienceDatabaseArguments arguments)
     {
-        ExperienceDatabaseProviderResult providerResult;
+        LoadedExperienceDatabaseProvider loadedProvider;
         try
         {
-            providerResult = ExperienceDatabaseProviderLoader.Load(
+            loadedProvider = ExperienceDatabaseProviderLoader.Load(
                 arguments.ExperienceDatabase);
         }
         catch (ExperienceDatabaseProviderLoadException ex)
@@ -66,7 +65,7 @@ public sealed class CvGenerationCommand
             return ExitCodes.ValidationError;
         }
 
-        var tagsDatabase = providerResult.TagsDatabase;
+        var tagsDatabase = loadedProvider.Result.TagsDatabase;
         foreach (var tag in tagsDatabase.TagsGraph.Keys
                      .Select(static tag => tag.Name)
                      .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
@@ -138,8 +137,9 @@ public sealed class CvGenerationCommand
             configPath,
             cancellationToken);
         var fullOutputDirectory = Path.GetFullPath(outputDirectory);
-        var providerResult = ExperienceDatabaseProviderLoader.Load(
+        var loadedProvider = ExperienceDatabaseProviderLoader.Load(
             experienceDatabasePath);
+        var providerResult = loadedProvider.Result;
         var searchConfiguration = configuration.BuildSearch(
             providerResult.TagsDatabase);
         var experienceDatabase = providerResult.ExperienceDatabase;
@@ -158,6 +158,7 @@ public sealed class CvGenerationCommand
         Console.WriteLine($"xelatex: {latexExecutables.Paths.XeLatex}");
         var latexExecutionOptions = CreateLatexExecutionOptions(fontConfiguration);
         await using var serviceProvider = await AppConfiguration.CreateApp(
+            loadedProvider.Assembly,
             latexExecutables.Paths,
             cancellationToken);
         var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
@@ -523,7 +524,7 @@ public sealed class CvGenerationCommand
         new(Category.LinkedIn, [personalInfo.LinkedIn]),
     ];
 
-    private static string GetExampleConfigPath() => Path.Combine(
+    internal static string ExampleConfigPath => Path.Combine(
         AppContext.BaseDirectory,
         "data",
         "cv-selection.example.json");
