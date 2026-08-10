@@ -73,4 +73,24 @@ public sealed class LatexFontOptionsTests
         var families = LatexFontOptions.Default.Families;
         Assert.Throws<ArgumentOutOfRangeException>(() => families[(LatexFontRole)123]);
     }
+
+    [Fact]
+    public void RoleArray_MapPreservesRoles()
+    {
+        var values = new LatexFontRoleArray<int>(main: 1, sans: 2, monospace: 3);
+
+        var mapped = values.Map(static value => value.ToString());
+
+        Assert.Equal("1", mapped.Main);
+        Assert.Equal("2", mapped.Sans);
+        Assert.Equal("3", mapped.Monospace);
+    }
+
+    [Fact]
+    public void RoleArray_EnumeratesInRoleOrder()
+    {
+        var values = new LatexFontRoleArray<int>(main: 1, sans: 2, monospace: 3);
+
+        Assert.Equal([1, 2, 3], values);
+    }
 }

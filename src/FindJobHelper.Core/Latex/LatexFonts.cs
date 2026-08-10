@@ -46,7 +46,7 @@ public enum LatexFontRole
     Mono,
 }
 
-public readonly record struct LatexFontRoleArray<T>
+public readonly record struct LatexFontRoleArray<T> : IEnumerable<T>
 {
     public LatexFontRoleArray(T main, T sans, T monospace)
     {
@@ -66,6 +66,24 @@ public readonly record struct LatexFontRoleArray<T>
         LatexFontRole.Mono => Monospace,
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
     };
+
+    public LatexFontRoleArray<TResult> Map<TResult>(Func<T, TResult> selector)
+    {
+        ArgumentNullException.ThrowIfNull(selector);
+        return new(
+            main: selector(Main),
+            sans: selector(Sans),
+            monospace: selector(Monospace));
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        yield return Main;
+        yield return Sans;
+        yield return Monospace;
+    }
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
 public static class LatexFontRoles
@@ -90,7 +108,7 @@ public sealed record LatexFontOptions
 
     public LatexFontOptions(LatexFontRoleArray<LatexFontFamilyName> families)
     {
-        if (LatexFontRoles.All.Any(role => families[role] is null))
+        if (families.Any(static family => family is null))
         {
             throw new ArgumentException("LaTeX font families cannot contain null.", nameof(families));
         }
