@@ -4,25 +4,55 @@ public sealed class LatexFontConfigurationResolverTests
 {
     public static IEnumerable<object?[]> Cases =>
     [
-        [new string?[] { "Flag Serif", "Flag Sans", "Flag Mono" }, new string?[] { "Env Serif", "Env Sans", "Env Mono" }, new[] { "Flag Serif", "Flag Sans", "Flag Mono" }, new[] { true, true, true }, false],
-        [new string?[3], new string?[] { "Env Serif", "Env Sans", "Env Mono" }, new[] { "Env Serif", "Env Sans", "Env Mono" }, new[] { true, true, true }, false],
-        [new string?[3], new string?[3], new[] { "Liberation Serif", "Liberation Sans", "Liberation Mono" }, new[] { false, false, false }, false],
-        [new string?[] { " ", null, null }, new string?[] { "Env Serif", null, null }, Array.Empty<string>(), Array.Empty<bool>(), true],
-        [new string?[3], new string?[] { null, "", null }, Array.Empty<string>(), Array.Empty<bool>(), true],
+        [
+            new LatexFontRoleArray<string?>(main: "Flag Serif", sans: "Flag Sans", monospace: "Flag Mono"),
+            new LatexFontRoleArray<string?>(main: "Env Serif", sans: "Env Sans", monospace: "Env Mono"),
+            new LatexFontOptions(new(main: new("Flag Serif"), sans: new("Flag Sans"), monospace: new("Flag Mono"))),
+            new LatexFontRoleArray<bool>(main: true, sans: true, monospace: true),
+            false,
+        ],
+        [
+            new LatexFontRoleArray<string?>(main: null, sans: null, monospace: null),
+            new LatexFontRoleArray<string?>(main: "Env Serif", sans: "Env Sans", monospace: "Env Mono"),
+            new LatexFontOptions(new(main: new("Env Serif"), sans: new("Env Sans"), monospace: new("Env Mono"))),
+            new LatexFontRoleArray<bool>(main: true, sans: true, monospace: true),
+            false,
+        ],
+        [
+            new LatexFontRoleArray<string?>(main: null, sans: null, monospace: null),
+            new LatexFontRoleArray<string?>(main: null, sans: null, monospace: null),
+            LatexFontOptions.Default,
+            new LatexFontRoleArray<bool>(main: false, sans: false, monospace: false),
+            false,
+        ],
+        [
+            new LatexFontRoleArray<string?>(main: " ", sans: null, monospace: null),
+            new LatexFontRoleArray<string?>(main: "Env Serif", sans: null, monospace: null),
+            null,
+            null,
+            true,
+        ],
+        [
+            new LatexFontRoleArray<string?>(main: null, sans: null, monospace: null),
+            new LatexFontRoleArray<string?>(main: null, sans: "", monospace: null),
+            null,
+            null,
+            true,
+        ],
     ];
 
     [Theory]
     [MemberData(nameof(Cases))]
     public void Resolve_AppliesIndependentPrecedenceAndRejectsPresentBlankValues(
-        string?[] flags,
-        string?[] environments,
-        string[] expectedFamilies,
-        bool[] expectedManuallySpecified,
+        LatexFontRoleArray<string?> flags,
+        LatexFontRoleArray<string?> environments,
+        LatexFontOptions? expectedOptions,
+        LatexFontRoleArray<bool>? expectedManuallySpecified,
         bool throws)
     {
         ResolvedLatexFontConfiguration Resolve() => LatexFontConfigurationResolver.Resolve(
-            flags: new(flags),
-            environments: new(environments));
+            flags: flags,
+            environments: environments);
 
         if (throws)
         {
@@ -31,7 +61,7 @@ public sealed class LatexFontConfigurationResolverTests
         }
 
         var result = Resolve();
-        Assert.Equal(expectedFamilies, result.Options.Families.Values.Select(static family => family.Value));
-        Assert.Equal(expectedManuallySpecified, result.ManuallySpecified.Values);
+        Assert.Equal(expectedOptions, result.Options);
+        Assert.Equal(expectedManuallySpecified, result.ManuallySpecified);
     }
 }

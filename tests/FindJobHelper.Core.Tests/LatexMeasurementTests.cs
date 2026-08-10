@@ -511,9 +511,11 @@ public sealed class LatexMeasurementTests
         LatexFontRole role,
         string familyName)
     {
-        var families = original.Families.Values.ToArray();
-        families[(int)role] = new(familyName);
-        return new(new(families));
+        var replacement = new LatexFontFamilyName(familyName);
+        return new(new(
+            main: role == LatexFontRole.Main ? replacement : original.Families.Main,
+            sans: role == LatexFontRole.Sans ? replacement : original.Families.Sans,
+            monospace: role == LatexFontRole.Mono ? replacement : original.Families.Monospace));
     }
 
     [Fact]

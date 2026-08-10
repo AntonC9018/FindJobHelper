@@ -8,8 +8,11 @@ public sealed class LatexFontOptionsTests
     public void Default_UsesExpectedFontFamilies()
     {
         Assert.Equal(
-            ["Liberation Serif", "Liberation Sans", "Liberation Mono"],
-            LatexFontOptions.Default.Families.Values.Select(static family => family.Value));
+            new LatexFontOptions(new(
+                main: new("Liberation Serif"),
+                sans: new("Liberation Sans"),
+                monospace: new("Liberation Mono"))),
+            LatexFontOptions.Default);
     }
 
     [Theory]
@@ -58,17 +61,16 @@ public sealed class LatexFontOptionsTests
     public void Options_RejectNullFamilies()
     {
         var family = new LatexFontFamilyName("Valid Family");
-        Assert.Throws<ArgumentNullException>(() => new LatexFontOptions(default));
-        Assert.Throws<ArgumentException>(() => new LatexFontOptions(new([family, null!, family])));
+        Assert.Throws<ArgumentException>(() => new LatexFontOptions(new(
+            main: family,
+            sans: null!,
+            monospace: family)));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(2)]
-    [InlineData(4)]
-    public void Options_RequireOneFamilyPerRole(int count)
+    [Fact]
+    public void RoleArray_IndexerRejectsUnknownRole()
     {
-        var families = Enumerable.Repeat(new LatexFontFamilyName("Valid Family"), count).ToArray();
-        Assert.Throws<ArgumentException>(() => new LatexFontRoleArray<LatexFontFamilyName>(families));
+        var families = LatexFontOptions.Default.Families;
+        Assert.Throws<ArgumentOutOfRangeException>(() => families[(LatexFontRole)123]);
     }
 }

@@ -7,18 +7,18 @@ namespace FindJobHelper.Core.Tests;
 public sealed partial class GeneratedPdfFontTests
 {
     private static readonly LatexFontRoleArray<string> Sentinels = new(
-        ["MAINROLESENTINEL", "SANSROLESENTINEL", "MONOROLESENTINEL"]);
+        main: "MAINROLESENTINEL",
+        sans: "SANSROLESENTINEL",
+        monospace: "MONOROLESENTINEL");
 
     [Fact]
     public async Task GeneratedPdf_EmbedsEachConfiguredFontForItsFamilyRole()
     {
         using var fixture = new GeneratedPdfFixture();
         var fonts = new LatexFontOptions(new(
-        [
-            new("Liberation Sans"),
-            new("Liberation Serif"),
-            new("Liberation Mono"),
-        ]));
+            main: new("Liberation Sans"),
+            sans: new("Liberation Serif"),
+            monospace: new("Liberation Mono")));
 
         var result = await CvTemplate.Generate(new()
         {
