@@ -6,7 +6,7 @@ public sealed class LatexFontConfigurationResolverTests
     [
         [new string?[] { "Flag Serif", "Flag Sans", "Flag Mono" }, new string?[] { "Env Serif", "Env Sans", "Env Mono" }, new[] { "Flag Serif", "Flag Sans", "Flag Mono" }, new[] { true, true, true }, false],
         [new string?[3], new string?[] { "Env Serif", "Env Sans", "Env Mono" }, new[] { "Env Serif", "Env Sans", "Env Mono" }, new[] { true, true, true }, false],
-        [new string?[3], new string?[3], new[] { "Liberation Serif", "Liberation Sans", "Latin Modern Mono" }, new[] { false, false, false }, false],
+        [new string?[3], new string?[3], new[] { "Liberation Serif", "Liberation Sans", "Liberation Mono" }, new[] { false, false, false }, false],
         [new string?[] { " ", null, null }, new string?[] { "Env Serif", null, null }, Array.Empty<string>(), Array.Empty<bool>(), true],
         [new string?[3], new string?[] { null, "", null }, Array.Empty<string>(), Array.Empty<bool>(), true],
     ];

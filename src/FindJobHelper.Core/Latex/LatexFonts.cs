@@ -78,7 +78,7 @@ public static class LatexFontRoles
 public sealed record LatexFontOptions
 {
     public static LatexFontOptions Default { get; } = new(new LatexFontRoleArray<LatexFontFamilyName>(
-        [new("Liberation Serif"), new("Liberation Sans"), new("Latin Modern Mono")]));
+        [new("Liberation Serif"), new("Liberation Sans"), new("Liberation Mono")]));
 
     public LatexFontOptions(LatexFontRoleArray<LatexFontFamilyName> families)
     {

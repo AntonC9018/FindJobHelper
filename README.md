@@ -68,7 +68,7 @@ each LaTeX role:
 | --- | --- | --- | --- |
 | Main (serif) | `--main-font` | `CV_MAIN_FONT` | `Liberation Serif` |
 | Sans serif | `--sans-font` | `CV_SANS_FONT` | `Liberation Sans` |
-| Monospaced | `--mono-font` | `CV_MONO_FONT` | `Latin Modern Mono` |
+| Monospaced | `--mono-font` | `CV_MONO_FONT` | `Liberation Mono` |
 
 Each role is resolved independently. A CLI option takes precedence over its
 environment variable, and the environment variable takes precedence over the
