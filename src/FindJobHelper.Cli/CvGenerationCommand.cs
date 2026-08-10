@@ -669,9 +669,7 @@ internal static class LatexFontConfigurationResolver
             EnvironmentVariable: "CV_MONO_FONT"));
 
     public static LatexFontRoleArray<string?> GetEnvironmentValues() =>
-        Settings
-            .Map(static setting => setting.EnvironmentVariable)
-            .Map(Environment.GetEnvironmentVariable);
+        Settings.Map(static setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable));
 
     public static ResolvedLatexFontConfiguration Resolve(
         LatexFontRoleArray<string?> flags,
