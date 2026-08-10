@@ -1,5 +1,6 @@
 bin/
 obj/
+build/
 debug/
 *.aux
 *.fdb_latexmk
@@ -11,3 +12,5 @@ debug/
 sent/*/
 !sent/.gitkeep
 !sent/index.csv
+!sent/example/
+!sent/example/config.json

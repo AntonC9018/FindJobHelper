@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using FindJobHelper.CVGeneration;
 using Microsoft.Extensions.Configuration;
@@ -9,12 +10,16 @@ using Microsoft.Extensions.Options;
 internal static class AppConfiguration
 {
     public static ValueTask<ServiceProvider> CreateApp(
+        Assembly experienceDatabaseAssembly,
         LatexExecutablePaths latexExecutables,
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
         var configBuilder = new ConfigurationBuilder();
-        configBuilder.AddUserSecrets(typeof(Program).Assembly);
+        configBuilder.AddUserSecrets(
+            experienceDatabaseAssembly,
+            optional: true,
+            reloadOnChange: false);
         configBuilder.AddEnvironmentVariables();
 
         var config = configBuilder.Build();

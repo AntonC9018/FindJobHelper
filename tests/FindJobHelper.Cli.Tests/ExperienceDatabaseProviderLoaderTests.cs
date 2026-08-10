@@ -15,8 +15,9 @@ public sealed class ExperienceDatabaseProviderLoaderTests
     {
         var result = ExperienceDatabaseProviderLoader.Load(SyntheticProviderDllPath);
 
-        Assert.NotEmpty(result.TagsDatabase.TagsGraph);
-        Assert.NotEmpty(result.ExperienceDatabase.Experiences);
+        Assert.NotEmpty(result.Result.TagsDatabase.TagsGraph);
+        Assert.NotEmpty(result.Result.ExperienceDatabase.Experiences);
+        Assert.Equal(typeof(ExperienceDatabaseProvider).Assembly, result.Assembly);
     }
 
     [Fact]
@@ -26,7 +27,7 @@ public sealed class ExperienceDatabaseProviderLoaderTests
 
         var result = ExperienceDatabaseProviderLoader.Load(relativePath);
 
-        Assert.NotEmpty(result.ExperienceDatabase.Experiences);
+        Assert.NotEmpty(result.Result.ExperienceDatabase.Experiences);
     }
 
     [Fact]

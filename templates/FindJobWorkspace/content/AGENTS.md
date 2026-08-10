@@ -26,4 +26,19 @@ All checked-in examples are fictional. Replace fictional provider data only in a
 
 Create per-application configuration with `dotnet tool run find-job-helper -- new-config`. Keep each edited configuration and its generated artifacts in its own private `sent/` directory. Do not commit generated artifacts in a public repository.
 
-Provide `PersonalInfo__FirstName`, `PersonalInfo__LastName`, `PersonalInfo__Profession`, `PersonalInfo__City`, `PersonalInfo__Country`, `PersonalInfo__Email`, `PersonalInfo__Phone`, `PersonalInfo__GitHub`, and `PersonalInfo__LinkedIn` through user secrets or environment variables. The public contact examples are `202-555-0100` and `Example City, Example Country` only.
+## Running the Workspace
+
+```powershell
+.\run.ps1
+.\run.ps1 --force
+.\run.ps1 -- --output-directory output
+```
+
+Use `./run.sh` on Linux, macOS, or WSL. Use `--force` after editing provider
+source. The current directory supplies `config.json`; `sent/example` contains a
+sample.
+
+```powershell
+dotnet user-secrets set "PersonalInfo:Email" "you@example.com" --project src/FindJobWorkspace.Provider
+dotnet user-secrets set "PersonalInfo:Phone" "+1 202-555-0100" --project src/FindJobWorkspace.Provider
+```

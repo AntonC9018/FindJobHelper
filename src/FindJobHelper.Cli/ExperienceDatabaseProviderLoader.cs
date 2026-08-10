@@ -7,7 +7,7 @@ namespace MainCli;
 
 internal static class ExperienceDatabaseProviderLoader
 {
-    public static ExperienceDatabaseProviderResult Load(string path)
+    public static LoadedExperienceDatabaseProvider Load(string path)
     {
         string fullPath;
         try
@@ -168,9 +168,10 @@ internal static class ExperienceDatabaseProviderLoader
 
         try
         {
-            return provider.Create()
+            var result = provider.Create()
                 ?? throw new ExperienceDatabaseProviderLoadException(
                     $"Experience database provider '{providerType.FullName}' returned a null result.");
+            return new(result, assembly);
         }
         catch (ExperienceDatabaseProviderLoadException)
         {
@@ -190,6 +191,10 @@ internal static class ExperienceDatabaseProviderLoader
             ? inner
             : exception;
 }
+
+internal sealed record LoadedExperienceDatabaseProvider(
+    ExperienceDatabaseProviderResult Result,
+    Assembly Assembly);
 
 internal sealed class ExperienceDatabaseProviderLoadException : Exception
 {
