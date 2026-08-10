@@ -94,17 +94,8 @@ public sealed class CvGenerationCommand
                 openInOs: arguments.Open,
                 latexBinDirectory: arguments.LatexBinDirectory,
                 fontConfiguration: LatexFontConfigurationResolver.Resolve(
-                    flags: new(
-                        main: arguments.MainFont,
-                        sans: arguments.SansFont,
-                        monospace: arguments.MonoFont),
-                    environments: new(
-                        main: Environment.GetEnvironmentVariable(
-                            LatexFontConfigurationResolver.Settings.Main.EnvironmentVariable),
-                        sans: Environment.GetEnvironmentVariable(
-                            LatexFontConfigurationResolver.Settings.Sans.EnvironmentVariable),
-                        monospace: Environment.GetEnvironmentVariable(
-                            LatexFontConfigurationResolver.Settings.Monospace.EnvironmentVariable))),
+                    flags: arguments.FontFlags,
+                    environments: LatexFontConfigurationResolver.GetEnvironmentValues()),
                 cancellationToken: cancellationToken);
         }
         catch (CvConfigurationException ex)
@@ -644,6 +635,17 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
 
 }
 
+internal static class CvGenerationArgumentsExtensions
+{
+    extension(CvGenerationArguments arguments)
+    {
+        internal LatexFontRoleArray<string?> FontFlags => new(
+            main: arguments.MainFont,
+            sans: arguments.SansFont,
+            monospace: arguments.MonoFont);
+    }
+}
+
 internal sealed record ResolvedLatexFontConfiguration(
     LatexFontOptions Options,
     LatexFontRoleArray<bool> ManuallySpecified);
@@ -653,9 +655,23 @@ internal sealed class LatexFontConfigurationException(string message) : Exceptio
 internal static class LatexFontConfigurationResolver
 {
     public static LatexFontRoleArray<LatexFontSetting> Settings { get; } = new(
-        main: new(FlagName: "--main-font", EnvironmentVariable: "CV_MAIN_FONT"),
-        sans: new(FlagName: "--sans-font", EnvironmentVariable: "CV_SANS_FONT"),
-        monospace: new(FlagName: "--mono-font", EnvironmentVariable: "CV_MONO_FONT"));
+        main: new(
+            Role: LatexFontRole.Main,
+            FlagName: "--main-font",
+            EnvironmentVariable: "CV_MAIN_FONT"),
+        sans: new(
+            Role: LatexFontRole.Sans,
+            FlagName: "--sans-font",
+            EnvironmentVariable: "CV_SANS_FONT"),
+        monospace: new(
+            Role: LatexFontRole.Mono,
+            FlagName: "--mono-font",
+            EnvironmentVariable: "CV_MONO_FONT"));
+
+    public static LatexFontRoleArray<string?> GetEnvironmentValues() =>
+        Settings
+            .Map(static setting => setting.EnvironmentVariable)
+            .Map(Environment.GetEnvironmentVariable);
 
     public static ResolvedLatexFontConfiguration Resolve(
         LatexFontRoleArray<string?> flags,
@@ -722,4 +738,7 @@ internal static class LatexFontConfigurationResolver
 
 }
 
-internal sealed record LatexFontSetting(string FlagName, string EnvironmentVariable);
+internal sealed record LatexFontSetting(
+    LatexFontRole Role,
+    string FlagName,
+    string EnvironmentVariable);
