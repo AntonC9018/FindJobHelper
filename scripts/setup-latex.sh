@@ -31,7 +31,7 @@ font_version=2.1.5
 font_url='https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz'
 font_sha256='7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0'
 font_root="${HOME}/.local/share/fonts/findjobhelper/liberation-fonts-${font_version}"
-font_marker="$font_root/.archive-sha256"
+font_marker="$font_root/.archive-sha256-all-families"
 packages=(babel-romanian xifthen ifmtarg moresize zref needspace multirow wrapfig varwidth environ)
 temporary_directories=()
 
@@ -124,6 +124,7 @@ check_installation() {
   for package in "${packages[@]}"; do verify_package "$bin_directory/tlmgr" "$package"; done
   verify_font 'Liberation Serif'
   verify_font 'Liberation Sans'
+  verify_font 'Liberation Mono'
   printf 'TeX Live root: %s\n' "$install_root"
   printf 'TeX Live platform: %s\n' "${bin_directory##*/}"
   printf 'LaTeX binary directory: %s\n' "$bin_directory"
@@ -205,7 +206,7 @@ if [[ ! -f "$font_marker" ]] || [[ "$(<"$font_marker")" != "$font_sha256" ]]; th
   fi
   printf '%s  %s\n' "$font_sha256" "$font_archive" | sha256sum --check --status
   mkdir -p "$font_root"
-  tar -xzf "$font_archive" -C "$font_root" --strip-components=1 --wildcards '*/LiberationSerif-*.ttf' '*/LiberationSans-*.ttf'
+  tar -xzf "$font_archive" -C "$font_root" --strip-components=1 --wildcards '*/LiberationSerif-*.ttf' '*/LiberationSans-*.ttf' '*/LiberationMono-*.ttf'
   printf '%s\n' "$font_sha256" >"$font_marker"
 fi
 fc-cache -f "$font_root" >/dev/null

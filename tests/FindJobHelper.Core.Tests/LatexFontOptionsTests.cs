@@ -8,7 +8,7 @@ public sealed class LatexFontOptionsTests
     public void Default_UsesExpectedFontFamilies()
     {
         Assert.Equal(
-            ["Liberation Serif", "Liberation Sans", "Latin Modern Mono"],
+            ["Liberation Serif", "Liberation Sans", "Liberation Mono"],
             LatexFontOptions.Default.Families.Values.Select(static family => family.Value));
     }
 

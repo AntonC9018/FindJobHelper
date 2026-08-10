@@ -632,10 +632,10 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
 
     [Option(
         "mono-font",
-        Description = "Installed LaTeX monospaced font family. Overrides CV_MONO_FONT; default: Latin Modern Mono.")]
+        Description = "Installed LaTeX monospaced font family. Overrides CV_MONO_FONT; default: Liberation Mono.")]
     public string? MonoFont { get; set; }
 
-    public LatexFontRoleArray<string?> FontFlags => new([MainFont, SansFont, MonoFont]);
+    internal LatexFontRoleArray<string?> FontFlags => new([MainFont, SansFont, MonoFont]);
 }
 
 internal sealed record ResolvedLatexFontConfiguration(

@@ -176,7 +176,7 @@ public sealed class LatexMeasurementTests
         Assert.DoesNotContain("geometry", source);
         Assert.Contains(@"\setmainfont{Liberation Serif}", source);
         Assert.Contains(@"\setsansfont{Liberation Sans}", source);
-        Assert.Contains(@"\setmonofont{Latin Modern Mono}", source);
+        Assert.Contains(@"\setmonofont{Liberation Mono}", source);
     }
 
     [Fact]
@@ -500,7 +500,7 @@ public sealed class LatexMeasurementTests
             Assert.True(context.Heights > 0);
         });
         Assert.Contains(contexts, context => context.Main == "Liberation Serif"
-            && context.Sans == "Liberation Sans" && context.Mono == "Latin Modern Mono");
+            && context.Sans == "Liberation Sans" && context.Mono == "Liberation Mono");
         Assert.Contains(contexts, context => context.Main == "Noto Serif");
         Assert.Contains(contexts, context => context.Sans == "Noto Sans");
         Assert.Contains(contexts, context => context.Mono == "Noto Sans Mono");

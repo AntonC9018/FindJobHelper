@@ -17,7 +17,7 @@ public sealed partial class GeneratedPdfFontTests
         [
             new("Liberation Sans"),
             new("Liberation Serif"),
-            new("Latin Modern Mono"),
+            new("Liberation Mono"),
         ]));
 
         var result = await CvTemplate.Generate(new()
