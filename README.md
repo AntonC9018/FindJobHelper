@@ -53,7 +53,7 @@ builder.Job(job =>
 
 Then you run the generator:
 ```bash
-dotnet find-job-helper -- --config config.json --experience-database compiled_database.dll
+dotnet find-job-helper --config config.json --experience-database compiled_database.dll
 ```
 
 And get a `FirstLast.pdf` rendered CV, containing the best-matching experiences according to your configuration.
@@ -88,7 +88,7 @@ In principle, without that setting, it takes as many items as fit the page, ensu
 
 To generate a CV, do the following:
 
-1. Make a config by using `dotnet find-job-helper -- new-config` in a new directory for the current run.
+1. Make a config by using `dotnet find-job-helper new-config` in a new directory for the current run.
    Edit the `config.json` to fit the tags of the target job position.
 
 2. Run `run.sh` or `run.ps1` from the directory with the config.
@@ -110,7 +110,7 @@ but which are actually irrelevant, so be careful of those.
 ## Hardcoded defaults
 
 * User parameters are configured per invocation via environment variables, or via user-secrets, not stored in the config.
-* If education is included, each education experience is forced to appear.
+* If education is included, each education experience is forced to appear, unless no bullets pass an earlier filter.
 * All job experiences are included bare even if they have no matching bullets.
 * Personal projects are not included unless they have at least one selected bullet.
 
