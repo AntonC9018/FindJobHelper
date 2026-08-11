@@ -23,7 +23,7 @@ try {
         throw "dotnet-releaser build failed with exit code $LASTEXITCODE."
     }
 
-    & dotnet restore (Join-Path $repositoryRoot 'FindJobHelper.sln') -p:RestoreLockedMode=false
+    & dotnet restore (Join-Path $repositoryRoot 'FindJobHelper.slnx') -p:RestoreLockedMode=false
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet restore failed with exit code $LASTEXITCODE."
     }

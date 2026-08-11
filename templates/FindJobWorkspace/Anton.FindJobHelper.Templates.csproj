@@ -23,6 +23,9 @@
              Exclude="content\**\bin\**;content\**\obj\**;content\$(TemplateProviderProject);content\$(TemplateToolManifest)"
              Pack="true"
              PackagePath="content" />
+    <!-- These files are compiled by the provider project that is also loaded in the
+         root solution. Keep packaging them here without creating a second IDE context. -->
+    <Content Update="content\**\*.cs" Visible="false" />
     <Content Include="$(RootPath)src\FindJobHelper.Cli\data\cv-selection.example.json"
              Pack="true"
              PackagePath="content\sent\example\config.json"

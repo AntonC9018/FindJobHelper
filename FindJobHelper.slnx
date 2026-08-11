@@ -1,0 +1,33 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/FindJobHelper.Cli/FindJobHelper.Cli.csproj" />
+    <Project Path="src/FindJobHelper.Core/FindJobHelper.Core.csproj" />
+    <Project Path="src/TheirStack.Client/TheirStack.Client.csproj" />
+    <Project Path="src/TheirStack.ClientGenerator/TheirStack.ClientGenerator.csproj" />
+  </Folder>
+  <Folder Name="/templates/" />
+  <Folder Name="/templates/FindJobWorkspace/">
+    <Project Path="templates/FindJobWorkspace/Anton.FindJobHelper.Templates.csproj" />
+  </Folder>
+  <Folder Name="/templates/FindJobWorkspace/content/" />
+  <Folder Name="/templates/FindJobWorkspace/content/src/">
+    <Project Path="templates/FindJobWorkspace/content/src/FindJobWorkspace.Provider/FindJobWorkspace.Provider.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FindJobHelper.Cli.Tests/FindJobHelper.Cli.Tests.csproj" />
+    <Project Path="tests/FindJobHelper.Core.Tests/FindJobHelper.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/ProviderFixtures/">
+    <Project Path="tests/ProviderFixtures/ConstructorThrows/ConstructorThrows.csproj" />
+    <Project Path="tests/ProviderFixtures/CreateThrows/CreateThrows.csproj" />
+    <Project Path="tests/ProviderFixtures/MultipleProviders/MultipleProviders.csproj" />
+    <Project Path="tests/ProviderFixtures/NoConstructor/NoConstructor.csproj" />
+    <Project Path="tests/ProviderFixtures/NullResult/NullResult.csproj" />
+    <Project Path="tests/ProviderFixtures/SyntheticProvider/SyntheticProvider.csproj" />
+  </Folder>
+</Solution>

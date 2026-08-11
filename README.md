@@ -47,9 +47,9 @@ Personal identity and contact values are supplied through the `PersonalInfo` con
 ## Build and test
 
 ```powershell
-dotnet restore .\FindJobHelper.sln --use-lock-file
-dotnet build .\FindJobHelper.sln --no-restore
-dotnet test .\FindJobHelper.sln --no-build
+dotnet restore .\FindJobHelper.slnx --use-lock-file
+dotnet build .\FindJobHelper.slnx --no-restore
+dotnet test .\FindJobHelper.slnx --no-build
 ```
 
 TheirStack projects are retained for future development but are not referenced by the CLI and are never included in the published packages.
