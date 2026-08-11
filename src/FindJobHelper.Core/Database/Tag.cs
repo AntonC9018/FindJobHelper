@@ -1013,17 +1013,25 @@ public static class TagDatabaseSerializer
             static tag => tag.Name,
             StringComparer.OrdinalIgnoreCase);
         var graph = serialized.Tags
-            .Select(tag => KeyValuePair.Create(
-                tagsByName[tag.Name],
-                new Relations(tag.Relations
-                    .Select(relation => new TagRelation(
-                        tagsByName.TryGetValue(relation.OtherTag, out var otherTag)
-                            ? otherTag
-                            : throw new JsonException(
-                                $"Tag relation references unknown tag '{relation.OtherTag}'."),
-                        OverlapScore.Create(relation.Overlap)))
-                    .ToImmutableArray())))
-            .ToFrozenDictionary();
+            .Select(tag =>
+            {
+                var relations = tag.Relations
+                    .Select(relation =>
+                    {
+                        if (!tagsByName.TryGetValue(relation.OtherTag, out var otherTag))
+                        {
+                            throw new JsonException(
+                                $"Tag relation references unknown tag '{relation.OtherTag}'.");
+                        }
+
+                        var score = OverlapScore.Create(relation.Overlap);
+                        var ret = new TagRelation(otherTag, score);
+                        return ret;
+                    })
+                    .ToImmutableArray();
+                return (TagName: tagsByName[tag.Name], Relations: new Relations(relations));
+            })
+            .ToFrozenDictionary(x => x.TagName, x => x.Relations);
         return new(graph, declarationOrder);
     }
 
