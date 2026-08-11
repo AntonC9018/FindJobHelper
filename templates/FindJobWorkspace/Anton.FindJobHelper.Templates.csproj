@@ -20,16 +20,16 @@
   <ItemGroup>
     <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="All" />
     <Content Include="content\**\*"
-             Exclude="content\$(TemplateProviderProject);content\$(TemplateToolManifest)"
+             Exclude="content\**\bin\**;content\**\obj\**;content\$(TemplateProviderProject);content\$(TemplateToolManifest)"
              Pack="true"
              PackagePath="content" />
-    <Content Include="..\..\src\FindJobHelper.Cli\data\cv-selection.example.json"
+    <Content Include="$(RootPath)src\FindJobHelper.Cli\data\cv-selection.example.json"
              Pack="true"
              PackagePath="content\sent\example\config.json"
              Link="content\sent\example\config.json" />
-    <Content Include="..\..\scripts\setup-latex.sh" Pack="true" PackagePath="content\scripts\setup-latex.sh" Link="content\scripts\setup-latex.sh" />
+    <Content Include="$(RootPath)scripts\setup-latex.sh" Pack="true" PackagePath="content\scripts\setup-latex.sh" Link="content\scripts\setup-latex.sh" />
     <Compile Remove="content\**\*.cs" />
-    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="$(RootPath)LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>
   <!-- Stamp the exact Engine package version into staged copies so packing never modifies tracked template source. -->
   <Target Name="StageVersionedTemplateContent" BeforeTargets="_GetPackageFiles" DependsOnTargets="MinVer">
@@ -44,8 +44,8 @@
     <Copy SourceFiles="content\$(TemplateToolManifest)"
           DestinationFiles="$(_StagedToolManifest)" />
     <XmlPoke XmlInputPath="$(_StagedProviderProject)"
-             Query="/Project/ItemGroup/PackageReference[@Include='Anton.FindJobHelper.Core']/@Version"
-             Value="[$(PackageVersion)]" />
+             Query="/Project/ItemGroup[@Label='FindJobHelperCoreReference']"
+             Value="&lt;PackageReference Include=&quot;Anton.FindJobHelper.Core&quot; Version=&quot;[$(PackageVersion)]&quot; /&gt;" />
     <JsonPoke ContentPath="$(_StagedToolManifest)"
               Query="$.tools['anton.findjobhelper.cli'].version"
               Value="$(PackageVersion)" />
