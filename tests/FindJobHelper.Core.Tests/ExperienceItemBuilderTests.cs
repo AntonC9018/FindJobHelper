@@ -4,6 +4,17 @@ namespace FindJobHelper.Core.Tests;
 
 public sealed class ExperienceItemBuilderTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Tag_RejectsNonPositiveConfiguredScores(int score)
+    {
+        var builder = new ExperienceItemBuilder();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.Tag(new Tag("test"), score));
+    }
+
     [Fact]
     public void Builder_RejectsDuplicateExclusionMembers()
     {
