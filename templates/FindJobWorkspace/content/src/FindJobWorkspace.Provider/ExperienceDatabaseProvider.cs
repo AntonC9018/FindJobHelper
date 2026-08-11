@@ -1,12 +1,58 @@
 using FindJobHelper.Core;
+using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
 
 namespace FindJobWorkspace.Provider;
+
+using static RichTextFactory;
+
+public static class Tags
+{
+    public static Tag DotNet => new(".NET");
+    public static Tag MicroServices => new("microservices");
+}
 
 public sealed class ExperienceDatabaseProvider : IExperienceDatabaseProvider
 {
     public ExperienceDatabaseProviderResult Create()
     {
-        var (dotnet, database) = TagDatabaseFactory.Create();
-        return new(database, ExperienceDatabaseFactory.Create(dotnet));
+        var tags = CreateTags();
+        var experiences = CreateExperiences();
+        return new(tags, experiences);
+    }
+
+    private TagsDatabase CreateTags()
+    {
+        var tags = new TagsDatabaseBuilder();
+        var dotnet = tags.Tag(Tags.DotNet);
+        var microservices = tags.Tag(Tags.MicroServices);
+        dotnet.IsIncludedIn(microservices).By(0.2f).WhichIsIncludedInIt().By(0.1f);
+        return tags.Build().GetResultOrThrow();
+    }
+
+    private ExperienceDatabase CreateExperiences()
+    {
+        var experiences = new ExperienceDatabaseBuilder();
+        var company = experiences.Place("Example Company");
+        experiences.Job(job =>
+        {
+            job.Title("Example Software Engineer");
+            job.Place(company);
+            job.DateRange(
+                DateRange.Completed(
+                    new(Year: 2023, Month: 1),
+                    new(Year: 2024, Month: 12)));
+            job.Item(item =>
+            {
+                item.Text($"Built a fictional { Bold(".NET service") } for example users.");
+                item.Tag(Tags.DotNet, score: 10);
+            });
+            job.Item(item =>
+            {
+                item.Text($"Designed a { Bold("microservice") }");
+                item.Tag(Tags.MicroServices, score: 5);
+            });
+        });
+        return experiences.Build();
     }
 }

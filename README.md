@@ -1,6 +1,38 @@
 # FindJobHelper
 
-FindJobHelper is a reusable CV-selection and generation engine. The public repository contains the Core library, the `find-job-helper` .NET tool, a fictional Workspace template, automated tests, and retained (but unpackaged) TheirStack client source.
+This is a tool used to generate a CV by matching the given tags to your experience database.
+
+Approximate idea:
+```json
+// config.json
+{
+    "requiredTags": [
+        { "name": ".NET", "weight": 1.0 },
+        { "name": "Microservices", "weight": 1.0 },
+    ],
+    // includes more configuration here, like the
+    // listed skills & technologies, page layout, matching parameters.
+}
+```
+
+```csharp
+// Experience Database (some code omitted for brevity)
+var builder = new ExperienceDatabaseBuilder();
+var company = builder.Place("Example Company");
+builder.Job(job =>
+{
+    job.Title("Example Software Engineer");
+    job.Place(company);
+    job.DateRange(DateRange.Completed(new(2023, 1), new(2024, 12)));
+    job.Item(item =>
+    {
+        item.Text($"Built a fictional .NET service for example users.");
+        item.Tag(Tags.DotNet, 10);
+    });
+});
+```
+
+
 
 ## Packages
 

@@ -1,5 +1,8 @@
 *.user*
 bin
 obj
+artifacts
+artifacts-dotnet-releaser
 *.received*
 ~$*
+.idea

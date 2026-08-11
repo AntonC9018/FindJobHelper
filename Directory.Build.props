@@ -10,7 +10,7 @@
         <RootPath>$(MSBuildThisFileDirectory)</RootPath>
         <MinVerTagPrefix>v</MinVerTagPrefix>
         <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
-        <Authors>Anton C.</Authors>
+        <Authors>Anton Curmanschii</Authors>
         <Company>AntonC9018</Company>
         <RepositoryType>git</RepositoryType>
         <RepositoryUrl>https://github.com/AntonC9018/FindJobHelper</RepositoryUrl>

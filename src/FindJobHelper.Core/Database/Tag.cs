@@ -55,7 +55,7 @@ public readonly struct TagBuilderOverlapClause(Builders b)
     public TagBuilderOtherClauseStart By(float score)
     {
         var s = OverlapScore.Create(score);
-        b.Self._OverlapsWithArray.Add(new(b.Other, s));
+        b.Self.OverlapsWithArray.Add(new(b.Other, s));
         return new(b);
     }
 }
@@ -121,9 +121,11 @@ public readonly record struct TagBuilderLink(
 public sealed class TagBuilder
 {
     public required string Name { get; init; }
-    public List<TagBuilderLink> _OverlapsWithArray { get; } = new();
+    internal List<TagBuilderLink> OverlapsWithArray { get; } = new();
 
-    // a.Overlaps(b).By(0.9f) means 10% of a is not in b, 90% is
+    /// <summary>
+    /// a.IsIncludedIn(b).By(0.9f) means 10% of a is not in b, 90% is
+    /// </summary>
     public TagBuilderOverlapClause IsIncludedIn(TagBuilder other)
     {
         return new(new(this, other));
@@ -192,36 +194,51 @@ public sealed record class NotEnoughInformationToImplyInclusionTransitively : Ta
 
 public readonly record struct TagsDatabaseCreateResult(
     List<TagsDatabaseCreationError>? Errors,
-    TagsDatabase? Database);
+    TagsDatabase? Database)
+{
+    public TagsDatabase GetResultOrThrow()
+    {
+        if (Errors != null)
+        {
+            throw new InvalidOperationException(
+                string.Join(Environment.NewLine, Errors));
+        }
+        return Database!;
+    }
+}
 
 public sealed class TagsDatabaseBuilder
 {
     private readonly Dictionary<Tag, TagBuilder> _allTags = new();
 
+    public TagBuilder Tag(Tag tag)
+    {
+        return AddTag(tag);
+    }
+
     public TagBuilder Tag(string name, params ReadOnlySpan<string> aliases)
     {
-        var t = AddTag(name);
+        var t = AddTag(new(name));
         foreach (var x in aliases)
         {
-            t.SameAs(AddTag(x));
+            t.SameAs(AddTag(new(x)));
         }
         return t;
+    }
 
-        TagBuilder AddTag(string name1)
+    private TagBuilder AddTag(Tag tag)
+    {
+        if (_allTags.TryGetValue(tag, out var v))
         {
-            var tag = new Tag(name1);
-            if (_allTags.TryGetValue(tag, out var v))
-            {
-                return v;
-            }
-
-            v = new TagBuilder
-            {
-                Name = name1,
-            };
-            _allTags.Add(tag, v);
             return v;
         }
+
+        v = new TagBuilder
+        {
+            Name = tag.Name,
+        };
+        _allTags.Add(tag, v);
+        return v;
     }
 
     private readonly record struct Combo(
@@ -362,7 +379,7 @@ public sealed class TagsDatabaseBuilder
 
         foreach (var a in context.AllKeys)
         {
-            var value = _allTags[a]._OverlapsWithArray;
+            var value = _allTags[a].OverlapsWithArray;
             var dict = new OverlapDict(value.Count);
             context.Overlaps.Add(a, dict);
 
@@ -679,11 +696,6 @@ public sealed class TagsDatabase
 
     public FrozenDictionary<Tag, Relations> TagsGraph { get; }
 
-    public TagsDatabase(FrozenDictionary<Tag, Relations> tagsGraph)
-        : this(tagsGraph, tagsGraph.Keys.ToImmutableArray())
-    {
-    }
-
     internal TagsDatabase(
         FrozenDictionary<Tag, Relations> tagsGraph,
         ImmutableArray<Tag> declarationOrder)
@@ -766,7 +778,7 @@ public static class TagsDatabaseExtensions
             var groups = groupOrder
                 .Select(x => new RequiredTagGroup(
                     x.CanonicalTag,
-                    x.ConfiguredTags.ToImmutableArray(),
+                    [.. x.ConfiguredTags],
                     x.MaximumWeight))
                 .ToImmutableArray();
             var projectionBuilders = new Dictionary<Tag, ProjectionBuilder>();
@@ -793,15 +805,16 @@ public static class TagsDatabaseExtensions
 
             return new(
                 groups,
-                projectionOrder
-                    .Select(x => new WeightedTagProjection(
-                        x.TargetTag,
-                        x.MaximumCoefficient,
-                        x.HasDirectCoefficient
-                            ? x.MaximumDirectCoefficient
-                            : 0,
-                        x.Origins.ToImmutableArray()))
-                    .ToImmutableArray());
+                [
+                    .. projectionOrder
+                        .Select(x => new WeightedTagProjection(
+                            x.TargetTag,
+                            x.MaximumCoefficient,
+                            x.HasDirectCoefficient
+                                ? x.MaximumDirectCoefficient
+                                : 0,
+                            [.. x.Origins])),
+                ]);
 
             void AddProjection(
                 Tag targetTag,
