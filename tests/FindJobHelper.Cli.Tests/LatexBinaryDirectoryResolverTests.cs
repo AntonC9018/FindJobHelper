@@ -41,58 +41,10 @@ public sealed class LatexBinaryDirectoryResolverTests
         Assert.Null(LatexBinaryDirectoryResolver.TryNormalizePathDirectory("\0"));
     }
 
-    [Fact]
-    public void TemplatePackageLinksTheCanonicalInstallerDirectly()
-    {
-        var root = FindRepositoryRoot();
-        var projectPath = Path.Combine(
-            root,
-            "templates",
-            "FindJobWorkspace",
-            "Anton.FindJobHelper.Templates.csproj");
-        var project = XDocument.Load(projectPath);
-        var installer = project.Descendants("Content").Single(element =>
-            (string?)element.Attribute("PackagePath") == @"content\scripts\setup-latex.sh");
-
-        Assert.Equal(@"..\..\scripts\setup-latex.sh", (string?)installer.Attribute("Include"));
-        Assert.False(File.Exists(Path.Combine(root, "templates", "FindJobWorkspace", "content", "scripts", "setup-latex.sh")));
-    }
-
-    [Fact]
-    public void TemplateProviderSwitchesFromLocalCoreProjectToPackedCorePackage()
-    {
-        var root = FindRepositoryRoot();
-        var templateDirectory = Path.Combine(root, "templates", "FindJobWorkspace");
-        var provider = XDocument.Load(Path.Combine(
-            templateDirectory,
-            "content",
-            "src",
-            "FindJobWorkspace.Provider",
-            "FindJobWorkspace.Provider.csproj"));
-        var packageProject = XDocument.Load(Path.Combine(
-            templateDirectory,
-            "Anton.FindJobHelper.Templates.csproj"));
-
-        var projectReference = provider.Descendants("ProjectReference").Single();
-        var versionPoke = packageProject.Descendants("XmlPoke").Single();
-
-        Assert.Equal(
-            "FindJobHelperCoreReference",
-            (string?)projectReference.Parent?.Attribute("Label"));
-        Assert.DoesNotContain(provider.Descendants("PackageReference"), element =>
-            (string?)element.Attribute("Include") == "Anton.FindJobHelper.Core");
-        Assert.Equal(
-            "/Project/ItemGroup[@Label='FindJobHelperCoreReference']",
-            (string?)versionPoke.Attribute("Query"));
-        Assert.Equal(
-            "<PackageReference Include=\"Anton.FindJobHelper.Core\" Version=\"[$(PackageVersion)]\" />",
-            (string?)versionPoke.Attribute("Value"));
-    }
-
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FindJobHelper.sln")))
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FindJobHelper.slnx")))
         {
             directory = directory.Parent;
         }

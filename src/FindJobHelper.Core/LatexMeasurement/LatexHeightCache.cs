@@ -108,7 +108,10 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(fonts);
-        if (values.Count == 0) return;
+        if (values.Count == 0)
+        {
+            return;
+        }
 
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
