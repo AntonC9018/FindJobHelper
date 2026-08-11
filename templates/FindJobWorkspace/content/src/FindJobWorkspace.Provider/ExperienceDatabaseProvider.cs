@@ -9,7 +9,7 @@ using static RichTextFactory;
 public static class Tags
 {
     public static Tag DotNet => new(".NET");
-    public static Tag MicroServices => new("microservices");
+    public static Tag Microservices => new("microservices");
 }
 
 public sealed class ExperienceDatabaseProvider : IExperienceDatabaseProvider
@@ -25,7 +25,7 @@ public sealed class ExperienceDatabaseProvider : IExperienceDatabaseProvider
     {
         var tags = new TagsDatabaseBuilder();
         var dotnet = tags.Tag(Tags.DotNet);
-        var microservices = tags.Tag(Tags.MicroServices);
+        var microservices = tags.Tag(Tags.Microservices);
         dotnet.IsIncludedIn(microservices).By(0.2f).WhichIsIncludedInIt().By(0.1f);
         return tags.Build().GetResultOrThrow();
     }
@@ -45,12 +45,14 @@ public sealed class ExperienceDatabaseProvider : IExperienceDatabaseProvider
             job.Item(item =>
             {
                 item.Text($"Built a fictional { Bold(".NET service") } for example users.");
+                // Score 1-10 is recommended, though any scale may be used.
                 item.Tag(Tags.DotNet, score: 10);
+                item.Tag(Tags.Microservices, score: 4);
             });
             job.Item(item =>
             {
                 item.Text($"Designed a { Bold("microservice") }");
-                item.Tag(Tags.MicroServices, score: 5);
+                item.Tag(Tags.Microservices, score: 5);
             });
         });
         return experiences.Build();

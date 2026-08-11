@@ -1,6 +1,6 @@
 {
   "$schema": "http://json.schemastore.org/template",
-  "author": "Anton C.",
+  "author": "Anton Curmanschii",
   "classifications": [ "Console", "CV", "Workspace" ],
   "identity": "Anton.FindJobHelper.Workspace",
   "name": "FindJobHelper fictional Workspace",

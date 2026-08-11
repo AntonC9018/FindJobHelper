@@ -1,44 +1,66 @@
-# FindJobWorkspace instructions
+### When asked to generate a CV:
 
-This Workspace consumes the public FindJobHelper Engine through NuGet. Engine source is not required for normal work; the compiled provider DLL is the integration point. Keep the Core package and local CLI tool pinned to the same exact version.
+- `run.sh` or `run.ps1` is the core script used to generate a CV.
+- Use `dotnet find-job-helper` to create a new CV config and to list the existing tags.
+- Only include the language section where the position is local for the user
+  or where it mentions that knowing a given language is required.
+- Only include tags explicitly required in the position.
+  Similar tags are going to match automatically.
+- You may add new tags if those are not mentioned in the database but the experience does
+  talk about them, or you've added bullets that talk about them from other projects of the user.
+- You may edit the tag relations in the tag database, but make sure 
+  to explain why with a comment above the lines you add.
+- CV generally should be 2 pages, unless 1 page includes enough information.
+- Put the generated CV PDF + JSON configuration named exactly `config.json` (+ cover letter if asked)
+  in a directory under `sent/` named as `{nr}_{title}_{company}`,
+  add a row to `sent/index.csv`.
+- Reserve yourself a number as soon as possible so there are no number conflicts 
+  with other agents. In order to do this, just create a directory for the output.
+- You might be working with other agents on this so make sure 
+  the writes to `sent/index.csv` lock the file and only append to it, unless explicitly asked to edit a row.
+- Only reserve consecutive numbers after the current largest, don't reinsert missing numbers.
+- Don't send the CV on email, unless explicitly asked by the user. 
+  You must only edit local files.
+- You don't need to edit or view the experience database code when making a CV,
+  unless it is to add new experiences or new tags.
+- Don't try to force one particular experience on to the page.
+  You need to only operate on tag basis. 
+  And if too few things match, only then should you go into the experience database
+  and add new experiences.
+- Include each of the technologies as a separate item, don't group them using '/'.
+  E.g. don't do "ASP.NET Core / EF Core" do "ASP.NET Core, EF Core".
+  CI/CD, C/C++ and other common established patterns are fine though.
+- Save the job description as a txt file in the new folder.
+- Assume the program is behaving correctly and will print errors if something didn't go right.
+- Assume the generated CV is the right number of pages and includes 
+  the best fitting candidates according to the configuration.
+- Include all the keywords you can, even if there is no proof of them in the experience database.
+- Comment out keywords with least evidence in the JSON, if they take up too much space.
+- When generating a cover letter, don't go over 120 characters per line.
+- Pull down information on each of the companies and put it in a file next to the generated CV:
+  * domain
+  * latest projects
+  * reviews if those are easily accessible
+  Include a link to the company in that document.
+- Don't access the link to the job posting if the user already gave you the job description.
 
-## LaTeX setup
+## When adding experiences
 
-On Linux or WSL, run `bash scripts/setup-latex.sh` before the first PDF generation.
-The script prints any follow-up commands when it finishes. Safe reruns fill missing
-requirements without updating installed packages.
-
-- Default TeX Live root: `$HOME/.local/share/findjobhelper/texlive/2026`
-- Setup override: `--install-root` or `FINDJOBHELPER_TEXLIVE_ROOT`
-- Runtime override: `--latex-bin-directory` or `FINDJOBHELPER_LATEX_BIN_DIRECTORY`
-- Fonts: Liberation Fonts 2.1.5 under the SIL Open Font License
-- Requirements: network access and several GB of user-owned disk space
-
-The CLI option wins over environment configuration. Both `latexmk` and `xelatex`
-must come from the same selected directory. Native Windows installation is
-unsupported, but an existing compatible distribution may be selected explicitly.
-
-To remove the default installation, delete only the default TeX root and
-`$HOME/.local/share/fonts/findjobhelper/liberation-fonts-2.1.5`, then run
-`fc-cache -f`.
-
-All checked-in examples are fictional. Replace fictional provider data only in a private Workspace. Never send an application, email anyone, or publish private CV data without explicit owner authorization.
-
-Create per-application configuration with `dotnet tool run find-job-helper -- new-config`. Keep each edited configuration and its generated artifacts in its own private `sent/` directory. Do not commit generated artifacts in a public repository.
-
-## Running the Workspace
-
-```powershell
-.\run.ps1
-.\run.ps1 --force
-.\run.ps1 -- --output-directory output
-```
-
-Use `./run.sh` on Linux, macOS, or WSL. Use `--force` after editing provider
-source. The current directory supplies `config.json`; `sent/example` contains a
-sample.
-
-```powershell
-dotnet user-secrets set "PersonalInfo:Email" "you@example.com" --project src/FindJobWorkspace.Provider
-dotnet user-secrets set "PersonalInfo:Phone" "+1 202-555-0100" --project src/FindJobWorkspace.Provider
-```
+- The experiences must come from real facts derived from the user's code,
+  or supplied by the user in the prompt, or must already exist in the database.
+  Other sources are allowed when pointed at by the user.
+- You may clone down the repo that the user requests to extract information from.
+  Clone it to a temp system directory, not locally.
+- Each bullet point must include the accomplishment or the derivative that was produced,
+  using which tools / libraries / methods, the problem it solved and the impact it produced.
+- Make sure that if a detail is removed from the experiences,
+  it is still recorded in a comment above it.
+- If a user-provided detail is not used in an actual experience bullet,
+  include it in a comment above it still if it is important context.
+- If an experience is generated by you, an agent, you must write above it a comment that it's AI generated.
+- When AI implemented most of the underlying work described by an experience, default every tag unrelated to
+  AI-assisted development to a score of at most 7. This cap is about who performed the work; it does not apply
+  merely because an AI agent wrote or rephrased the experience bullet. Only use a higher score for AI-implemented
+  work when the user explicitly confirms that their own manual effort or expertise warrants it. Research, design,
+  or setup that the user performed themselves may be scored normally even when AI assisted elsewhere.
+- Make sure to look at the latest branches for each repo you inspect.
