@@ -9,8 +9,3 @@ debug/
 *.out
 *.xdv
 *.synctex.gz
-sent/*/
-!sent/.gitkeep
-!sent/index.csv
-!sent/example/
-!sent/example/config.json

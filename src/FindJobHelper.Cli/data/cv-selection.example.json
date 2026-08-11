@@ -1,60 +1,70 @@
 {
-  "pageCount": 2,
-  "requiredTags": [
-    { "name": ".NET", "weight": 1.0 },
-    { "name": "Thesis", "weight": 0.01 },
-    { "name": "Image Processing", "weight": 1.0 },
-    { "name": "Multithreading", "weight": 1.0 },
-    { "name": "Concurrency", "weight": 0.8 },
-    { "name": "SQL", "weight": 0.9 },
-    { "name": "SQL Server", "weight": 0.8 },
-    { "name": "PostgreSQL", "weight": 0.6 },
-    { "name": "EF Core", "weight": 0.5 },
-    { "name": "PNG", "weight": 1.0 },
-    { "name": "TIFF", "weight": 1.0 },
-    { "name": "3D", "weight": 0.5 },
-    { "name": "JPEG", "weight": 0.5 },
-    { "name": "GRPC", "weight": 0.9 }
-  ],
-  "skills": [
-    "Image Processing",
-    "Parallel Processing"
-  ],
-  "technologies": [
-    ".NET",
-    "SQL Server",
-    "PostgreSQL",
-    "Entity Framework",
-    "ADO.NET",
-    "gRPC"
-  ],
-  "mmr": {
-    "relevanceWeight": 0.72,
-    "saturationQuota": 2,
-    "saturationPenalty": 0.18
-  },
-  "selection": {
-    "default": {
-      // "minItemBudget": 2,
-      // "itemBudget": 8,
-      // "scoreLowerBound": 5,
-      // "recencyBoost": 0.25,
-      // "directMatchBoost": 0.5
+    "pageCount": 2,
+    "requiredTags": [
+        { "name": ".NET", "weight": 1.0 },
+        { "name": "Thesis", "weight": 0.01 },
+        { "name": "Image Processing", "weight": 1.0 },
+        { "name": "Multithreading", "weight": 1.0 },
+        { "name": "Concurrency", "weight": 0.8 },
+        { "name": "SQL", "weight": 0.9 },
+        { "name": "SQL Server", "weight": 0.8 },
+        { "name": "PostgreSQL", "weight": 0.6 },
+        { "name": "EF Core", "weight": 0.5 },
+        { "name": "PNG", "weight": 1.0 },
+        { "name": "TIFF", "weight": 1.0 },
+        { "name": "3D", "weight": 0.5 },
+        { "name": "JPEG", "weight": 0.5 },
+        { "name": "GRPC", "weight": 0.9 },
+    ],
+    "skills": [
+        "Image Processing",
+        "Parallel Processing",
+    ],
+    "technologies": [
+        ".NET",
+        "SQL Server",
+        "PostgreSQL",
+        "Entity Framework",
+        "ADO.NET",
+        "gRPC",
+    ],
+    "mmr": {
+        "relevanceWeight": 0.72,
+        "saturationQuota": 2,
+        "saturationPenalty": 0.18,
     },
-    "education": {
-      // "minItemBudget": 2,
-      // "itemBudget": 8,
-      // "scoreLowerBound": 5,
-      // "recencyBoost": 0.25,
-      // "directMatchBoost": 0.5
+    "selection": {
+        "default": {
+            // "minItemBudget": 2,
+            // "itemBudget": 8,
+            // "scoreLowerBound": 5,
+            // "recencyBoost": 0.25,
+            // "directMatchBoost": 0.5,
+        },
+        "education": {
+            // "minItemBudget": 2,
+            // "itemBudget": 8,
+            // "scoreLowerBound": 5,
+            // "recencyBoost": 0.25,
+            // "directMatchBoost": 0.5,
+        },
+        "workExperience": {
+        },
+        "personalProjects": {
+        },
     },
-    "workExperience": {
-    },
-    "personalProjects": {
-    }
-  },
-  "sectionOrder": [
-    { "page": 1, "sections": ["WorkExperience"] },
-    { "page": 2, "sections": ["PersonalProjects", "Languages", "Education"] },
-  ]
+    "sectionOrder": [
+        {
+            "page": 1,
+            "sections": ["WorkExperience"],
+        },
+        {
+            "page": 2,
+            "sections": ["PersonalProjects", "Languages", "Education"],
+        },
+        // {
+        //     "page": "2-3",
+        //     "sections": ["PersonalProjects", "Languages", "Education"],
+        // },
+    ],
 }

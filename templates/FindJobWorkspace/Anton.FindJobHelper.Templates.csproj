@@ -27,11 +27,10 @@
          root solution. Keep packaging them here without creating a second IDE context. -->
     <Content Update="content\**\*.cs" Visible="false" />
     <Content Remove="content\**\*.cs" Condition="'$(DesignTimeBuild)' == 'true'" />
-    <Content Include="$(RootPath)src\FindJobHelper.Cli\data\cv-selection.example.json"
+    <Content Include="$(RootPath)scripts\setup-latex.sh"
              Pack="true"
-             PackagePath="content\sent\example\config.json"
-             Link="content\sent\example\config.json" />
-    <Content Include="$(RootPath)scripts\setup-latex.sh" Pack="true" PackagePath="content\scripts\setup-latex.sh" Link="content\scripts\setup-latex.sh" />
+             PackagePath="content\scripts\setup-latex.sh"
+             Link="content\scripts\setup-latex.sh" />
     <Compile Remove="content\**\*.cs" />
     <None Include="$(RootPath)LICENSE" Pack="true" PackagePath="\" />
   </ItemGroup>

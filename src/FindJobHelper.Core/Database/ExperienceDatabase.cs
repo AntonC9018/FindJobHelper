@@ -9,7 +9,19 @@ using FindJobHelper.CVGeneration;
 namespace FindJobHelper.Core;
 
 // Tag reference with score for a specific experience item
-public readonly record struct TagReference(Tag Tag, int Score);
+public readonly record struct TagReference
+{
+    public TagReference(Tag Tag, int Score)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(Score, 0, "Use a positive score value");
+
+        this.Tag = Tag;
+        this.Score = Score;
+    }
+
+    public Tag Tag { get; }
+    public int Score { get; }
+}
 
 public enum ItemRequirement
 {
