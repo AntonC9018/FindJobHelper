@@ -2,8 +2,10 @@
   <PropertyGroup>
     <UserSecretsId>3d10e187-d43d-44b5-96ae-c78077e83d91</UserSecretsId>
   </PropertyGroup>
+  <ItemGroup Label="FindJobHelperCoreReference">
+    <ProjectReference Include="$(RootPath)src\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+  </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Anton.FindJobHelper.Core" Version="[0.2.0]" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
   </ItemGroup>
 </Project>

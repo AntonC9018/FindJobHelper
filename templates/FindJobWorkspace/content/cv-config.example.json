@@ -1,7 +1,0 @@
-{
-  "limitToOnePage": true,
-  "requiredTags": [ { "name": ".NET", "weight": 1.0 } ],
-  "skills": [ "Fictional collaboration" ],
-  "technologies": [ ".NET" ],
-  "sectionOrder": [ "WorkExperience", "PersonalProjects", "Education" ]
-}
