@@ -79,7 +79,7 @@ internal sealed class JsonCvSelectionConfiguration
     public required List<RequiredTagConfiguration> RequiredTags { get; init; }
     public required List<string> Skills { get; init; }
     public required List<string> Technologies { get; init; }
-    public required MmrConfiguration Mmr { get; init; }
+    public MmrConfiguration? Mmr { get; init; }
     public required SelectionConfiguration Selection { get; init; }
     public required SectionOrderCollection SectionOrder { get; init; }
 
@@ -164,14 +164,7 @@ internal sealed class JsonCvSelectionConfiguration
             errors.Add("'technologies' cannot contain blank items.");
         }
 
-        if (Mmr is null)
-        {
-            errors.Add("'mmr' is required.");
-        }
-        else
-        {
-            Mmr.CollectValidationErrors(errors);
-        }
+        Mmr?.CollectValidationErrors(errors);
 
         if (Selection is null)
         {
@@ -194,7 +187,7 @@ internal sealed class JsonCvSelectionConfiguration
             [.. RequiredTags!],
             [.. Skills!],
             [.. Technologies!],
-            Mmr!,
+            Mmr?.ToDomain() ?? MmrOptions.Default,
             Selection!,
             SectionOrder.Sections,
             pageLayout);
@@ -270,7 +263,7 @@ public sealed class CvSelectionConfiguration
         ImmutableArray<RequiredTagConfiguration> requiredTags,
         ImmutableArray<string> skills,
         ImmutableArray<string> technologies,
-        MmrConfiguration mmr,
+        MmrOptions mmr,
         SelectionConfiguration selection,
         ImmutableArray<Section> sectionOrder,
         CvPageLayout? pageLayout = null)
@@ -293,7 +286,7 @@ public sealed class CvSelectionConfiguration
 
     public ImmutableArray<string> Technologies { get; }
 
-    public MmrConfiguration Mmr { get; }
+    public MmrOptions Mmr { get; }
 
     public SelectionConfiguration Selection { get; }
 
@@ -336,13 +329,9 @@ public sealed class CvSelectionConfiguration
             throw new CvConfigurationException(ex.Message, ex);
         }
 
-        var mmr = new MmrOptions(
-            Mmr.RelevanceWeight,
-            Mmr.SaturationQuota,
-            Mmr.SaturationPenalty);
         try
         {
-            mmr.Validate();
+            Mmr.Validate();
         }
         catch (ArgumentOutOfRangeException ex)
         {
@@ -355,7 +344,7 @@ public sealed class CvSelectionConfiguration
 
         var builder = new SearchBuilder();
         builder.Tags(weightedTags);
-        builder.Mmr(mmr);
+        builder.Mmr(Mmr);
         builder.ConfigureDefaults(Selection.Default.Apply);
         builder.Configure(
             educationKey,
@@ -411,26 +400,36 @@ public sealed class RequiredTagConfiguration
 
 public sealed class MmrConfiguration
 {
-    public required float RelevanceWeight { get; init; }
-    public required int SaturationQuota { get; init; }
-    public required float SaturationPenalty { get; init; }
+    public float? RelevanceWeight { get; init; }
+    public int? SaturationQuota { get; init; }
+    public float? SaturationPenalty { get; init; }
 
     public void CollectValidationErrors(List<string> errors)
     {
-        if (!float.IsFinite(RelevanceWeight) || RelevanceWeight is < 0 or > 1)
+        if (RelevanceWeight is { } relevanceWeight
+            && (!float.IsFinite(relevanceWeight) || relevanceWeight is < 0 or > 1))
         {
             errors.Add("'mmr.relevanceWeight' must be finite and between 0 and 1.");
         }
 
-        if (SaturationQuota < 1)
+        if (SaturationQuota is < 1)
         {
             errors.Add("'mmr.saturationQuota' must be at least 1.");
         }
 
-        if (!float.IsFinite(SaturationPenalty) || SaturationPenalty < 0)
+        if (SaturationPenalty is { } saturationPenalty
+            && (!float.IsFinite(saturationPenalty) || saturationPenalty < 0))
         {
             errors.Add("'mmr.saturationPenalty' must be finite and non-negative.");
         }
+    }
+
+    public MmrOptions ToDomain()
+    {
+        return new(
+            RelevanceWeight: RelevanceWeight ?? MmrOptions.Default.RelevanceWeight,
+            SaturationQuota: SaturationQuota ?? MmrOptions.Default.SaturationQuota,
+            SaturationPenalty: SaturationPenalty ?? MmrOptions.Default.SaturationPenalty);
     }
 }
 

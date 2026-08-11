@@ -1,19 +1,22 @@
-// config.json
 {
+    "pageCount": 1,
     "requiredTags": [
         { "name": ".NET", "weight": 1.0 },
-        { "name": "Microservices", "weight": 1.0 },
+        { "name": "microservices", "weight": 1.0 },
     ],
-    "sections": {
+    "skills": [
+        "Microservices",
+    ],
+    "technologies": [
+        ".NET",
+    ],
+    "selection": {
         "workExperience": {
-            // Only include a single bullet into the CV
-            "itemBudget": 1
-        }
+            // Only include a single bullet in the CV.
+            "itemBudget": 1,
+        },
     },
     "sectionOrder": [
         { "page": 1, "sections": ["WorkExperience"] },
     ],
-    // Includes more configuration here, like the
-    // listed skills & technologies, page layout, matching parameters.
 }
-
