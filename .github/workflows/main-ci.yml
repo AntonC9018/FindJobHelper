@@ -38,10 +38,10 @@ jobs:
           source "$HOME/.local/share/findjobhelper/texlive/2026/findjobhelper-env.sh"
           printf '%s\n' "$(dirname "$(command -v latexmk)")" >> "$GITHUB_PATH"
           ./scripts/setup-latex.sh --check
-      - run: dotnet restore FindJobHelper.sln
-      - run: dotnet build FindJobHelper.sln -c Release --no-restore -p:ContinuousIntegrationBuild=true
+      - run: dotnet restore FindJobHelper.slnx
+      - run: dotnet build FindJobHelper.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
       - name: Run complete test suite
-        run: dotnet test FindJobHelper.sln -c Release --no-build --no-restore
+        run: dotnet test FindJobHelper.slnx -c Release --no-build --no-restore
       - name: Render a fictional CV through the real CLI
         shell: bash
         run: |
