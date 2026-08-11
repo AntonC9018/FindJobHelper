@@ -2,7 +2,7 @@ namespace FindJobHelper.Core;
 
 public interface IExperienceDatabaseProvider
 {
-    ExperienceDatabaseProviderResult Create();
+    public ExperienceDatabaseProviderResult Create();
 }
 
 public sealed record ExperienceDatabaseProviderResult

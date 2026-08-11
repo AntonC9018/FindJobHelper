@@ -231,14 +231,14 @@ public sealed class SearchBuilder
                 predicate.Key,
                 predicate.Predicate,
                 new(
-                    predicate.Options.MinItemBudget,
-                    predicate.Options.ItemBudget,
-                    predicate.Options.ScoreLowerBound,
-                    predicate.Options.RecencyBoost,
-                    predicate.Options.DirectMatchBoost,
-                    predicate.Options.IncludeEmptyLists,
-                    predicate.Options.PreserveOneItemPerList),
-                i));
+                    MinItemBudget: predicate.Options.MinItemBudget,
+                    ItemBudget: predicate.Options.ItemBudget,
+                    ScoreLowerBound: predicate.Options.ScoreLowerBound,
+                    RecencyBoost: predicate.Options.RecencyBoost,
+                    DirectMatchBoost: predicate.Options.DirectMatchBoost,
+                    IncludeEmptyLists: predicate.Options.IncludeEmptyLists,
+                    PreserveOneItemPerList: predicate.Options.PreserveOneItemPerList),
+                Order: i));
         }
 
         return new(

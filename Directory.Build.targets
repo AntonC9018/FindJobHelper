@@ -1,8 +1,4 @@
 <Project>
-    <Import
-        Condition="'$(IncludeUserSecrets)' == 'true'"
-        Project="build\UserSecrets.props" />
-
     <ItemGroup>
         <None Include="$(ProjectDir)data\**\*.*" CopyToOutputDirectory="Always" />
     </ItemGroup>
