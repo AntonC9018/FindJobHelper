@@ -56,13 +56,7 @@ internal sealed partial class LatexmkProgressParser
         lock (_sync)
         {
             var run = RuleRunRegex().Match(line);
-            if (run.Success
-                && int.TryParse(
-                    run.Groups["number"].Value,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var passNumber)
-                && passNumber > 0)
+            if (TryParseRunNumber(run, out var passNumber))
             {
                 switch (run.Groups["rule"].Value)
                 {
@@ -95,12 +89,10 @@ internal sealed partial class LatexmkProgressParser
                 }
             }
 
-            if (_activeXeLatexPass is { } markerPass
-                && LatexProgressMarkerProtocol.TryParse(
+            if (TryResolveRenderBullet(
                     line,
-                    out var marker)
-                && _renderProgressPlan.TryGetBullet(
-                    marker.Id,
+                    out var markerPass,
+                    out var marker,
                     out var bullet))
             {
                 _activeRenderBullet = bullet;
@@ -114,11 +106,7 @@ internal sealed partial class LatexmkProgressParser
                 return;
             }
 
-            if (_activeXeLatexPass is { } activePass
-                && line.Contains(
-                    "Output written on main.xdv",
-                    StringComparison.Ordinal)
-                && _completedXeLatexPasses.Add(activePass))
+            if (TryCompleteActivePass(line, out var activePass))
             {
                 CompleteMissingBullets(activePass);
                 _activeXeLatexPass = null;
@@ -171,8 +159,11 @@ internal sealed partial class LatexmkProgressParser
     private string CurrentDetail()
     {
         var baseDetail = _overrunDetail ?? "Rendering PDF";
-        if (_activeXeLatexPass is not { } pass
-            || _activeRenderBullet is not { } bullet)
+        if (_activeXeLatexPass is not { } pass)
+        {
+            return baseDetail;
+        }
+        if (_activeRenderBullet is not { } bullet)
         {
             return baseDetail;
         }
@@ -191,6 +182,73 @@ internal sealed partial class LatexmkProgressParser
     private readonly record struct CompletedRenderBullet(
         int Pass,
         LatexProgressMarkerId MarkerId);
+
+    private static bool TryParseRunNumber(Match run, out int passNumber)
+    {
+        passNumber = default;
+        if (!run.Success)
+        {
+            return false;
+        }
+        if (!int.TryParse(
+                run.Groups["number"].Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out passNumber))
+        {
+            return false;
+        }
+
+        return passNumber > 0;
+    }
+
+    private bool TryResolveRenderBullet(
+        string line,
+        out int markerPass,
+        out LatexProgressMarker marker,
+        out LatexRenderBullet bullet)
+    {
+        markerPass = default;
+        marker = default;
+        bullet = default;
+        if (_activeXeLatexPass is not { } activePass)
+        {
+            return false;
+        }
+        if (!LatexProgressMarkerProtocol.TryParse(line, out marker))
+        {
+            return false;
+        }
+        if (!_renderProgressPlan.TryGetBullet(marker.Id, out bullet))
+        {
+            return false;
+        }
+
+        markerPass = activePass;
+        return true;
+    }
+
+    private bool TryCompleteActivePass(string line, out int activePass)
+    {
+        activePass = default;
+        if (_activeXeLatexPass is not { } pass)
+        {
+            return false;
+        }
+        if (!line.Contains(
+                "Output written on main.xdv",
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (!_completedXeLatexPasses.Add(pass))
+        {
+            return false;
+        }
+
+        activePass = pass;
+        return true;
+    }
 
     [GeneratedRegex(
         @"Run number (?<number>\d+) of rule '(?<rule>xelatex|xdvipdfmx)'",

@@ -109,15 +109,21 @@ internal static class LatexBinaryDirectoryResolver
     {
         var latexmk = ResolveExecutable(normalizedDirectory, "latexmk");
         var xelatex = ResolveExecutable(normalizedDirectory, "xelatex");
-        if (latexmk is null || xelatex is null)
+        if (latexmk is null)
+        {
+            return null;
+        }
+        if (xelatex is null)
         {
             return null;
         }
 
+        var executables =
+            new FindJobHelper.CVGeneration.LatexExecutablePaths(latexmk, xelatex);
         return new(
             selectionSource,
             normalizedDirectory,
-            new(latexmk, xelatex));
+            executables);
     }
 
     private static string? ResolveExecutable(string directory, string name)

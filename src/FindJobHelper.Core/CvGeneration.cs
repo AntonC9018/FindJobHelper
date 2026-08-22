@@ -51,7 +51,8 @@ internal static class CvLatexErrors
             @"FJH_SECTION_PAGE_OVERFLOW:\s*([^\r\n.]+)",
             RegexOptions.CultureInvariant);
         var label = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
-        return new(label.Length == 0 ? null : label);
+        var sectionLabel = label.Length == 0 ? null : label;
+        return new(sectionLabel);
     }
 
     public static CvEventPageOverflowException CreateEventPageOverflowException(
@@ -64,35 +65,78 @@ internal static class CvLatexErrors
             RegexOptions.CultureInvariant);
         var section = match.Success ? match.Groups[1].Value.Trim() : string.Empty;
         var @event = match.Success ? match.Groups[2].Value.Trim() : string.Empty;
-        if (model is not null
-            && Enum.TryParse<Section>(section, ignoreCase: false, out var parsedSection))
+        if (TryResolveEvents(model, section, out var events))
         {
-            var events = parsedSection switch
+            if (ShouldUseOnlyEvent(@event, events))
+            {
+                @event = events[0].Title.Value;
+            }
+            else if (TryParseEventNumber(@event, events.Length, out var eventNumber))
+            {
+                @event = events[eventNumber - 1].Title.Value;
+            }
+        }
+
+        var sectionLabel = section.Length == 0 ? null : section;
+        var eventLabel = @event.Length == 0 ? null : @event;
+        return new(sectionLabel, eventLabel);
+
+        static bool TryResolveEvents(
+            CvDataModel? model,
+            string section,
+            out ImmutableArray<Event> events)
+        {
+            events = [];
+            if (model is null)
+            {
+                return false;
+            }
+            if (!Enum.TryParse<Section>(
+                    section,
+                    ignoreCase: false,
+                    out var parsedSection))
+            {
+                return false;
+            }
+
+            events = parsedSection switch
             {
                 Section.WorkExperience => model.WorkExperiences,
                 Section.Education => model.Educations,
                 Section.PersonalProjects => model.PersonalProjects,
                 _ => [],
             };
-            if (@event.Length == 0 && events.Length == 1)
-            {
-                @event = events[0].Title.Value;
-            }
-            else if (int.TryParse(
-                    @event,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var eventNumber)
-                && eventNumber > 0
-                && eventNumber <= events.Length)
-            {
-                @event = events[eventNumber - 1].Title.Value;
-            }
+            return true;
         }
 
-        return new(
-            section.Length == 0 ? null : section,
-            @event.Length == 0 ? null : @event);
+        static bool ShouldUseOnlyEvent(
+            string eventToken,
+            ImmutableArray<Event> events)
+        {
+            if (eventToken.Length != 0)
+            {
+                return false;
+            }
+
+            return events.Length == 1;
+        }
+
+        static bool TryParseEventNumber(
+            string eventToken,
+            int eventCount,
+            out int eventNumber)
+        {
+            if (!int.TryParse(
+                    eventToken,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out eventNumber))
+            {
+                return false;
+            }
+
+            return eventNumber > 0 && eventNumber <= eventCount;
+        }
     }
 
 }
@@ -131,13 +175,21 @@ internal static partial class LatexLogPageCountParser
     {
         ArgumentNullException.ThrowIfNull(latexLog);
         var matches = PageCountRegex().Matches(latexLog);
-        if (matches.Count > 0
-            && int.TryParse(
+        if (matches.Count == 0)
+        {
+            pageCount = 0;
+            return false;
+        }
+        if (!int.TryParse(
                 matches[^1].Groups[1].Value,
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
-                out pageCount)
-            && pageCount > 0)
+                out pageCount))
+        {
+            pageCount = 0;
+            return false;
+        }
+        if (pageCount > 0)
         {
             return true;
         }
@@ -171,18 +223,11 @@ internal static partial class LatexExplicitLayoutMarkerParser
         var ends = new Dictionary<int, int>();
         foreach (Match match in BlockMarkerRegex().Matches(latexLog))
         {
-            if (!int.TryParse(
-                    match.Groups[2].Value,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var blockNumber)
-                || blockNumber <= 0
-                || !int.TryParse(
-                    match.Groups[3].Value,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var pageNumber)
-                || pageNumber <= 0)
+            if (!TryParsePositiveNumber(match.Groups[2].Value, out var blockNumber))
+            {
+                continue;
+            }
+            if (!TryParsePositiveNumber(match.Groups[3].Value, out var pageNumber))
             {
                 continue;
             }
@@ -193,18 +238,30 @@ internal static partial class LatexExplicitLayoutMarkerParser
 
         int? footerPage = null;
         var footerMatches = FooterMarkerRegex().Matches(latexLog);
-        if (footerMatches.Count > 0
-            && int.TryParse(
-                footerMatches[^1].Groups[1].Value,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var parsedFooterPage)
-            && parsedFooterPage > 0)
+        if (footerMatches.Count > 0)
         {
-            footerPage = parsedFooterPage;
+            var footerValue = footerMatches[^1].Groups[1].Value;
+            if (TryParsePositiveNumber(footerValue, out var parsedFooterPage))
+            {
+                footerPage = parsedFooterPage;
+            }
         }
 
         return new(starts, ends, footerPage);
+
+        static bool TryParsePositiveNumber(string value, out int number)
+        {
+            if (!int.TryParse(
+                    value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out number))
+            {
+                return false;
+            }
+
+            return number > 0;
+        }
     }
 }
 
@@ -447,8 +504,7 @@ public static class CvTemplate
         }
         else if (p.PageCount.ExactCount is { } requiredPageCount)
         {
-            if (finalLatexLog is null
-                || !LatexLogPageCountParser.TryParse(
+            if (!TryParseRenderedPageCount(
                     finalLatexLog,
                     out var renderedPageCount))
             {
@@ -476,6 +532,19 @@ public static class CvTemplate
 
         latexmkProgress.CompleteConversionAndValidation();
         return new GeneratedCvArtifacts(pdfOutputPath);
+
+        static bool TryParseRenderedPageCount(
+            string? latexLog,
+            out int pageCount)
+        {
+            pageCount = default;
+            if (latexLog is null)
+            {
+                return false;
+            }
+
+            return LatexLogPageCountParser.TryParse(latexLog, out pageCount);
+        }
     }
 
     internal static int GetTexWorkUnitCount(
@@ -730,12 +799,30 @@ public sealed class SelectionDebugInfo
 
     public float RawScore
     {
-        get => _rawScore == 0
-               && Score != 0
-               && RequirementCoverage.IsEmpty
-               && TagMatches.IsEmpty
-            ? Score
-            : _rawScore;
+        get
+        {
+            if (_rawScore != 0)
+            {
+                return _rawScore;
+            }
+
+            if (Score == 0)
+            {
+                return _rawScore;
+            }
+
+            if (!RequirementCoverage.IsEmpty)
+            {
+                return _rawScore;
+            }
+
+            if (!TagMatches.IsEmpty)
+            {
+                return _rawScore;
+            }
+
+            return Score;
+        }
         set => _rawScore = value;
     }
 
@@ -802,7 +889,8 @@ public readonly record struct OptionalDateParts
         Debug.Assert(Day is >= 0 and <= 31);
         if (Year == 0)
         {
-            Debug.Assert(Month == 0 && Day == 0);
+            Debug.Assert(Month == 0);
+            Debug.Assert(Day == 0);
         }
         if (Month == 0)
         {
@@ -938,17 +1026,9 @@ public sealed class DateRangeComparer : IComparer<DateRange>
     {
         // Unspecified dates are considered "greater than" specified dates
         // (they sort to the end, like ongoing/current dates)
-        if (a.IsUnspecified && b.IsUnspecified)
+        if (TryCompareUnspecified(a, b, out var unspecifiedComparison))
         {
-            return 0;
-        }
-        if (a.IsUnspecified)
-        {
-            return 1;
-        }
-        if (b.IsUnspecified)
-        {
-            return -1;
+            return unspecifiedComparison;
         }
 
         // Compare years
@@ -959,17 +1039,9 @@ public sealed class DateRangeComparer : IComparer<DateRange>
         }
 
         // Compare months (0 means unspecified, treat as less precise but equal within year)
-        if (a.Month == 0 && b.Month == 0)
+        if (TryCompareMissingPart(a.Month, b.Month, out var monthMissingComparison))
         {
-            return 0;
-        }
-        if (a.Month == 0)
-        {
-            return -1; // Less precise sorts earlier
-        }
-        if (b.Month == 0)
-        {
-            return 1;
+            return monthMissingComparison;
         }
 
         int monthComparison = a.Month.CompareTo(b.Month);
@@ -979,20 +1051,52 @@ public sealed class DateRangeComparer : IComparer<DateRange>
         }
 
         // Compare days (0 means unspecified)
-        if (a.Day == 0 && b.Day == 0)
+        if (TryCompareMissingPart(a.Day, b.Day, out var dayMissingComparison))
         {
-            return 0;
-        }
-        if (a.Day == 0)
-        {
-            return -1; // Less precise sorts earlier
-        }
-        if (b.Day == 0)
-        {
-            return 1;
+            return dayMissingComparison;
         }
 
         return a.Day.CompareTo(b.Day);
+
+        static bool TryCompareUnspecified(
+            OptionalDateParts left,
+            OptionalDateParts right,
+            out int comparison)
+        {
+            comparison = default;
+            if (left.IsUnspecified)
+            {
+                comparison = right.IsUnspecified ? 0 : 1;
+                return true;
+            }
+            if (right.IsUnspecified)
+            {
+                comparison = -1;
+                return true;
+            }
+
+            return false;
+        }
+
+        static bool TryCompareMissingPart(
+            int left,
+            int right,
+            out int comparison)
+        {
+            comparison = default;
+            if (left == 0)
+            {
+                comparison = right == 0 ? 0 : -1;
+                return true;
+            }
+            if (right == 0)
+            {
+                comparison = 1;
+                return true;
+            }
+
+            return false;
+        }
     }
 }
 

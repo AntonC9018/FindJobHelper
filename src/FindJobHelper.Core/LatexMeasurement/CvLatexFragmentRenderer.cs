@@ -88,8 +88,20 @@ internal static class CvLatexFragmentRenderer
             return Empty;
         }
 
-        var rows = languages.Select(static language => (FormattableString)
-            $"{LatexConverter.ToLatexString(language.Language.Name)} & {LatexConverter.ToLatexString(language.GeneralProficiencyLevel.Value)} & {Join(language.Skills.Select(static skill => (FormattableString) $"{LatexConverter.ToLatexString(skill.Text)}"), ", ")} \\\\");
+        var rows = languages.Select(static language =>
+        {
+            var languageName = LatexConverter.ToLatexString(language.Language.Name);
+            var proficiency = LatexConverter.ToLatexString(
+                language.GeneralProficiencyLevel.Value);
+            var renderedSkills = language.Skills.Select(static skill =>
+            {
+                var renderedSkill = LatexConverter.ToLatexString(skill.Text);
+                return (FormattableString) $"{renderedSkill}";
+            });
+            var skills = Join(renderedSkills, ", ");
+            return (FormattableString)
+                $"{languageName} & {proficiency} & {skills} \\\\";
+        });
 
         return $$"""
             \cvsection{Languages}
@@ -296,13 +308,11 @@ internal static class CvLatexFragmentRenderer
         {
             var info = i < model.CategorizedInfos.Length ? model.CategorizedInfos[i] : default;
             var list = i < model.CategorizedInfoLists.Length ? model.CategorizedInfoLists[i] : default;
-            FormattableString infoText = info == default
-                ? Empty
-                : $@"\textbf{{{LatexConverter.ToLatexString(info.Category.DisplayName)}:}} {FormatCategoryValue(info.Category, info.Value)}";
-            FormattableString listText = list == default
-                ? Empty
-                : $@"\textbf{{{LatexConverter.ToLatexString(list.Category.DisplayName)}:}} {Join(list.Values.Select(value => FormatCategoryValue(list.Category, value)), ", ")}";
-            rows.Add($@"\metasection{{{infoText}}}{{{listText}}}");
+            var infoText = RenderMetadataInfo(info);
+            var listText = RenderMetadataList(list);
+            FormattableString row =
+                $@"\metasection{{{infoText}}}{{{listText}}}";
+            rows.Add(row);
         }
 
         FormattableString table = rows.Count == 0
@@ -324,6 +334,32 @@ internal static class CvLatexFragmentRenderer
             \vspace{6pt}
             \vspace{\cvsectionspacing}
             """;
+
+        static FormattableString RenderMetadataInfo(CategorizedInfo info)
+        {
+            if (info == default)
+            {
+                return Empty;
+            }
+
+            var category = LatexConverter.ToLatexString(info.Category.DisplayName);
+            var value = FormatCategoryValue(info.Category, info.Value);
+            return $@"\textbf{{{category}:}} {value}";
+        }
+
+        static FormattableString RenderMetadataList(CategorizedInfoList list)
+        {
+            if (list == default)
+            {
+                return Empty;
+            }
+
+            var category = LatexConverter.ToLatexString(list.Category.DisplayName);
+            var renderedValues = list.Values.Select(value =>
+                FormatCategoryValue(list.Category, value));
+            var values = Join(renderedValues, ", ");
+            return $@"\textbf{{{category}:}} {values}";
+        }
     }
 
     private static FormattableString FormatCategoryValue(Category category, RegularString value)

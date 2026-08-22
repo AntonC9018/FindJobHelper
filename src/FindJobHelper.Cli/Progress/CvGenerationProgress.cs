@@ -209,7 +209,11 @@ internal sealed class CvGenerationProgressContext
     {
         lock (_sync)
         {
-            if (_failed || _finished)
+            if (_failed)
+            {
+                return;
+            }
+            if (_finished)
             {
                 return;
             }
@@ -536,9 +540,16 @@ internal static class CvGenerationProgressDisplay
     public static ICvGenerationProgressDisplay CreateDefault()
     {
         var console = AnsiConsole.Console;
-        return !Console.IsOutputRedirected
-               && console.Profile.Capabilities.Interactive
-            ? new InteractiveCvGenerationProgressDisplay(console)
-            : new RedirectedCvGenerationProgressDisplay(Console.Out);
+        if (Console.IsOutputRedirected)
+        {
+            return new RedirectedCvGenerationProgressDisplay(Console.Out);
+        }
+
+        if (!console.Profile.Capabilities.Interactive)
+        {
+            return new RedirectedCvGenerationProgressDisplay(Console.Out);
+        }
+
+        return new InteractiveCvGenerationProgressDisplay(console);
     }
 }

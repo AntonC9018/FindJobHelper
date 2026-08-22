@@ -21,8 +21,11 @@ internal readonly record struct FormattedScore(float Value) : ISpanFormattable
     public string ToString(string? format, IFormatProvider? formatProvider)
     {
         _ = formatProvider;
+        var numericFormat = string.IsNullOrEmpty(format)
+            ? DefaultNumericFormat
+            : format;
         return Value.ToString(
-            string.IsNullOrEmpty(format) ? DefaultNumericFormat : format,
+            numericFormat,
             CultureInfo.InvariantCulture);
     }
 

@@ -44,12 +44,20 @@ public sealed class LatexBinaryDirectoryResolverTests
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "FindJobHelper.slnx")))
+        while (directory is not null)
         {
+            var solutionPath = Path.Combine(
+                directory.FullName,
+                "FindJobHelper.slnx");
+            if (File.Exists(solutionPath))
+            {
+                return directory.FullName;
+            }
+
             directory = directory.Parent;
         }
 
-        return directory?.FullName ?? throw new InvalidOperationException("Repository root not found.");
+        throw new InvalidOperationException("Repository root not found.");
     }
 
     private static string ExecutableName(string name) =>

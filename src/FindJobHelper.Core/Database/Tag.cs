@@ -254,7 +254,7 @@ public sealed class TagsDatabaseBuilder
     {
         public TagPath GetPath(Node a, Node b, Node c)
         {
-            if (a == b || b == c || a == c)
+            if (HasDuplicateNodes(a, b, c))
             {
                 Debug.Fail("Must pass all different options");
             }
@@ -265,6 +265,20 @@ public sealed class TagsDatabaseBuilder
                 AB: GetOverlap(a, b),
                 BC: GetOverlap(b, c),
                 AC: GetOverlap(a, c));
+
+            static bool HasDuplicateNodes(Node a, Node b, Node c)
+            {
+                if (a == b)
+                {
+                    return true;
+                }
+                if (b == c)
+                {
+                    return true;
+                }
+
+                return a == c;
+            }
         }
 
         public OverlapScore GetOverlap(Node a, Node b)
@@ -387,22 +401,21 @@ public sealed class TagsDatabaseBuilder
             {
                 var b = new Tag(x.OtherTag.Name);
                 ref var score = ref dict.GetValueRefOrAddDefault(b, out bool exists);
-                if (exists)
-                {
-                    if (score != x.PercentageOfSelfIncludedInTheOtherTag)
-                    {
-                        context.AddError(new DifferentOverlapSpecifiedSecondTime
-                        {
-                            ExistingScore = score,
-                            NewScore = x.PercentageOfSelfIncludedInTheOtherTag,
-                            TagA = a,
-                            TagB = b,
-                        });
-                    }
-                }
-                else
+                if (!exists)
                 {
                     score = x.PercentageOfSelfIncludedInTheOtherTag;
+                    continue;
+                }
+
+                if (score != x.PercentageOfSelfIncludedInTheOtherTag)
+                {
+                    context.AddError(new DifferentOverlapSpecifiedSecondTime
+                    {
+                        ExistingScore = score,
+                        NewScore = x.PercentageOfSelfIncludedInTheOtherTag,
+                        TagA = a,
+                        TagB = b,
+                    });
                 }
             }
         }
@@ -537,7 +550,12 @@ public sealed class TagsDatabaseBuilder
                         if (x.AC == OverlapDict.NoneValue)
                         {
                             ref var v = ref context.NewMaxMinOverlaps[x.A].GetValueRefOrAddDefault(x.C, out bool exists);
-                            if (!exists || minac.Value > v.Value)
+                            if (!exists)
+                            {
+                                v = minac;
+                                break;
+                            }
+                            if (minac.Value > v.Value)
                             {
                                 v = minac;
                             }
@@ -776,10 +794,14 @@ public static class TagsDatabaseExtensions
             }
 
             var groups = groupOrder
-                .Select(x => new RequiredTagGroup(
-                    x.CanonicalTag,
-                    [.. x.ConfiguredTags],
-                    x.MaximumWeight))
+                .Select(x =>
+                {
+                    var configuredTags = x.ConfiguredTags.ToImmutableArray();
+                    return new RequiredTagGroup(
+                        x.CanonicalTag,
+                        configuredTags,
+                        x.MaximumWeight);
+                })
                 .ToImmutableArray();
             var projectionBuilders = new Dictionary<Tag, ProjectionBuilder>();
             var projectionOrder = new List<ProjectionBuilder>();
@@ -807,13 +829,18 @@ public static class TagsDatabaseExtensions
                 groups,
                 [
                     .. projectionOrder
-                        .Select(x => new WeightedTagProjection(
-                            x.TargetTag,
-                            x.MaximumCoefficient,
-                            x.HasDirectCoefficient
+                        .Select(x =>
+                        {
+                            var directCoefficient = x.HasDirectCoefficient
                                 ? x.MaximumDirectCoefficient
-                                : 0,
-                            [.. x.Origins])),
+                                : 0;
+                            var origins = x.Origins.ToImmutableArray();
+                            return new WeightedTagProjection(
+                                x.TargetTag,
+                                x.MaximumCoefficient,
+                                directCoefficient,
+                                origins);
+                        }),
                 ]);
 
             void AddProjection(
@@ -873,10 +900,14 @@ public static class TagsDatabaseExtensions
 
             bool AreAliases(Tag left, Tag right)
             {
-                return self.RelationsOf(left).GetOverlapWith(right)
-                           == OverlapScore.Full
-                       && self.RelationsOf(right).GetOverlapWith(left)
-                           == OverlapScore.Full;
+                var leftOverlap = self.RelationsOf(left).GetOverlapWith(right);
+                if (leftOverlap != OverlapScore.Full)
+                {
+                    return false;
+                }
+
+                var rightOverlap = self.RelationsOf(right).GetOverlapWith(left);
+                return rightOverlap == OverlapScore.Full;
             }
         }
 
@@ -983,9 +1014,12 @@ public static class TagDatabaseSerializer
             ArgumentNullException.ThrowIfNull(db);
             var serialized = new SerializedTagDatabase(
                 db.DeclarationOrder
-                    .Select(tag => new SerializedTag(
-                        tag.Name,
-                        SerializeRelations(db.RelationsOf(tag))))
+                    .Select(tag =>
+                    {
+                        var relations = db.RelationsOf(tag);
+                        var serializedRelations = SerializeRelations(relations);
+                        return new SerializedTag(tag.Name, serializedRelations);
+                    })
                     .ToImmutableArray());
             await JsonSerializer.SerializeAsync(
                 options: Options,
@@ -1029,7 +1063,8 @@ public static class TagDatabaseSerializer
                         return ret;
                     })
                     .ToImmutableArray();
-                return (TagName: tagsByName[tag.Name], Relations: new Relations(relations));
+                var tagRelations = new Relations(relations);
+                return (TagName: tagsByName[tag.Name], Relations: tagRelations);
             })
             .ToFrozenDictionary(x => x.TagName, x => x.Relations);
         return new(graph, declarationOrder);

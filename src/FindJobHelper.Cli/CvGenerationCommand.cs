@@ -441,17 +441,19 @@ public sealed class CvGenerationCommand
                             offset: markdownFileIndex * markdownWorkUnits,
                             length: markdownWorkUnits,
                             targetTotal: allMarkdownWorkUnits);
+                        var renderMode = artifact.Kind == CvArtifactKind.CleanMarkdown
+                            ? CvMarkdownRenderMode.Clean
+                            : CvMarkdownRenderMode.Annotated;
+                        var stagedMarkdownPath = await StageMarkdownAsync(
+                            model,
+                            renderMode,
+                            artifact.FileName,
+                            stagingDirectory,
+                            markdownProgress,
+                            cancellationToken);
                         stagedArtifactPaths.Add(
                             artifact.Kind,
-                            await StageMarkdownAsync(
-                                model,
-                                artifact.Kind == CvArtifactKind.CleanMarkdown
-                                    ? CvMarkdownRenderMode.Clean
-                                    : CvMarkdownRenderMode.Annotated,
-                                artifact.FileName,
-                                stagingDirectory,
-                                markdownProgress,
-                                cancellationToken));
+                            stagedMarkdownPath);
                         markdownFileIndex++;
                         break;
                     default:

@@ -250,8 +250,13 @@ public sealed class CvGenerationProgressDisplayTests
 
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
-        for (var attempt = 0; attempt < 100 && !condition(); attempt++)
+        for (var attempt = 0; attempt < 100; attempt++)
         {
+            if (condition())
+            {
+                return;
+            }
+
             await Task.Yield();
         }
 
@@ -411,7 +416,11 @@ public sealed class CvGenerationProgressDisplayTests
             {
                 lock (_sync)
                 {
-                    if (_disposed || now < _dueTimestamp)
+                    if (_disposed)
+                    {
+                        return;
+                    }
+                    if (now < _dueTimestamp)
                     {
                         return;
                     }

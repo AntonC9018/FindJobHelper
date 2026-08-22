@@ -74,7 +74,7 @@ internal static class ExplicitPageLayoutCalculator
         var pageHeight = usablePageHeight.ScaledPoints;
         var headerHeight = documentHeaderHeight.ScaledPoints;
         var footerHeight = documentFooterHeight.ScaledPoints;
-        if (pageHeight < 0 || headerHeight < 0 || footerHeight < 0)
+        if (HasNegativeHeight(pageHeight, headerHeight, footerHeight))
         {
             return Failure(
                 ExplicitPageLayoutFailureKind.InvalidHeight,
@@ -102,8 +102,9 @@ internal static class ExplicitPageLayoutCalculator
             for (var unitIndex = 0; unitIndex < units.Count; unitIndex++)
             {
                 var unit = units[unitIndex];
-                if (unit.CurrentPageHeight.ScaledPoints < 0
-                    || unit.FreshPageHeight.ScaledPoints < 0)
+                if (HasNegativeHeight(
+                        unit.CurrentPageHeight.ScaledPoints,
+                        unit.FreshPageHeight.ScaledPoints))
                 {
                     return Failure(
                         ExplicitPageLayoutFailureKind.InvalidHeight,
@@ -211,16 +212,20 @@ internal static class ExplicitPageLayoutCalculator
                     allPlacements.Add(placement);
                 }
 
-                blockResults.Add(new(
+                int? firstPlacementPage = blockPlacements.Count == 0
+                    ? null
+                    : blockPlacements[0].PageNumber;
+                int? lastPlacementPage = blockPlacements.Count == 0
+                    ? null
+                    : blockPlacements[^1].PageNumber;
+                var immutablePlacements = blockPlacements.DrainToImmutable();
+                var blockResult = new ExplicitPageLayoutBlockResult(
                     block,
                     naturalPageCount,
-                    blockPlacements.Count == 0
-                        ? null
-                        : blockPlacements[0].PageNumber,
-                    blockPlacements.Count == 0
-                        ? null
-                        : blockPlacements[^1].PageNumber,
-                    blockPlacements.DrainToImmutable()));
+                    firstPlacementPage,
+                    lastPlacementPage,
+                    immutablePlacements);
+                blockResults.Add(blockResult);
             }
 
             return new(
@@ -234,6 +239,19 @@ internal static class ExplicitPageLayoutCalculator
                 ExplicitPageLayoutFailureKind.InvalidHeight,
                 "Explicit page-layout height arithmetic overflowed.");
         }
+    }
+
+    private static bool HasNegativeHeight(params long[] heights)
+    {
+        foreach (var height in heights)
+        {
+            if (height < 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int CalculateNaturalPageCount(

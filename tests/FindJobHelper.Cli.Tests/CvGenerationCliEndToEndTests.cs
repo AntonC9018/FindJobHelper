@@ -642,13 +642,27 @@ public sealed class CvGenerationCliEndToEndTests
 
         var command = arguments.FirstOrDefault();
         var acceptsExperienceDatabase = command is not "example-config" and not "new-config";
-        if (addExperienceDatabase
-            && acceptsExperienceDatabase
-            && !arguments.Contains("--experience-database", StringComparer.Ordinal))
+        if (ShouldAddExperienceDatabase())
         {
             startInfo.ArgumentList.Add("--experience-database");
             startInfo.ArgumentList.Add(
                 typeof(ExperienceDatabaseProvider).Assembly.Location);
+        }
+
+        bool ShouldAddExperienceDatabase()
+        {
+            if (!addExperienceDatabase)
+            {
+                return false;
+            }
+            if (!acceptsExperienceDatabase)
+            {
+                return false;
+            }
+
+            return !arguments.Contains(
+                "--experience-database",
+                StringComparer.Ordinal);
         }
 
         startInfo.Environment["PersonalInfo__Email"] = "e2e@example.test";

@@ -204,7 +204,11 @@ public static class ExperienceListSorter
 
             while (pending.TryPop(out var predecessor))
             {
-                if (predecessor is null || !visited.Add(predecessor))
+            if (predecessor is null)
+            {
+                continue;
+            }
+            if (!visited.Add(predecessor))
                 {
                     continue;
                 }
@@ -368,25 +372,35 @@ public static class ExperienceListSorter
                 .TopologicalSort(BlockPredecessors);
         }
         catch (InvalidOperationException exception)
-            when (list.ItemGroups.Length != 0 &&
-                  exception.Message.Contains("Cycle detected", StringComparison.Ordinal))
         {
+            if (!IsGroupingCycle(exception))
+            {
+                throw;
+            }
+
             // A pre-existing item-level cycle is still reported with the
             // established error. Only a cycle introduced by collapsing valid
             // item ordering into blocks is a grouping/interleaving conflict.
             var frontItems = list.Items
                 .Where(item =>
-                    selectedSet.Contains(item) &&
-                    item.Order.Move == ItemMove.ToFront)
+                {
+                    if (!selectedSet.Contains(item))
+                    {
+                        return false;
+                    }
+
+                    return item.Order.Move == ItemMove.ToFront;
+                })
                 .ToList();
             frontItems
                 .Concat(selected.Where(item => item.Order.Move != ItemMove.ToFront))
                 .TopologicalSort(item =>
                 {
                     var predecessors = SelectedPredecessors(item);
-                    return item.Order.Move == ItemMove.ToFront
+                    var effectivePredecessors = item.Order.Move == ItemMove.ToFront
                         ? predecessors
                         : predecessors.Concat(frontItems);
+                    return effectivePredecessors;
                 });
 
             throw new InvalidOperationException(
@@ -395,10 +409,26 @@ public static class ExperienceListSorter
                 exception);
         }
 
+        bool IsGroupingCycle(InvalidOperationException exception)
+        {
+            if (list.ItemGroups.Length == 0)
+            {
+                return false;
+            }
+
+            return exception.Message.Contains("Cycle detected", StringComparison.Ordinal);
+        }
+
         return orderedBlocks
-            .SelectMany(block => block.Items.TopologicalSort(item =>
-                SelectedPredecessors(item).Where(predecessor =>
-                    ReferenceEquals(itemToBlock[predecessor], block))))
+            .SelectMany(block =>
+            {
+                return block.Items.TopologicalSort(item =>
+                {
+                    var predecessors = SelectedPredecessors(item);
+                    return predecessors.Where(predecessor =>
+                        ReferenceEquals(itemToBlock[predecessor], block));
+                });
+            })
             .ToList();
 
         IEnumerable<ExperienceListItem> SelectedPredecessors(ExperienceListItem item)
@@ -407,7 +437,11 @@ public static class ExperienceListSorter
             var pending = new Stack<ExperienceListItem>(OrderingPredecessors(item));
             while (pending.TryPop(out var predecessor))
             {
-                if (predecessor is null || !visited.Add(predecessor))
+                if (predecessor is null)
+                {
+                    continue;
+                }
+                if (!visited.Add(predecessor))
                 {
                     continue;
                 }
@@ -607,7 +641,12 @@ public sealed class ExperienceList
         {
             foreach (var referencedItem in references)
             {
-                if (referencedItem is null || !items.Contains(referencedItem))
+                if (referencedItem is null)
+                {
+                    throw new InvalidOperationException(
+                        "An experience item ordering relationship references an item outside its experience list.");
+                }
+                if (!items.Contains(referencedItem))
                 {
                     throw new InvalidOperationException(
                         $"An experience item {relationship} references an item that does not belong to its experience list.");
@@ -718,9 +757,16 @@ public sealed class ExperienceItemBuilder
             IEnumerable<ExperienceItemBuilder> references)
         {
             return references
-                .Select(builder => builtItems.TryGetValue(builder, out var item)
-                    ? item
-                    : throw new InvalidOperationException("Referenced item has not been built yet"))
+                .Select(builder =>
+                {
+                    if (!builtItems.TryGetValue(builder, out var item))
+                    {
+                        throw new InvalidOperationException(
+                            "Referenced item has not been built yet");
+                    }
+
+                    return item;
+                })
                 .ToImmutableArray();
         }
     }
@@ -957,14 +1003,27 @@ public sealed class ExperienceListBuilder
         }
 
         var itemGroups = _groups.Values.Select(group => group.Build(builtItems)).ToImmutableArray();
-        var itemExclusionSets = _exclusionSets.Select(set => new ExperienceItemExclusionSet
-        {
-            Items = set.Select(builder => builtItems.TryGetValue(builder, out var item)
-                ? item
-                : throw new InvalidOperationException(
-                    "An exclusion set contains an item handle that does not belong to its experience list."))
-                .ToImmutableArray(),
-        }).ToImmutableArray();
+        var itemExclusionSets = _exclusionSets
+            .Select(set =>
+            {
+                var items = set
+                    .Select(builder =>
+                    {
+                        if (!builtItems.TryGetValue(builder, out var item))
+                        {
+                            throw new InvalidOperationException(
+                                "An exclusion set contains an item handle that does not belong to its experience list.");
+                        }
+
+                        return item;
+                    })
+                    .ToImmutableArray();
+                return new ExperienceItemExclusionSet
+                {
+                    Items = items,
+                };
+            })
+            .ToImmutableArray();
 
         var result = new ExperienceList
         {
@@ -1176,17 +1235,29 @@ public sealed class WeightedTags : IReadOnlyCollection<WeightedTagProjection>
         }
 
         var groups = groupOrder
-            .Select(x => new RequiredTagGroup(
-                x.Tag,
-                x.ConfiguredTags.ToImmutableArray(),
-                x.MaximumWeight))
+            .Select(x =>
+            {
+                var configuredTags = x.ConfiguredTags.ToImmutableArray();
+                return new RequiredTagGroup(
+                    x.Tag,
+                    configuredTags,
+                    x.MaximumWeight);
+            })
             .ToImmutableArray();
         var projections = groups
-            .Select(group => new WeightedTagProjection(
-                group.CanonicalTag,
-                group.MaximumWeight,
-                group.MaximumWeight,
-                [new(group, group.MaximumWeight, isDirect: true)]))
+            .Select(group =>
+            {
+                var origin = new TagMatchOrigin(
+                    group,
+                    group.MaximumWeight,
+                    isDirect: true);
+                ImmutableArray<TagMatchOrigin> origins = [origin];
+                return new WeightedTagProjection(
+                    group.CanonicalTag,
+                    group.MaximumWeight,
+                    group.MaximumWeight,
+                    origins);
+            })
             .ToImmutableArray();
         return new(groups, projections);
     }

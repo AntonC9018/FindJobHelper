@@ -97,9 +97,12 @@ internal static class ExperienceDatabaseProviderLoader
 
             var loaderMessage = ex.LoaderExceptions
                 .FirstOrDefault(static exception => exception is not null)?.Message;
-            throw new ExperienceDatabaseProviderLoadException(
+            var messageSuffix = loaderMessage is null ? "." : $": {loaderMessage}";
+            var message =
                 $"Types in experience database DLL '{fullPath}' could not be inspected"
-                + (loaderMessage is null ? "." : $": {loaderMessage}"),
+                + messageSuffix;
+            throw new ExperienceDatabaseProviderLoadException(
+                message,
                 ex);
         }
         catch (Exception ex) when (ex is FileNotFoundException or FileLoadException)
@@ -117,8 +120,14 @@ internal static class ExperienceDatabaseProviderLoader
 
         var providerTypes = exportedTypes
             .Where(static type =>
-                type is { IsClass: true, IsAbstract: false }
-                && typeof(IExperienceDatabaseProvider).IsAssignableFrom(type))
+            {
+                if (type is not { IsClass: true, IsAbstract: false })
+                {
+                    return false;
+                }
+
+                return typeof(IExperienceDatabaseProvider).IsAssignableFrom(type);
+            })
             .ToArray();
         if (providerTypes.Length == 0)
         {

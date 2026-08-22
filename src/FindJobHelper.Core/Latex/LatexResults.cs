@@ -276,19 +276,34 @@ internal static partial class LatexFailureClassifier
     {
         var normalizedExecutableName = Path.GetFileNameWithoutExtension(executableName);
         var requirement = options.Requirements.FirstOrDefault(
-            requirement => requirement is ExecutableLatexRequirement executable
-                && string.Equals(
-                    Path.GetFileNameWithoutExtension(executable.Name.Value),
-                    normalizedExecutableName,
-                    StringComparison.OrdinalIgnoreCase));
-        return requirement is null
-            ? null
-            : new(
-                requirement,
-                phase,
-                exception.Message,
-                diagnosticDirectory,
-                options);
+            requirement => MatchesExecutable(requirement, normalizedExecutableName));
+        if (requirement is null)
+        {
+            return null;
+        }
+
+        return new(
+            requirement,
+            phase,
+            exception.Message,
+            diagnosticDirectory,
+            options);
+
+        static bool MatchesExecutable(
+            ILatexRequirement requirement,
+            string normalizedExecutableName)
+        {
+            if (requirement is not ExecutableLatexRequirement executable)
+            {
+                return false;
+            }
+
+            var configuredName = Path.GetFileNameWithoutExtension(executable.Name.Value);
+            return string.Equals(
+                configuredName,
+                normalizedExecutableName,
+                StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     public static IncompleteLatexInstallation? ClassifyLog(
@@ -298,20 +313,18 @@ internal static partial class LatexFailureClassifier
         LatexExecutionOptions options)
     {
         ArgumentNullException.ThrowIfNull(log);
+        var missingTexFileRegex = MissingTexFileRegex();
+        var missingBabelLanguageRegex = MissingBabelLanguageRegex();
         var rules = new LatexLogRequirementRule[]
         {
             new(
-                MissingTexFileRegex(),
+                missingTexFileRegex,
                 static match => match.Groups[1].Value,
-                static (requirement, value) => requirement is TexFileLatexRequirement file
-                    && string.Equals(file.FileName.Value, value, StringComparison.OrdinalIgnoreCase)),
+                MatchesTexFile),
             new(
-                MissingBabelLanguageRegex(),
-                static match => match.Groups[1].Success
-                    ? match.Groups[1].Value
-                    : match.Groups[2].Value,
-                static (requirement, value) => requirement is BabelLanguageLatexRequirement language
-                    && string.Equals(language.LanguageName.Value, value, StringComparison.OrdinalIgnoreCase)),
+                missingBabelLanguageRegex,
+                GetBabelLanguage,
+                MatchesBabelLanguage),
         };
         var candidates = rules
             .SelectMany(rule => rule.FindMatches(log, options.Requirements))
@@ -331,6 +344,40 @@ internal static partial class LatexFailureClassifier
             first.Diagnostic,
             diagnosticDirectory,
             options);
+
+        static string GetBabelLanguage(Match match)
+        {
+            var group = match.Groups[1].Success
+                ? match.Groups[1]
+                : match.Groups[2];
+            return group.Value;
+        }
+
+        static bool MatchesTexFile(ILatexRequirement requirement, string value)
+        {
+            if (requirement is not TexFileLatexRequirement file)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                file.FileName.Value,
+                value,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        static bool MatchesBabelLanguage(ILatexRequirement requirement, string value)
+        {
+            if (requirement is not BabelLanguageLatexRequirement language)
+            {
+                return false;
+            }
+
+            return string.Equals(
+                language.LanguageName.Value,
+                value,
+                StringComparison.OrdinalIgnoreCase);
+        }
 
     }
 

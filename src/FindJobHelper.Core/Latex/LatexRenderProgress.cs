@@ -26,9 +26,11 @@ internal sealed class LatexRenderProgressPlan
         out LatexRenderBullet bullet)
     {
         bullet = default;
-        if (markerId.Category != LatexProgressMarkerCategory.RenderBullet
-            || markerId.Value <= 0
-            || markerId.Value > Bullets.Length)
+        if (markerId.Category != LatexProgressMarkerCategory.RenderBullet)
+        {
+            return false;
+        }
+        if (markerId.Value <= 0 || markerId.Value > Bullets.Length)
         {
             return false;
         }
@@ -74,9 +76,10 @@ internal sealed class LatexRenderProgressBuilder
                 "The bullet number must be within the experience's bullet count.");
         }
 
+        var markerNumber = checked(_bullets.Count + 1);
         var markerId = new LatexProgressMarkerId(
             LatexProgressMarkerCategory.RenderBullet,
-            checked(_bullets.Count + 1));
+            markerNumber);
         _bullets.Add(new(
             MarkerId: markerId,
             Section: section,

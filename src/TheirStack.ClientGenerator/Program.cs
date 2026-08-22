@@ -369,7 +369,7 @@ public static class OpenApiSchemaPatcher
                                 {
                                     return t;
                                 }
-                                if (t.EndsWith(":") || t.EndsWith(".") || t.EndsWith(","))
+                                if (t[^1] is ':' or '.' or ',')
                                 {
                                     t = t[.. ^1];
                                     continue;
@@ -391,6 +391,88 @@ public static class OpenApiSchemaPatcher
             return false;
         }
 
+        bool ContainsAnyWords(params string[] alternatives)
+        {
+            foreach (var alternative in alternatives)
+            {
+                if (ContainsWordsInOrder(alternative))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        bool ContainsDateFormat()
+        {
+            if (ContainsAnyWords("ISO 8601", "UTC"))
+            {
+                return true;
+            }
+
+            return description.Contains(
+                "'YYYY-MM-DD'",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        bool IsDateTimeDescription(bool containsDateFormat)
+        {
+            if (ContainsWordsInOrder("date and time"))
+            {
+                return true;
+            }
+            if (!containsDateFormat)
+            {
+                return false;
+            }
+
+            return ContainsWordsInOrder("datetime");
+        }
+
+        bool IsDateDescription(bool containsDateFormat)
+        {
+            if (ContainsAnyWords("date when", "billing cycle period"))
+            {
+                return true;
+            }
+            if (!containsDateFormat)
+            {
+                return false;
+            }
+
+            return ContainsWordsInOrder("date");
+        }
+
+        bool IsBooleanDescription()
+        {
+            if (ContainsWordsInOrder("only return"))
+            {
+                return true;
+            }
+
+            string[] prefixes =
+            [
+                "whether",
+                "Is a",
+                "Is the",
+                "Is this",
+                "If the",
+                "Indicates whether",
+            ];
+            foreach (var prefix in prefixes)
+            {
+                if (description.StartsWith(
+                        prefix,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         if (description.Any(char.IsDigit))
         {
             p.Type = JsonObjectType.Integer;
@@ -398,38 +480,27 @@ public static class OpenApiSchemaPatcher
             return;
         }
 
-        bool containsDateFormat = ContainsWordsInOrder("ISO 8601")
-            || ContainsWordsInOrder("UTC")
-            || description.Contains("'YYYY-MM-DD'", StringComparison.OrdinalIgnoreCase);
+        var containsDateFormat = ContainsDateFormat();
 
-        if (containsDateFormat && ContainsWordsInOrder("datetime")
-            || ContainsWordsInOrder("date and time"))
+        if (IsDateTimeDescription(containsDateFormat))
         {
             p.Type = JsonObjectType.String;
             p.Format = JsonFormatStrings.DateTime;
             return;
         }
-        if (containsDateFormat && ContainsWordsInOrder("date")
-            || ContainsWordsInOrder("date when")
-            || ContainsWordsInOrder("billing cycle period"))
+        if (IsDateDescription(containsDateFormat))
         {
             p.Type = JsonObjectType.String;
             p.Format = JsonFormatStrings.Date;
             return;
         }
-        if (description.StartsWith("whether", StringComparison.OrdinalIgnoreCase)
-            || ContainsWordsInOrder("only return")
-            || description.StartsWith("Is a", StringComparison.OrdinalIgnoreCase)
-            || description.StartsWith("Is the", StringComparison.OrdinalIgnoreCase)
-            || description.StartsWith("Is this", StringComparison.OrdinalIgnoreCase)
-            || description.StartsWith("If the", StringComparison.OrdinalIgnoreCase)
-            || description.StartsWith("Indicates whether", StringComparison.OrdinalIgnoreCase))
+        if (IsBooleanDescription())
         {
             p.Type = JsonObjectType.Boolean;
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("True") || ContainsWordsInOrder("False"))
+        if (ContainsAnyWords("True", "False"))
         {
             p.Type = JsonObjectType.Boolean;
             p.Format = null;
@@ -444,22 +515,19 @@ public static class OpenApiSchemaPatcher
             p.Format = JsonFormatStrings.Uri;
             return;
         }
-        if (ContainsWordsInOrder("number")
-            || ContainsWordsInOrder("value")
-            || ContainsWordsInOrder("amount")
-            || ContainsWordsInOrder("frequency"))
+        if (ContainsAnyWords("number", "value", "amount", "frequency"))
         {
             p.Type = JsonObjectType.Number;
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("order") || ContainsWordsInOrder("country name"))
+        if (ContainsAnyWords("order", "country name"))
         {
             p.Type = JsonObjectType.String;
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("ID") || ContainsWordsInOrder("identifying string"))
+        if (ContainsAnyWords("ID", "identifying string"))
         {
             p.Type = JsonObjectType.String;
             p.Format = null;
@@ -471,7 +539,7 @@ public static class OpenApiSchemaPatcher
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("USD") || ContainsWordsInOrder("salary"))
+        if (ContainsAnyWords("USD", "salary"))
         {
             p.Type = JsonObjectType.Number;
             p.Format = JsonFormatStrings.Double;
@@ -495,15 +563,16 @@ public static class OpenApiSchemaPatcher
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("Company")
-            || ContainsWordsInOrder("Country")
-            || ContainsWordsInOrder("City")
-            || ContainsWordsInOrder("Industry")
-            || ContainsWordsInOrder("companies")
-            || ContainsWordsInOrder("countries")
-            || ContainsWordsInOrder("cities")
-            || ContainsWordsInOrder("industries")
-            || ContainsWordsInOrder("continents"))
+        if (ContainsAnyWords(
+                "Company",
+                "Country",
+                "City",
+                "Industry",
+                "companies",
+                "countries",
+                "cities",
+                "industries",
+                "continents"))
         {
             p.Type = JsonObjectType.String;
             p.Format = null;
@@ -519,20 +588,19 @@ public static class OpenApiSchemaPatcher
         {
             return;
         }
-        if (ContainsWordsInOrder("Alexa") || ContainsWordsInOrder("dataset"))
+        if (ContainsAnyWords("Alexa", "dataset"))
         {
             p.Type = JsonObjectType.String;
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("title")
-            || ContainsWordsInOrder("the state code"))
+        if (ContainsAnyWords("title", "the state code"))
         {
             p.Type = JsonObjectType.String;
             p.Format = null;
             return;
         }
-        if (ContainsWordsInOrder("latitude") || ContainsWordsInOrder("longitude"))
+        if (ContainsAnyWords("latitude", "longitude"))
         {
             p.Type = JsonObjectType.Number;
             p.Format = JsonFormatStrings.Double;
@@ -553,4 +621,3 @@ public static class OpenApiSchemaPatcher
 
     }
 }
-

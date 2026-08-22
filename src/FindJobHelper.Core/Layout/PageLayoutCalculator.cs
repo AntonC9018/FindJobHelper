@@ -52,7 +52,7 @@ internal static class PageLayoutCalculator
         var pageHeight = usablePageHeight.ScaledPoints;
         var headerHeight = documentHeaderHeight.ScaledPoints;
         var footerHeight = documentFooterHeight.ScaledPoints;
-        if (pageHeight < 0 || headerHeight < 0 || footerHeight < 0)
+        if (HasNegativeHeight(pageHeight, headerHeight, footerHeight))
         {
             return Failure(
                 PageLayoutFailureKind.InvalidHeight,
@@ -80,8 +80,9 @@ internal static class PageLayoutCalculator
 
         foreach (var section in sections)
         {
-            if (section.CurrentPageHeight.ScaledPoints < 0
-                || section.FreshPageHeight.ScaledPoints < 0)
+            if (HasNegativeHeight(
+                    section.CurrentPageHeight.ScaledPoints,
+                    section.FreshPageHeight.ScaledPoints))
             {
                 return Failure(
                     PageLayoutFailureKind.InvalidHeight,
@@ -115,7 +116,10 @@ internal static class PageLayoutCalculator
             }
 
             renderedPageCount = checked(renderedPageCount + 1);
-            if (maximumPageCount is { } cap && renderedPageCount > cap)
+            if (ExceedsPageCap(
+                    maximumPageCount,
+                    renderedPageCount,
+                    out var cap))
             {
                 return PageCountFailure(renderedPageCount, cap, placements.ToImmutable());
             }
@@ -133,13 +137,44 @@ internal static class PageLayoutCalculator
         {
             renderedPageCount = checked(renderedPageCount + 1);
             footerPageNumber = renderedPageCount;
-            if (maximumPageCount is { } cap && renderedPageCount > cap)
+            if (ExceedsPageCap(
+                    maximumPageCount,
+                    renderedPageCount,
+                    out var cap))
             {
                 return PageCountFailure(renderedPageCount, cap, placements.ToImmutable());
             }
         }
 
         return new(renderedPageCount, footerPageNumber, placements.ToImmutable(), Failure: null);
+    }
+
+    private static bool HasNegativeHeight(params long[] heights)
+    {
+        foreach (var height in heights)
+        {
+            if (height < 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ExceedsPageCap(
+        int? maximumPageCount,
+        int renderedPageCount,
+        out int cap)
+    {
+        cap = default;
+        if (maximumPageCount is not { } maximum)
+        {
+            return false;
+        }
+
+        cap = maximum;
+        return renderedPageCount > maximum;
     }
 
     private static PageLayoutResult PageCountFailure(
