@@ -88,33 +88,44 @@ internal sealed class JsonCvSelectionConfiguration
         var errors = new List<string>();
         errors.AddRange(SectionOrder.ValidationErrors);
         var pageLayout = SectionOrder.PageLayout;
-        if (SectionOrder.IsExplicit)
+        CollectPageConfigurationErrors();
+
+        void CollectPageConfigurationErrors()
         {
+            if (!SectionOrder.IsExplicit)
+            {
+                CollectNonExplicitPageConfigurationErrors();
+                return;
+            }
+
             if (IsLimitToOnePageSpecified)
             {
                 errors.Add(
                     "'limitToOnePage' cannot be supplied with object-form 'sectionOrder' because the page count is derived from the layout.");
             }
-            if (IsPageCountSpecified
-                && PageCount is > 0
-                && pageLayout is not null
-                && PageCount.Value != pageLayout.PageCount)
+            if (TryGetExplicitPageCountConflict(
+                    out var configuredPageCount,
+                    out var layoutPageCount))
             {
                 errors.Add(
-                    $"'pageCount' is {PageCount.Value}, but object-form 'sectionOrder' defines {pageLayout.PageCount} page(s).");
+                    $"'pageCount' is {configuredPageCount}, but object-form 'sectionOrder' defines {layoutPageCount} page(s).");
             }
         }
-        else if (IsLimitToOnePageSpecified && IsPageCountSpecified)
+
+        void CollectNonExplicitPageConfigurationErrors()
         {
-            errors.Add("'limitToOnePage' and 'pageCount' cannot both be supplied.");
+            if (HasConflictingPageCountOptions())
+            {
+                errors.Add("'limitToOnePage' and 'pageCount' cannot both be supplied.");
+            }
         }
 
-        if (IsPageCountSpecified && PageCount is null or <= 0)
+        if (HasInvalidPageCount())
         {
             errors.Add("'pageCount' must be a positive 32-bit integer.");
         }
 
-        if (RequiredTags is null || RequiredTags.Count == 0)
+        if (RequiredTags is not { Count: > 0 })
         {
             errors.Add("'requiredTags' must contain at least one tag.");
         }
@@ -146,7 +157,7 @@ internal sealed class JsonCvSelectionConfiguration
             }
         }
 
-        if (Skills is null || Skills.Count == 0)
+        if (Skills is not { Count: > 0 })
         {
             errors.Add("'skills' must contain at least one item.");
         }
@@ -155,7 +166,7 @@ internal sealed class JsonCvSelectionConfiguration
             errors.Add("'skills' cannot contain blank items.");
         }
 
-        if (Technologies is null || Technologies.Count == 0)
+        if (Technologies is not { Count: > 0 })
         {
             errors.Add("'technologies' must contain at least one item.");
         }
@@ -180,10 +191,11 @@ internal sealed class JsonCvSelectionConfiguration
             throw new CvConfigurationException(errors);
         }
 
+        var pageCount = pageLayout is null
+            ? ResolvePageCount()
+            : CvPageCount.Exact(pageLayout.PageCount);
         return new(
-            pageLayout is null
-                ? ResolvePageCount()
-                : CvPageCount.Exact(pageLayout.PageCount),
+            pageCount,
             [.. RequiredTags!],
             [.. Skills!],
             [.. Technologies!],
@@ -191,6 +203,54 @@ internal sealed class JsonCvSelectionConfiguration
             Selection!,
             SectionOrder.Sections,
             pageLayout);
+
+        bool TryGetExplicitPageCountConflict(
+            out int configuredPageCount,
+            out int layoutPageCount)
+        {
+            configuredPageCount = default;
+            layoutPageCount = default;
+            if (!IsPageCountSpecified)
+            {
+                return false;
+            }
+            if (PageCount is not { } pageCountValue)
+            {
+                return false;
+            }
+            if (pageCountValue <= 0)
+            {
+                return false;
+            }
+            if (pageLayout is null)
+            {
+                return false;
+            }
+
+            configuredPageCount = pageCountValue;
+            layoutPageCount = pageLayout.PageCount;
+            return configuredPageCount != layoutPageCount;
+        }
+
+        bool HasConflictingPageCountOptions()
+        {
+            if (!IsLimitToOnePageSpecified)
+            {
+                return false;
+            }
+
+            return IsPageCountSpecified;
+        }
+
+        bool HasInvalidPageCount()
+        {
+            if (!IsPageCountSpecified)
+            {
+                return false;
+            }
+
+            return PageCount is null or <= 0;
+        }
     }
 
     private CvPageCount ResolvePageCount()
@@ -200,9 +260,22 @@ internal sealed class JsonCvSelectionConfiguration
             return CvPageCount.Exact(PageCount!.Value);
         }
 
-        return IsLimitToOnePageSpecified && !LimitToOnePage
-            ? CvPageCount.Unrestricted
-            : CvPageCount.OnePage;
+        if (ShouldUseUnrestrictedPageCount())
+        {
+            return CvPageCount.Unrestricted;
+        }
+
+        return CvPageCount.OnePage;
+
+        bool ShouldUseUnrestrictedPageCount()
+        {
+            if (!IsLimitToOnePageSpecified)
+            {
+                return false;
+            }
+
+            return !LimitToOnePage;
+        }
     }
 
 }
@@ -372,11 +445,22 @@ public sealed class CvSelectionConfiguration
 
         try
         {
+            var search = builder.Build();
+            var bindings = new CvExperienceSectionBindings(
+                educationKey,
+                workKey,
+                personalProjectsKey);
+            var skills = Skills
+                .Select(static skill => new RegularString(skill))
+                .ToImmutableArray();
+            var technologies = Technologies
+                .Select(static technology => new RegularString(technology))
+                .ToImmutableArray();
             return new(
-                builder.Build(),
-                new(educationKey, workKey, personalProjectsKey),
-                Skills.Select(static skill => new RegularString(skill)).ToImmutableArray(),
-                Technologies.Select(static technology => new RegularString(technology)).ToImmutableArray(),
+                search,
+                bindings,
+                skills,
+                technologies,
                 SectionOrder,
                 PageCount,
                 PageLayout);
@@ -406,8 +490,7 @@ public sealed class MmrConfiguration
 
     public void CollectValidationErrors(List<string> errors)
     {
-        if (RelevanceWeight is { } relevanceWeight
-            && (!float.IsFinite(relevanceWeight) || relevanceWeight is < 0 or > 1))
+        if (HasInvalidRelevanceWeight())
         {
             errors.Add("'mmr.relevanceWeight' must be finite and between 0 and 1.");
         }
@@ -417,19 +500,51 @@ public sealed class MmrConfiguration
             errors.Add("'mmr.saturationQuota' must be at least 1.");
         }
 
-        if (SaturationPenalty is { } saturationPenalty
-            && (!float.IsFinite(saturationPenalty) || saturationPenalty < 0))
+        if (HasInvalidSaturationPenalty())
         {
             errors.Add("'mmr.saturationPenalty' must be finite and non-negative.");
+        }
+
+        bool HasInvalidRelevanceWeight()
+        {
+            if (RelevanceWeight is not { } relevanceWeight)
+            {
+                return false;
+            }
+
+            if (!float.IsFinite(relevanceWeight))
+            {
+                return true;
+            }
+
+            return relevanceWeight is < 0 or > 1;
+        }
+
+        bool HasInvalidSaturationPenalty()
+        {
+            if (SaturationPenalty is not { } saturationPenalty)
+            {
+                return false;
+            }
+
+            if (!float.IsFinite(saturationPenalty))
+            {
+                return true;
+            }
+
+            return saturationPenalty < 0;
         }
     }
 
     public MmrOptions ToDomain()
     {
+        var relevanceWeight = RelevanceWeight ?? MmrOptions.Default.RelevanceWeight;
+        var saturationQuota = SaturationQuota ?? MmrOptions.Default.SaturationQuota;
+        var saturationPenalty = SaturationPenalty ?? MmrOptions.Default.SaturationPenalty;
         return new(
-            RelevanceWeight: RelevanceWeight ?? MmrOptions.Default.RelevanceWeight,
-            SaturationQuota: SaturationQuota ?? MmrOptions.Default.SaturationQuota,
-            SaturationPenalty: SaturationPenalty ?? MmrOptions.Default.SaturationPenalty);
+            RelevanceWeight: relevanceWeight,
+            SaturationQuota: saturationQuota,
+            SaturationPenalty: saturationPenalty);
     }
 }
 
@@ -579,10 +694,16 @@ public sealed class SelectionOptionsConfiguration
         {
             options.RecencyBoost = new(RecencyBoost);
         }
-        if (SpecifiedFields.DirectMatchBoost && DirectMatchBoost is { } directMatchBoost)
+        if (!SpecifiedFields.DirectMatchBoost)
         {
-            options.DirectMatchBoost = new(directMatchBoost);
+            return;
         }
+        if (DirectMatchBoost is not { } directMatchBoost)
+        {
+            return;
+        }
+
+        options.DirectMatchBoost = new(directMatchBoost);
     }
 
     public void CollectValidationErrors(string path, List<string> errors)
@@ -596,8 +717,7 @@ public sealed class SelectionOptionsConfiguration
         {
             errors.Add($"'{path}.itemBudget' must be non-negative.");
         }
-        else if (ItemBudget is { } itemBudget
-                 && MinItemBudget > itemBudget)
+        else if (MinimumExceedsTotalBudget())
         {
             errors.Add(
                 $"'{path}.minItemBudget' must not exceed the total item budget.");
@@ -624,6 +744,16 @@ public sealed class SelectionOptionsConfiguration
             var jsonPropertyName = JsonNamingPolicy.CamelCase.ConvertName(propertyName);
             errors.Add(
                 $"'{path}.{jsonPropertyName}' must be finite and non-negative.");
+        }
+
+        bool MinimumExceedsTotalBudget()
+        {
+            if (ItemBudget is not { } itemBudget)
+            {
+                return false;
+            }
+
+            return MinItemBudget > itemBudget;
         }
     }
 }

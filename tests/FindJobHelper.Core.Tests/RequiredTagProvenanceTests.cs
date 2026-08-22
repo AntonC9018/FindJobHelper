@@ -288,11 +288,8 @@ public sealed class RequiredTagProvenanceTests
             var coverage = query.Match([new(target, 10)]).RequirementCoverage;
             var requirement = Assert.Single(coverage);
             Assert.Equal(group.CanonicalTag, requirement.Key);
-            Assert.DoesNotContain(
-                coverage.Keys,
-                x => x == new Tag("B")
-                     || x == new Tag("C")
-                     || x == new Tag("Alternate"));
+            Tag[] unexpectedTags = [new("B"), new("C"), new("Alternate")];
+            Assert.DoesNotContain(coverage.Keys, unexpectedTags.Contains);
         }
     }
 

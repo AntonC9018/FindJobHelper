@@ -519,17 +519,20 @@ internal static class ExperienceSelectionEngine
         {
             list.ValidateItemConfiguration();
         }
-        var progressTracker = new SelectionProgressTracker(
-            materializedLists.Sum(static list => list.Items.Length),
-            progress);
+        var itemCount = materializedLists.Sum(static list => list.Items.Length);
+        var progressTracker = new SelectionProgressTracker(itemCount, progress);
         var groupedLists = materializedLists
             .OrderByDescending(x => x.DateRange, DateRangeComparer.ByEnd)
-            .Select((list, listIndex) => CreateScoredList(
-                list,
-                listIndex,
-                FindGroup(list, groups),
-                tags,
-                progressTracker))
+            .Select((list, listIndex) =>
+            {
+                var group = FindGroup(list, groups);
+                return CreateScoredList(
+                    list,
+                    listIndex,
+                    group,
+                    tags,
+                    progressTracker);
+            })
             .Where(x => x is not null)
             .Select(x => x!)
             .ToList();
@@ -543,14 +546,20 @@ internal static class ExperienceSelectionEngine
             currentDate);
 
         var candidates = scoredLists
-            .SelectMany(x => x.Candidates(
-                appliedRecencyBoosts.GetValueOrDefault(x.List)))
+            .SelectMany(x =>
+            {
+                var boost = appliedRecencyBoosts.GetValueOrDefault(x.List);
+                return x.Candidates(boost);
+            })
             .ToList();
 
         var alwaysCandidates = groupedLists
             .Where(x => x.Group.Options.ItemBudget > 0)
-            .SelectMany(x => x.AlwaysCandidates(
-                appliedRecencyBoosts.GetValueOrDefault(x.List)))
+            .SelectMany(x =>
+            {
+                var boost = appliedRecencyBoosts.GetValueOrDefault(x.List);
+                return x.AlwaysCandidates(boost);
+            })
             .ToList();
 
         var context = new SelectionContext(groups, admissionPolicy);
@@ -562,7 +571,7 @@ internal static class ExperienceSelectionEngine
                 scoredList.ListIndex);
         }
 
-        if (candidates.Count == 0 && alwaysCandidates.Count == 0)
+        if (HasNoCandidates())
         {
             return CompleteOutput();
         }
@@ -625,8 +634,7 @@ internal static class ExperienceSelectionEngine
                 break;
             }
 
-            if (!admissionPolicy.FillAvailableCapacity
-                && ranker.Score(next.Value) <= 0)
+            if (ShouldStopForScore(next.Value))
             {
                 break;
             }
@@ -643,6 +651,27 @@ internal static class ExperienceSelectionEngine
         }
 
         return CompleteOutput();
+
+        bool HasNoCandidates()
+        {
+            if (candidates.Count != 0)
+            {
+                return false;
+            }
+
+            return alwaysCandidates.Count == 0;
+        }
+
+        bool ShouldStopForScore(MmrCandidate candidate)
+        {
+            if (admissionPolicy.FillAvailableCapacity)
+            {
+                return false;
+            }
+
+            var score = ranker.Score(candidate);
+            return score <= 0;
+        }
 
         SearchResult CompleteOutput()
         {
@@ -686,17 +715,20 @@ internal static class ExperienceSelectionEngine
                 {
                     if (context.Scores.TryGetValue(added, out var matches))
                     {
-                        context.ScoreBreakdowns[added] = ranker.AddSelected(
+                        var breakdown = ranker.AddSelected(
                             matches,
                             candidate.AppliedRecencyBoost);
+                        context.ScoreBreakdowns[added] = breakdown;
                     }
+                    var resolutionDetail = addedReason is
+                        SelectionItemReason.Dependency
+                        or SelectionItemReason.RequiredAlways
+                        or SelectionItemReason.RequiredIfAny
+                            ? "Matching experiences — required or dependent item resolved"
+                            : "Matching experiences — candidate selected";
                     progressTracker.ItemResolved(
                         added,
-                        addedReason is SelectionItemReason.Dependency
-                            or SelectionItemReason.RequiredAlways
-                            or SelectionItemReason.RequiredIfAny
-                            ? "Matching experiences — required or dependent item resolved"
-                            : "Matching experiences — candidate selected");
+                        resolutionDetail);
                 });
             if (!accepted)
             {
@@ -725,9 +757,11 @@ internal static class ExperienceSelectionEngine
             }
 
             var datedLists = lists
-                .Select(x => (
-                    x.List,
-                    EndDate: EffectiveEndDate(x.List.DateRange, currentDate)))
+                .Select(x =>
+                {
+                    var endDate = EffectiveEndDate(x.List.DateRange, currentDate);
+                    return (x.List, EndDate: endDate);
+                })
                 .ToArray();
             var oldestDay = datedLists.Min(x => x.EndDate.DayNumber);
             var newestDay = datedLists.Max(x => x.EndDate.DayNumber);
@@ -740,8 +774,8 @@ internal static class ExperienceSelectionEngine
             foreach (var (list, endDate) in datedLists)
             {
                 var normalizedRecency = (endDate.DayNumber - oldestDay) / (float) dateRange;
-                result[list] = recencyBoost.Scale(
-                    Math.Clamp(normalizedRecency, 0, 1));
+                var clampedRecency = Math.Clamp(normalizedRecency, 0, 1);
+                result[list] = recencyBoost.Scale(clampedRecency);
             }
         }
 
@@ -758,10 +792,9 @@ internal static class ExperienceSelectionEngine
         }
 
         var end = dateRange.End;
-        return new(
-            end.Year,
-            end.Month == 0 ? 1 : end.Month,
-            end.Day == 0 ? 1 : end.Day);
+        var month = end.Month == 0 ? 1 : end.Month;
+        var day = end.Day == 0 ? 1 : end.Day;
+        return new(end.Year, month, day);
     }
 
     private static ScoredList? CreateScoredList(
@@ -794,8 +827,7 @@ internal static class ExperienceSelectionEngine
             var scoredItem = new ScoredItem(item, matches, itemIndex);
             items.Add(scoredItem);
             progress.ItemScanned(item);
-            if (matches.IsEmpty
-                || matches.Sum < group.Options.ScoreLowerBound)
+            if (IsBelowScoreThreshold(matches))
             {
                 progress.ItemResolved(
                     item,
@@ -804,6 +836,16 @@ internal static class ExperienceSelectionEngine
             }
 
             candidateItems.Add(scoredItem);
+        }
+
+        bool IsBelowScoreThreshold(ScoredTags matches)
+        {
+            if (matches.IsEmpty)
+            {
+                return true;
+            }
+
+            return matches.Sum < group.Options.ScoreLowerBound;
         }
 
         candidateItems.Sort(CompareCandidateItems);
@@ -1025,16 +1067,13 @@ internal static class ExperienceSelectionEngine
 
             foreach (var candidate in candidates)
             {
-                if (added.Contains(candidate.Item) ||
-                    rejected?.Contains(candidate.Item) == true)
+                if (ShouldSkipCandidate(candidate, added, rejected))
                 {
                     continue;
                 }
 
                 var score = Score(candidate);
-                if (best is null ||
-                    score > bestScore ||
-                    (score == bestScore && BreakTie(candidate, best.Value) < 0))
+                if (IsBetterCandidate(candidate, score, best, bestScore))
                 {
                     best = candidate;
                     bestScore = score;
@@ -1042,6 +1081,41 @@ internal static class ExperienceSelectionEngine
             }
 
             return best;
+
+            static bool IsBetterCandidate(
+                MmrCandidate candidate,
+                float score,
+                MmrCandidate? best,
+                float bestScore)
+            {
+                if (best is null)
+                {
+                    return true;
+                }
+                if (score > bestScore)
+                {
+                    return true;
+                }
+                if (score != bestScore)
+                {
+                    return false;
+                }
+
+                return BreakTie(candidate, best.Value) < 0;
+            }
+
+            static bool ShouldSkipCandidate(
+                MmrCandidate candidate,
+                HashSet<ExperienceListItem> added,
+                HashSet<ExperienceListItem>? rejected)
+            {
+                if (added.Contains(candidate.Item))
+                {
+                    return true;
+                }
+
+                return rejected?.Contains(candidate.Item) == true;
+            }
         }
 
         public MmrScoreBreakdown AddSelected(
@@ -1180,7 +1254,11 @@ internal static class ExperienceSelectionEngine
         {
             var aCoverage = a.RequirementCoverage;
             var bCoverage = b.RequirementCoverage;
-            if (aCoverage.Count == 0 || bCoverage.Count == 0)
+            if (aCoverage.Count == 0)
+            {
+                return 0;
+            }
+            if (bCoverage.Count == 0)
             {
                 return 0;
             }
@@ -1364,17 +1442,10 @@ internal static class ExperienceSelectionEngine
         {
             if (Added.Contains(candidate.Item))
             {
-                if (reason == SelectionItemReason.RequiredAlways)
-                {
-                    Reasons[candidate.Item] = reason;
-                    DependencyTargets.Remove(candidate.Item);
-                }
-
-                return true;
+                return HandleAlreadyAddedItem();
             }
 
-            if (!allowExceedingBudget &&
-                _remainingMaximumBudgets[candidate.Group.Key] <= 0)
+            if (HasExhaustedBudget(candidate, allowExceedingBudget))
             {
                 return false;
             }
@@ -1400,15 +1471,9 @@ internal static class ExperienceSelectionEngine
                         $"Selection closure for experience '{candidate.List.Title.Value}' contains mutually exclusive items.");
                 }
 
-                if (closureMembers == 1 && exclusionSet.Items.Any(Added.Contains))
+                if (ConflictsWithAddedItem(exclusionSet, closureMembers))
                 {
-                    if (reason == SelectionItemReason.RequiredAlways)
-                    {
-                        throw new InvalidOperationException(
-                            $"Experience '{candidate.List.Title.Value}' has mutually exclusive Required().Always() items that both require selection.");
-                    }
-
-                    return false;
+                    return HandleExclusionConflict();
                 }
             }
 
@@ -1417,15 +1482,7 @@ internal static class ExperienceSelectionEngine
             var decision = _admissionPolicy.Evaluate(admission);
             if (!decision.IsAccepted)
             {
-                if (reason == SelectionItemReason.RequiredAlways)
-                {
-                    throw new RequiredExperienceItemLayoutException(
-                        candidate.List.Title.Value,
-                        candidate.Item.Text.ToString() ?? string.Empty,
-                        decision.Rejection!.Reason);
-                }
-
-                return false;
+                return HandleRejectedAdmission(decision);
             }
 
             ref var groupResults = ref CollectionsMarshal.GetValueRefOrAddDefault(
@@ -1458,6 +1515,69 @@ internal static class ExperienceSelectionEngine
             _remainingMaximumBudgets[candidate.Group.Key] -= _temp.Count;
             _admissionPolicy.Commit(admission);
             return true;
+
+            bool HandleAlreadyAddedItem()
+            {
+                if (reason != SelectionItemReason.RequiredAlways)
+                {
+                    return true;
+                }
+
+                Reasons[candidate.Item] = reason;
+                DependencyTargets.Remove(candidate.Item);
+                return true;
+            }
+
+            bool HandleExclusionConflict()
+            {
+                if (reason != SelectionItemReason.RequiredAlways)
+                {
+                    return false;
+                }
+
+                throw new InvalidOperationException(
+                    $"Experience '{candidate.List.Title.Value}' has mutually exclusive Required().Always() items that both require selection.");
+            }
+
+            bool HandleRejectedAdmission(SelectionAdmissionDecision decision)
+            {
+                if (reason != SelectionItemReason.RequiredAlways)
+                {
+                    return false;
+                }
+
+                var itemText = candidate.Item.Text.ToString() ?? string.Empty;
+                throw new RequiredExperienceItemLayoutException(
+                    candidate.List.Title.Value,
+                    itemText,
+                    decision.Rejection!.Reason);
+            }
+
+            bool HasExhaustedBudget(
+                MmrCandidate candidate,
+                bool allowExceedingBudget)
+            {
+                if (allowExceedingBudget)
+                {
+                    return false;
+                }
+
+                var remainingBudget =
+                    _remainingMaximumBudgets[candidate.Group.Key];
+                return remainingBudget <= 0;
+            }
+
+            bool ConflictsWithAddedItem(
+                ExperienceItemExclusionSet exclusionSet,
+                int closureMembers)
+            {
+                if (closureMembers != 1)
+                {
+                    return false;
+                }
+
+                return exclusionSet.Items.Any(item => Added.Contains(item));
+            }
         }
 
         public SearchResult Output()
@@ -1631,23 +1751,29 @@ internal static class ExperienceSelectionEngine
             var hasItems = items.Count > 0;
             foreach (var x in items)
             {
-                subBuilder.Add(new(
+                var subEventDebugInfo = ToDebugInfo(x.ScoreBreakdown, x.Matches);
+                var subEvent = new SubEvent(
                     x.Item.Text,
-                    ToDebugInfo(x.ScoreBreakdown, x.Matches)));
+                    subEventDebugInfo);
+                subBuilder.Add(subEvent);
             }
 
-            builder.Add(new()
+            var text = hasItems ? t.List.Description : null;
+            var matches = items.Select(x => x.Matches);
+            var debugInfo = ToDebugInfo(t.TotalScore, matches);
+            var subItems = subBuilder.ToImmutable();
+            var urls = hasItems ? t.List.Urls : [];
+            var @event = new Event
             {
                 DateRange = t.List.DateRange,
                 Place = t.List.Place,
                 Title = t.List.Title,
-                Text = hasItems ? t.List.Description : null,
-                DebugInfo = ToDebugInfo(
-                    t.TotalScore,
-                    items.Select(x => x.Matches)),
-                SubItems = subBuilder.ToImmutable(),
-                Urls = hasItems ? t.List.Urls : [],
-            });
+                Text = text,
+                DebugInfo = debugInfo,
+                SubItems = subItems,
+                Urls = urls,
+            };
+            builder.Add(@event);
             subBuilder.Clear();
         }
 
@@ -1762,13 +1888,9 @@ internal static class ExperienceSelectionEngine
             .Where(x => IsMeaningfulScore(x.Value.Relevance))
             .OrderByDescending(x => x.Value.Relevance)
             .ThenBy(x => x.Key.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(target => new DebugTagMatch(
-                target.Key,
-                target.Value.BaseContribution,
-                target.Value.DirectContribution,
-                target.Value.DirectMatchBonus,
-                target.Value.Relevance,
-                originTotals
+            .Select(target =>
+            {
+                var origins = originTotals
                     .Where(x => x.Key.Target == target.Key)
                     .Where(x => IsMeaningfulScore(x.Value.Contribution))
                     .OrderByDescending(x => x.Value.Contribution)
@@ -1779,7 +1901,15 @@ internal static class ExperienceSelectionEngine
                         x.Key.Requirement,
                         x.Value.Contribution,
                         x.Value.IsDirect))
-                    .ToImmutableArray()))
+                    .ToImmutableArray();
+                return new DebugTagMatch(
+                    target.Key,
+                    target.Value.BaseContribution,
+                    target.Value.DirectContribution,
+                    target.Value.DirectMatchBonus,
+                    target.Value.Relevance,
+                    origins);
+            })
             .ToImmutableArray();
     }
 
@@ -1816,9 +1946,16 @@ internal static class ExperienceSelectionEngine
             float contribution,
             bool isDirect)
         {
+            var combinedContribution = Contribution + contribution;
+            var hasDirectOrigin = IsDirect;
+            if (isDirect)
+            {
+                hasDirectOrigin = true;
+            }
+
             return new(
-                Contribution + contribution,
-                IsDirect || isDirect);
+                combinedContribution,
+                hasDirectOrigin);
         }
     }
 

@@ -609,35 +609,56 @@ public sealed class PageHeightSelectionTests
         Assert.Equal(items.Length, itemHeights.Length);
         Assert.Equal(lists.Length, headingHeights.Length);
         Assert.Equal(lists.Length, chromeHeights.Length);
+        var experienceItems = items
+            .Select((item, index) =>
+            {
+                var height = new LatexHeight(itemHeights[index]);
+                return (item.Id, Height: height);
+            })
+            .ToDictionary(static x => x.Id, static x => x.Height);
+        var experienceHeadings = lists
+            .Select((list, index) =>
+            {
+                var height = new LatexHeight(headingHeights[index]);
+                return (list.Id, Height: height);
+            })
+            .ToDictionary(static x => x.Id, static x => x.Height);
+        var experienceChrome = lists
+            .Select((list, index) =>
+            {
+                var height = new LatexHeight(chromeHeights[index]);
+                return (list.Id, Height: height);
+            })
+            .ToDictionary(static x => x.Id, static x => x.Height);
+        var emptyCompleteSections = new Dictionary<Section, LatexHeight>();
+        var sections = groups.Select(static group => group.Section).Distinct();
+        var currentChrome = sections.ToDictionary(
+            static section => section,
+            static _ => new LatexHeight(5));
+        var freshChrome = sections.ToDictionary(
+            static section => section,
+            static _ => new LatexHeight(5));
+        var documentHeader = new LatexHeight(10);
+        var usablePageHeight = new LatexHeight(pageHeight);
         var snapshot = new CvMeasurementSnapshot(
-            experienceItems: items
-                .Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
-                .ToDictionary(static x => x.Id, static x => x.Height),
-            experienceHeadings: lists
-                .Select((list, index) =>
-                    (list.Id, Height: new LatexHeight(headingHeights[index])))
-                .ToDictionary(static x => x.Id, static x => x.Height),
-            experienceChrome: lists
-                .Select((list, index) =>
-                    (list.Id, Height: new LatexHeight(chromeHeights[index])))
-                .ToDictionary(static x => x.Id, static x => x.Height),
-            currentPageCompleteSections: new Dictionary<Section, LatexHeight>(),
-            currentPageSectionChrome:
-                groups.Select(static group => group.Section).Distinct().ToDictionary(
-                static section => section,
-                static _ => new LatexHeight(5)),
-            freshPageSectionChrome:
-                groups.Select(static group => group.Section).Distinct().ToDictionary(
-                static section => section,
-                static _ => new LatexHeight(5)),
-            documentHeader: new LatexHeight(10),
+            experienceItems: experienceItems,
+            experienceHeadings: experienceHeadings,
+            experienceChrome: experienceChrome,
+            currentPageCompleteSections: emptyCompleteSections,
+            currentPageSectionChrome: currentChrome,
+            freshPageSectionChrome: freshChrome,
+            documentHeader: documentHeader,
             documentFooter: LatexHeight.Zero,
-            usablePageHeight: new LatexHeight(pageHeight));
+            usablePageHeight: usablePageHeight);
+        var bindings = Bindings(groups);
+        var sectionOrder = groups
+            .Select(static group => group.Section)
+            .ToImmutableArray();
         return new(
             database,
             snapshot,
-            Bindings(groups),
-            groups.Select(static group => group.Section).ToImmutableArray(),
+            bindings,
+            sectionOrder,
             CvPageCount.OnePage);
     }
 
@@ -656,33 +677,48 @@ public sealed class PageHeightSelectionTests
         var lists = database.EnumerateExperienceLists().ToArray();
         Assert.Equal(items.Length, itemHeights.Length);
         var sections = groups.Select(static group => group.Section).Distinct().ToArray();
+        var experienceItems = items
+            .Select((item, index) =>
+            {
+                var height = new LatexHeight(itemHeights[index]);
+                return (item.Id, Height: height);
+            })
+            .ToDictionary(static x => x.Id, static x => x.Height);
+        var experienceHeadings = lists.ToDictionary(
+            static list => list.Id,
+            static _ => new LatexHeight(5));
+        var experienceChrome = lists.ToDictionary(
+            static list => list.Id,
+            static _ => new LatexHeight(5));
+        var emptyCompleteSections = new Dictionary<Section, LatexHeight>();
+        var currentChrome = sections.ToDictionary(
+            static section => section,
+            _ => new LatexHeight(currentChromeHeight));
+        var freshChrome = sections.ToDictionary(
+            static section => section,
+            _ => new LatexHeight(freshChromeHeight));
+        var documentHeader = new LatexHeight(headerHeight);
+        var documentFooter = new LatexHeight(footerHeight);
+        var usablePageHeight = new LatexHeight(pageHeight);
         var snapshot = new CvMeasurementSnapshot(
-            experienceItems: items
-                .Select((item, index) => (item.Id, Height: new LatexHeight(itemHeights[index])))
-                .ToDictionary(static x => x.Id, static x => x.Height),
-            experienceHeadings:
-                lists.ToDictionary(
-                    static list => list.Id,
-                    static _ => new LatexHeight(5)),
-            experienceChrome:
-                lists.ToDictionary(
-                    static list => list.Id,
-                    static _ => new LatexHeight(5)),
-            currentPageCompleteSections: new Dictionary<Section, LatexHeight>(),
-            currentPageSectionChrome: sections.ToDictionary(
-                static section => section,
-                _ => new LatexHeight(currentChromeHeight)),
-            freshPageSectionChrome: sections.ToDictionary(
-                static section => section,
-                _ => new LatexHeight(freshChromeHeight)),
-            documentHeader: new(headerHeight),
-            documentFooter: new(footerHeight),
-            usablePageHeight: new(pageHeight));
+            experienceItems: experienceItems,
+            experienceHeadings: experienceHeadings,
+            experienceChrome: experienceChrome,
+            currentPageCompleteSections: emptyCompleteSections,
+            currentPageSectionChrome: currentChrome,
+            freshPageSectionChrome: freshChrome,
+            documentHeader: documentHeader,
+            documentFooter: documentFooter,
+            usablePageHeight: usablePageHeight);
+        var bindings = Bindings(groups);
+        var sectionOrder = groups
+            .Select(static group => group.Section)
+            .ToImmutableArray();
         return new(
             database,
             snapshot,
-            Bindings(groups),
-            groups.Select(static group => group.Section).ToImmutableArray(),
+            bindings,
+            sectionOrder,
             pageCount);
     }
 
@@ -692,10 +728,16 @@ public sealed class PageHeightSelectionTests
         var education = groups.FirstOrDefault(static group => group.Section == Section.Education).Key;
         var work = groups.FirstOrDefault(static group => group.Section == Section.WorkExperience).Key;
         var projects = groups.FirstOrDefault(static group => group.Section == Section.PersonalProjects).Key;
-        return new(
-            education.Value is null ? new("UnusedEducation") : education,
-            work.Value is null ? new("UnusedWork") : work,
-            projects.Value is null ? new("UnusedProjects") : projects);
+        var educationKey = education.Value is null
+            ? new ExperienceKey("UnusedEducation")
+            : education;
+        var workKey = work.Value is null
+            ? new ExperienceKey("UnusedWork")
+            : work;
+        var projectsKey = projects.Value is null
+            ? new ExperienceKey("UnusedProjects")
+            : projects;
+        return new(educationKey, workKey, projectsKey);
     }
 
     private static ExperienceDatabase Database(params ExperienceList[] lists)

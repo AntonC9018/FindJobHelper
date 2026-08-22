@@ -44,9 +44,10 @@ public static class CvMarkdownRenderer
         };
         ReportBlock("Creating Markdown files — document header");
 
-        if (!model.CategorizedInfos.IsEmpty || !model.CategorizedInfoLists.IsEmpty)
+        if (HasMetadata(model))
         {
-            blocks.Add(RenderMetadata(model));
+            var metadata = RenderMetadata(model);
+            blocks.Add(metadata);
         }
         ReportBlock("Creating Markdown files — metadata");
         if (model.Summary is not null)
@@ -63,7 +64,8 @@ public static class CvMarkdownRenderer
         {
             if (!CvLatexFragmentRenderer.IsSectionEmpty(section, model))
             {
-                blocks.Add(RenderSection(section, model, mode));
+                var renderedSection = RenderSection(section, model, mode);
+                blocks.Add(renderedSection);
             }
             ReportBlock("Creating Markdown files — section");
         }
@@ -93,6 +95,16 @@ public static class CvMarkdownRenderer
     {
         ArgumentNullException.ThrowIfNull(model);
         return checked(model.SectionOrder.Length + 5);
+    }
+
+    private static bool HasMetadata(CvDataModel model)
+    {
+        if (!model.CategorizedInfos.IsEmpty)
+        {
+            return true;
+        }
+
+        return !model.CategorizedInfoLists.IsEmpty;
     }
 
     private static FormattableString RenderMetadata(CvDataModel model)
@@ -135,13 +147,25 @@ public static class CvMarkdownRenderer
     {
         var items = languages.Select(static language =>
         {
-            var skills = language.Skills.IsEmpty
-                ? string.Empty
-                : $" · {string.Join(", ", language.Skills.Select(static skill => Text(skill.Text)))}";
+            var skills = RenderLanguageSkills(language.Skills);
+            var languageName = Text(language.Language.Name);
+            var proficiency = Text(language.GeneralProficiencyLevel.Value);
             return (FormattableString)
-                $"- **{Text(language.Language.Name)}:** {Text(language.GeneralProficiencyLevel.Value)}{skills}";
+                $"- **{languageName}:** {proficiency}{skills}";
         });
         return $"{items.Render(RenderEnumerableOptions.LineBreaksWithoutSpacer)}";
+
+        static string RenderLanguageSkills(ImmutableArray<LanguageSkill> skills)
+        {
+            if (skills.IsEmpty)
+            {
+                return string.Empty;
+            }
+
+            var renderedSkills = skills.Select(static skill => Text(skill.Text));
+            var joinedSkills = string.Join(", ", renderedSkills);
+            return $" · {joinedSkills}";
+        }
     }
 
     private static FormattableString RenderEvents(
@@ -362,9 +386,10 @@ public static class CvMarkdownRenderer
                 .Where(x => x.Contribution != bestContribution)
                 .ToImmutableArray();
 
-            lines.Add(bestOrigins.Length == 1
+            var bestOriginHeading = bestOrigins.Length == 1
                 ? "    best requirement origin (unboosted):"
-                : "    best requirement origins (unboosted):");
+                : "    best requirement origins (unboosted):";
+            lines.Add(bestOriginHeading);
             lines.AddRange(bestOrigins.Select(origin =>
                 $"      {FormatRequirementLabel(origin.Requirement)}: " +
                 FormatOriginContribution(origin)));
@@ -381,8 +406,8 @@ public static class CvMarkdownRenderer
 
     private static string FormatOriginContribution(DebugTagMatchOrigin origin)
     {
-        return $"{FormatScore(origin.Contribution)}" +
-               (origin.IsDirect ? " (direct)" : "");
+        var directSuffix = origin.IsDirect ? " (direct)" : "";
+        return $"{FormatScore(origin.Contribution)}{directSuffix}";
     }
 
     private static string FormatFencedBlock(string contents) =>
@@ -395,8 +420,11 @@ public static class CvMarkdownRenderer
     private static string FormatRequirementLabel(RequiredTagGroup requirement) =>
         requirement.ConfiguredTags[0].Tag.Name;
 
-    private static string CategoryValue(Category category, RegularString value) =>
-        category.IsUrl ? Autolink(value.Value) : Text(value);
+    private static string CategoryValue(Category category, RegularString value)
+    {
+        var renderedValue = category.IsUrl ? Autolink(value.Value) : Text(value);
+        return renderedValue;
+    }
 
     private static string Autolink(string value)
     {

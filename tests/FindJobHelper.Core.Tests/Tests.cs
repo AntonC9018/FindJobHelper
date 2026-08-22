@@ -163,9 +163,19 @@ public static class EqualityCheckVisitor
         })
         .Compare<Href>((a, b) => a.Url.Equals(b.Url))
         .Compare<PlainText>((a, b) => a.Text.Equals(b.Text))
-        .Compare<StyledText>((a, b) => a.Text.Equals(b.Text) && a.Style.Equals(b.Style))
+        .Compare<StyledText>(StyledTextsEqual)
         .Default<RichText>()
         .Build();
+
+    private static bool StyledTextsEqual(StyledText left, StyledText right)
+    {
+        if (!left.Text.Equals(right.Text))
+        {
+            return false;
+        }
+
+        return left.Style.Equals(right.Style);
+    }
 
 
     extension(RichTextVisitationMapBuilder builder)

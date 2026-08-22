@@ -53,14 +53,23 @@ internal readonly record struct LatexProgressMarkerId
         out LatexProgressMarkerId markerId)
     {
         markerId = default;
-        if (token.Length != 9
-            || !TryParseCategory(token[0], out var category)
-            || !int.TryParse(
+        if (token.Length != 9)
+        {
+            return false;
+        }
+        if (!TryParseCategory(token[0], out var category))
+        {
+            return false;
+        }
+        if (!int.TryParse(
                 token[1..],
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
-                out var value)
-            || value <= 0)
+                out var value))
+        {
+            return false;
+        }
+        if (value <= 0)
         {
             return false;
         }

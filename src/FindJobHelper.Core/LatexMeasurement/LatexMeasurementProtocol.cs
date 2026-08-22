@@ -114,14 +114,18 @@ internal sealed class XeLatexMeasurementRunner : ILatexMeasurementRunner
                     exception,
                     workingDirectory,
                     options);
-                return Retain(incomplete is null
-                    ? new LatexCompilationFailure(
-                        LatexExecutionPhase.HeightMeasurement,
-                        exception.Message,
-                        workingDirectory,
-                        null,
-                        options)
-                    : incomplete);
+                if (incomplete is not null)
+                {
+                    return Retain(incomplete);
+                }
+
+                var failure = new LatexCompilationFailure(
+                    LatexExecutionPhase.HeightMeasurement,
+                    exception.Message,
+                    workingDirectory,
+                    null,
+                    options);
+                return Retain(failure);
             }
             if (!result.IsSuccess)
             {
@@ -255,15 +259,29 @@ internal sealed class LatexMeasurementCompletionParser
     {
         ArgumentNullException.ThrowIfNull(line);
 
-        if (!LatexProgressMarkerProtocol.TryParse(line, out var marker)
-            || marker.Event != LatexProgressMarkerEvent.Completed
-            || marker.Id.Category
-                != LatexProgressMarkerCategory.Measurement)
+        if (!TryParseCompletedMeasurementMarker(line, out var marker))
         {
             return;
         }
 
-        Complete(new(marker.Id.Value));
+        var correlationId = new MeasurementCorrelationId(marker.Id.Value);
+        Complete(correlationId);
+
+        static bool TryParseCompletedMeasurementMarker(
+            string line,
+            out LatexProgressMarker marker)
+        {
+            if (!LatexProgressMarkerProtocol.TryParse(line, out marker))
+            {
+                return false;
+            }
+            if (marker.Event != LatexProgressMarkerEvent.Completed)
+            {
+                return false;
+            }
+
+            return marker.Id.Category == LatexProgressMarkerCategory.Measurement;
+        }
     }
 
     public void CompleteMissingMeasurements()
@@ -278,8 +296,11 @@ internal sealed class LatexMeasurementCompletionParser
     {
         lock (_sync)
         {
-            if (!_expected.Contains(correlationId)
-                || !_completed.Add(correlationId))
+            if (!_expected.Contains(correlationId))
+            {
+                return;
+            }
+            if (!_completed.Add(correlationId))
             {
                 return;
             }
@@ -391,7 +412,12 @@ internal static class LatexMeasurementResultParser
             }
 
             var fields = line.Split('|');
-            if (fields.Length != 6 || fields[0] != "FJH1")
+            if (fields.Length != 6)
+            {
+                throw new CvMeasurementException(
+                    $"Malformed LaTeX measurement result line: '{line}'.");
+            }
+            if (fields[0] != "FJH1")
             {
                 throw new CvMeasurementException(
                     $"Malformed LaTeX measurement result line: '{line}'.");
@@ -401,7 +427,14 @@ internal static class LatexMeasurementResultParser
             for (var i = 1; i < fields.Length; i++)
             {
                 var equals = fields[i].IndexOf('=');
-                if (equals <= 0 || !values.TryAdd(fields[i][..equals], fields[i][(equals + 1)..]))
+                if (equals <= 0)
+                {
+                    throw new CvMeasurementException(
+                        $"Malformed LaTeX measurement result field in '{line}'.");
+                }
+                var key = fields[i][..equals];
+                var fieldValue = fields[i][(equals + 1)..];
+                if (!values.TryAdd(key, fieldValue))
                 {
                     throw new CvMeasurementException(
                         $"Malformed LaTeX measurement result field in '{line}'.");
@@ -421,31 +454,18 @@ internal static class LatexMeasurementResultParser
                     $"Duplicate LaTeX measurement correlation '{values["corr"]}'.");
             }
 
-            if (!int.TryParse(values["rule"], NumberStyles.None, CultureInfo.InvariantCulture, out var rule)
-                || rule != request.CacheKey.RuleVersion
-                || values["kind"] != request.CacheKey.Kind.ToString()
-                || !IsSha256(values["sha256"])
-                || values["sha256"] != request.CacheKey.ContentHash)
-            {
-                throw new CvMeasurementException(
-                    $"LaTeX measurement metadata mismatch for correlation '{values["corr"]}'.");
-            }
-
-            if (!long.TryParse(values["height-sp"], NumberStyles.None, CultureInfo.InvariantCulture, out var height)
-                || height < 0)
-            {
-                throw new CvMeasurementException(
-                    $"Invalid LaTeX measurement height for correlation '{values["corr"]}'.");
-            }
-
-            results.Add(correlation, new LatexHeight(height));
+            ValidateMetadata(values, request);
+            var height = ParseHeight(values);
+            var latexHeight = new LatexHeight(height);
+            results.Add(correlation, latexHeight);
         }
 
         if (results.Count != expected.Count)
         {
             var missing = expected.Keys.Where(id => !results.ContainsKey(id));
+            var missingText = string.Join(", ", missing);
             throw new CvMeasurementException(
-                $"Missing LaTeX measurement results for: {string.Join(", ", missing)}.");
+                $"Missing LaTeX measurement results for: {missingText}.");
         }
 
         return results;
@@ -455,9 +475,11 @@ internal static class LatexMeasurementResultParser
     {
         if (!LatexProgressMarkerId.TryParse(
                 value.AsSpan(),
-                out var markerId)
-            || markerId.Category
-                != LatexProgressMarkerCategory.Measurement)
+                out var markerId))
+        {
+            throw new CvMeasurementException($"Malformed correlation token in '{line}'.");
+        }
+        if (markerId.Category != LatexProgressMarkerCategory.Measurement)
         {
             throw new CvMeasurementException($"Malformed correlation token in '{line}'.");
         }
@@ -469,14 +491,96 @@ internal static class LatexMeasurementResultParser
         string line,
         params string[] keys)
     {
-        if (values.Count != keys.Length || keys.Any(key => !values.ContainsKey(key)))
+        if (values.Count != keys.Length)
         {
             throw new CvMeasurementException(
                 $"Malformed LaTeX measurement metadata in '{line}'.");
         }
+        foreach (var key in keys)
+        {
+            if (!values.ContainsKey(key))
+            {
+                throw new CvMeasurementException(
+                    $"Malformed LaTeX measurement metadata in '{line}'.");
+            }
+        }
     }
 
     private static bool IsSha256(string value)
-        => value.Length == 64
-           && value.All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
+    {
+        if (value.Length != 64)
+        {
+            return false;
+        }
+        foreach (var character in value)
+        {
+            if (character is not (>= '0' and <= '9' or >= 'a' and <= 'f'))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void ValidateMetadata(
+        IReadOnlyDictionary<string, string> values,
+        LatexMeasurementRequest request)
+    {
+        var correlation = values["corr"];
+        if (!int.TryParse(
+                values["rule"],
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var rule))
+        {
+            throw new CvMeasurementException(
+                $"LaTeX measurement metadata mismatch for correlation '{correlation}'.");
+        }
+        if (rule != request.CacheKey.RuleVersion)
+        {
+            throw new CvMeasurementException(
+                $"LaTeX measurement metadata mismatch for correlation '{correlation}'.");
+        }
+
+        var expectedKind = request.CacheKey.Kind.ToString();
+        if (values["kind"] != expectedKind)
+        {
+            throw new CvMeasurementException(
+                $"LaTeX measurement metadata mismatch for correlation '{correlation}'.");
+        }
+
+        var hash = values["sha256"];
+        if (!IsSha256(hash))
+        {
+            throw new CvMeasurementException(
+                $"LaTeX measurement metadata mismatch for correlation '{correlation}'.");
+        }
+        if (hash != request.CacheKey.ContentHash)
+        {
+            throw new CvMeasurementException(
+                $"LaTeX measurement metadata mismatch for correlation '{correlation}'.");
+        }
+    }
+
+    private static long ParseHeight(IReadOnlyDictionary<string, string> values)
+    {
+        var correlation = values["corr"];
+        if (!long.TryParse(
+                values["height-sp"],
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var height))
+        {
+            throw new CvMeasurementException(
+                $"Invalid LaTeX measurement height for correlation '{correlation}'.");
+        }
+        if (height < 0)
+        {
+            throw new CvMeasurementException(
+                $"Invalid LaTeX measurement height for correlation '{correlation}'.");
+        }
+
+        return height;
+    }
 }

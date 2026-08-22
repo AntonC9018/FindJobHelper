@@ -338,27 +338,9 @@ public sealed class RichTextVisitationMapBuilder
             }
         }
 
+        if (current is null)
         {
-            if (current is null && list.GetChildren is { } getChildren)
-            {
-                var c = (GetChildren<T>) getChildren;
-                current = (a, b) =>
-                {
-                    using var children = c(a);
-                    while (true)
-                    {
-                        if (!children.MoveNext())
-                        {
-                            return;
-                        }
-                        if (b.Data.Action != VisitationAction.Recurse)
-                        {
-                            return;
-                        }
-                        b.Visit(children.Current);
-                    }
-                };
-            }
+            current = CreateDefaultVisit(list);
         }
         if (current is null)
         {
@@ -376,6 +358,32 @@ public sealed class RichTextVisitationMapBuilder
         return new(
             Visit: (a, b) => current((T) a, b),
             GetChildren: getChildrenRet);
+
+        static DefaultVisit<T>? CreateDefaultVisit(Impl list)
+        {
+            if (list.GetChildren is not { } getChildren)
+            {
+                return null;
+            }
+
+            var childrenFactory = (GetChildren<T>) getChildren;
+            return (node, visitor) =>
+            {
+                using var children = childrenFactory(node);
+                while (true)
+                {
+                    if (!children.MoveNext())
+                    {
+                        return;
+                    }
+                    if (visitor.Data.Action != VisitationAction.Recurse)
+                    {
+                        return;
+                    }
+                    visitor.Visit(children.Current);
+                }
+            };
+        }
     }
 
     private static readonly MethodInfo GenericHandleList = typeof(RichTextVisitationMapBuilder)
@@ -424,7 +432,11 @@ public sealed class RichTextVisitationMap
     public IEnumerator<IRichTextNode> GetChildren(IRichTextNode node)
     {
         var type = node.GetType();
-        if (_impls.TryGetValue(type, out var t) && t.GetChildren is { } getChildren)
+        if (!_impls.TryGetValue(type, out var implementation))
+        {
+            return CompletedEnumerator;
+        }
+        if (implementation.GetChildren is { } getChildren)
         {
             return getChildren(node);
         }
@@ -680,11 +692,40 @@ public static class MarkdownConverter
         return longestRun;
     }
 
-    private static bool NeedsCodeSpanPadding(string value) =>
-        value.Length > 0
-        && (value[0] == '`'
-            || value[^1] == '`'
-            || (value[0] == ' ' && value[^1] == ' ' && !value.AsSpan().Trim().IsEmpty));
+    private static bool NeedsCodeSpanPadding(string value)
+    {
+        if (value.Length == 0)
+        {
+            return false;
+        }
+
+        if (value[0] == '`')
+        {
+            return true;
+        }
+
+        if (value[^1] == '`')
+        {
+            return true;
+        }
+
+        return HasMeaningfulSurroundingSpaces(value);
+
+        static bool HasMeaningfulSurroundingSpaces(string value)
+        {
+            if (value[0] != ' ')
+            {
+                return false;
+            }
+
+            if (value[^1] != ' ')
+            {
+                return false;
+            }
+
+            return !value.AsSpan().Trim().IsEmpty;
+        }
+    }
 
     private static readonly RichTextVisitationMap VisitationMap = RichTextVisitorDefaults.CreateBuilder()
         .Override<Href>(next => (node, c) =>

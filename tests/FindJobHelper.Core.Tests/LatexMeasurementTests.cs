@@ -499,11 +499,24 @@ public sealed class LatexMeasurementTests
             Assert.Equal(23, context.Rule);
             Assert.True(context.Heights > 0);
         });
-        Assert.Contains(contexts, context => context.Main == "Liberation Serif"
-            && context.Sans == "Liberation Sans" && context.Mono == "Liberation Mono");
+        Assert.Contains(contexts, context =>
+        {
+            if (context.Main != "Liberation Serif")
+            {
+                return false;
+            }
+
+            if (context.Sans != "Liberation Sans")
+            {
+                return false;
+            }
+
+            return context.Mono == "Liberation Mono";
+        });
         Assert.Contains(contexts, context => context.Main == "Noto Serif");
         Assert.Contains(contexts, context => context.Sans == "Noto Sans");
         Assert.Contains(contexts, context => context.Mono == "Noto Sans Mono");
+
     }
 
     private static LatexFontOptions WithFont(
@@ -512,10 +525,27 @@ public sealed class LatexMeasurementTests
         string familyName)
     {
         var replacement = new LatexFontFamilyName(familyName);
-        return new(new(
-            main: role == LatexFontRole.Main ? replacement : original.Families.Main,
-            sans: role == LatexFontRole.Sans ? replacement : original.Families.Sans,
-            monospace: role == LatexFontRole.Mono ? replacement : original.Families.Monospace));
+        var main = original.Families.Main;
+        var sans = original.Families.Sans;
+        var monospace = original.Families.Monospace;
+        switch (role)
+        {
+            case LatexFontRole.Main:
+                main = replacement;
+                break;
+            case LatexFontRole.Sans:
+                sans = replacement;
+                break;
+            case LatexFontRole.Mono:
+                monospace = replacement;
+                break;
+        }
+
+        var families = new LatexFontRoleArray<LatexFontFamilyName>(
+            main,
+            sans,
+            monospace);
+        return new(families);
     }
 
     [Fact]
@@ -1318,19 +1348,25 @@ public sealed class LatexMeasurementTests
             CvTemplate.GetPdfWorkUnitCount(expectedBulletCount);
         Assert.Contains(
             progress.Reports,
-            report =>
-                report.CompletedWorkUnits == 1
-                && report.TotalWorkUnits
-                == expectedWorkUnitCount);
+            report => HasProgress(report, completedWorkUnits: 1));
         Assert.Contains(
             progress.Reports,
-            report =>
-                report.CompletedWorkUnits == expectedWorkUnitCount - 1
-                && report.TotalWorkUnits
-                == expectedWorkUnitCount);
+            report => HasProgress(
+                report,
+                completedWorkUnits: expectedWorkUnitCount - 1));
         Assert.Equal(
             expectedWorkUnitCount,
             progress.Last.CompletedWorkUnits);
+
+        bool HasProgress(ProgressReport report, double completedWorkUnits)
+        {
+            if (report.CompletedWorkUnits != completedWorkUnits)
+            {
+                return false;
+            }
+
+            return report.TotalWorkUnits == expectedWorkUnitCount;
+        }
         Assert.Equal(
             expectedWorkUnitCount,
             progress.Last.TotalWorkUnits);

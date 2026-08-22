@@ -48,8 +48,15 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
         _dynamicSections = sectionBindings.Sections.ToHashSet();
         _explicitPageLayout = explicitPageLayout;
         PageCount = pageCount;
-        if (explicitPageLayout is not null)
+        ValidateExplicitLayout();
+
+        void ValidateExplicitLayout()
         {
+            if (explicitPageLayout is null)
+            {
+                return;
+            }
+
             if (!sectionOrder.SequenceEqual(explicitPageLayout.SectionOrder))
             {
                 throw new ArgumentException(
@@ -82,7 +89,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
             _listIds.Add(identified.Value, identified.Id);
             var headingHeight = measurements.GetExperienceHeadingHeight(identified.Id).ScaledPoints;
             var chromeHeight = measurements.GetExperienceChromeHeight(identified.Id).ScaledPoints;
-            if (headingHeight < 0 || chromeHeight < 0)
+            if (HasNegativeHeight(headingHeight, chromeHeight))
             {
                 throw new CvMeasurementInvariantException(
                     $"Measured experience heights for '{identified.Value.Title}' cannot be negative.");
@@ -109,7 +116,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
         {
             var currentChrome = measurements.GetCurrentPageSectionChromeHeight(section).ScaledPoints;
             var freshChrome = measurements.GetFreshPageSectionChromeHeight(section).ScaledPoints;
-            if (currentChrome < 0 || freshChrome < 0)
+            if (HasNegativeHeight(currentChrome, freshChrome))
             {
                 throw new CvMeasurementInvariantException(
                     $"Measured section chrome for '{section}' cannot be negative.");
@@ -120,7 +127,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
                     $"Fresh-page wrapper for section '{section}' is shorter than its current-page wrapper.");
             }
 
-            if (_explicitPageLayout is not null && _dynamicSections.Contains(section))
+            if (ShouldMeasureSplitSection(section))
             {
                 var currentStart = measurements
                     .GetCurrentPageSplitSectionStartHeight(section)
@@ -128,7 +135,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
                 var freshStart = measurements
                     .GetFreshPageSplitSectionStartHeight(section)
                     .ScaledPoints;
-                if (currentStart < 0 || freshStart < 0)
+                if (HasNegativeHeight(currentStart, freshStart))
                 {
                     throw new CvMeasurementInvariantException(
                         $"Measured split-section start for '{section}' cannot be negative.");
@@ -166,8 +173,9 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
         }
         else
         {
-            if (measurements.SplitSectionEnd.ScaledPoints < 0
-                || measurements.FreshPageContinuation.ScaledPoints < 0)
+            if (HasNegativeHeight(
+                    measurements.SplitSectionEnd.ScaledPoints,
+                    measurements.FreshPageContinuation.ScaledPoints))
             {
                 throw new CvMeasurementInvariantException(
                     "Measured split-section ending and fresh-page continuation heights cannot be negative.");
@@ -201,25 +209,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
         var section = GetSection(admission.Group);
         if (_explicitPageLayout is not null)
         {
-            if (!_renderedSections.Contains(section))
-            {
-                return SelectionAdmissionDecision.Accepted;
-            }
-
-            var proposedEventHeight = checked(
-                _eventHeights.GetValueOrDefault(admission.List)
-                + GetAdditionalEventHeight(admission));
-            var explicitLayout = CalculateExplicitLayout(
-                admission.List,
-                section,
-                proposedEventHeight);
-            if (explicitLayout.Fits)
-            {
-                return SelectionAdmissionDecision.Accepted;
-            }
-
-            return SelectionAdmissionDecision.Reject(
-                $"the {LayoutDescription} cannot include it: {explicitLayout.Failure!.Message}");
+            return EvaluateExplicitLayout();
         }
 
         var additionalHeight = GetAdditionalHeight(admission);
@@ -233,6 +223,30 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
 
         return SelectionAdmissionDecision.Reject(
             $"the {LayoutDescription} cannot include it: {layout.Failure!.Message}");
+
+        SelectionAdmissionDecision EvaluateExplicitLayout()
+        {
+            if (!_renderedSections.Contains(section))
+            {
+                return SelectionAdmissionDecision.Accepted;
+            }
+
+            var currentEventHeight = _eventHeights.GetValueOrDefault(admission.List);
+            var additionalEventHeight = GetAdditionalEventHeight(admission);
+            var proposedEventHeight = checked(currentEventHeight + additionalEventHeight);
+            var explicitLayout = CalculateExplicitLayout(
+                admission.List,
+                section,
+                proposedEventHeight);
+            if (explicitLayout.Fits)
+            {
+                return SelectionAdmissionDecision.Accepted;
+            }
+
+            var rejectionReason =
+                $"the {LayoutDescription} cannot include it: {explicitLayout.Failure!.Message}";
+            return SelectionAdmissionDecision.Reject(rejectionReason);
+        }
     }
 
     public void Commit(SelectionAdmission admission)
@@ -244,15 +258,23 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
             : GetAdditionalEventHeight(admission);
         if (_renderedSections.Contains(section))
         {
-            _sectionHeights[section] = checked(
-                _sectionHeights.GetValueOrDefault(section) + additionalHeight);
-            if (_explicitPageLayout is not null)
-            {
-                _eventHeights[admission.List] = checked(
-                    _eventHeights.GetValueOrDefault(admission.List)
-                    + additionalEventHeight);
-                _eventSections[admission.List] = section;
-            }
+            CommitRenderedSection();
+        }
+
+        if (_explicitPageLayout is null)
+        {
+            CommitDynamicLayout();
+        }
+        else
+        {
+            CommitExplicitLayout();
+        }
+
+        void CommitRenderedSection()
+        {
+            var currentSectionHeight = _sectionHeights.GetValueOrDefault(section);
+            _sectionHeights[section] = checked(currentSectionHeight + additionalHeight);
+            CommitExplicitEventHeight();
             _visibleSections.Add(section);
             _visibleLists.Add(admission.List);
             if (admission.Items.Count > 0)
@@ -261,7 +283,19 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
             }
         }
 
-        if (_explicitPageLayout is null)
+        void CommitExplicitEventHeight()
+        {
+            if (_explicitPageLayout is null)
+            {
+                return;
+            }
+
+            var currentEventHeight = _eventHeights.GetValueOrDefault(admission.List);
+            _eventHeights[admission.List] = checked(currentEventHeight + additionalEventHeight);
+            _eventSections[admission.List] = section;
+        }
+
+        void CommitDynamicLayout()
         {
             _currentLayout = CalculateLayout();
             if (!_currentLayout.Fits)
@@ -270,7 +304,8 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
                     $"Committed selection no longer satisfies the {LayoutDescription}: {_currentLayout.Failure!.Message}");
             }
         }
-        else
+
+        void CommitExplicitLayout()
         {
             _currentExplicitLayout = CalculateExplicitLayout();
             if (!_currentExplicitLayout.Fits)
@@ -289,16 +324,22 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
                 "Explicit layouts must be completed with RequireCompletePageLayout.");
         }
 
-        if (PageCount.ExactCount is { } required
-            && _currentLayout!.PageCount != required)
+        if (TryGetPageCountMismatch(
+                out var required,
+                out var actualPageCount))
         {
-            throw new PredictedPageCountMismatchException(required, _currentLayout.PageCount);
+            throw new PredictedPageCountMismatchException(required, actualPageCount);
         }
     }
 
     internal void RequireCompletePageLayout()
     {
-        if (_explicitPageLayout is null || _currentExplicitLayout is null)
+        if (_explicitPageLayout is null)
+        {
+            throw new InvalidOperationException(
+                "RequireCompletePageLayout is only valid for an explicit page layout.");
+        }
+        if (_currentExplicitLayout is null)
         {
             throw new InvalidOperationException(
                 "RequireCompletePageLayout is only valid for an explicit page layout.");
@@ -412,17 +453,21 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
             .Where(pair => _eventSections[pair.Key] == section)
             .Select(static pair => (List: pair.Key, Height: pair.Value))
             .ToList();
-        if (overriddenList is not null && overriddenSection == section)
+        if (TryGetEventOverride(
+                overriddenList,
+                overriddenSection,
+                section,
+                out var eventOverride))
         {
             var existingIndex = events.FindIndex(
-                pair => ReferenceEquals(pair.List, overriddenList));
+                pair => ReferenceEquals(pair.List, eventOverride));
             if (existingIndex >= 0)
             {
-                events[existingIndex] = (overriddenList, overriddenEventHeight);
+                events[existingIndex] = (eventOverride, overriddenEventHeight);
             }
             else
             {
-                events.Add((overriddenList, overriddenEventHeight));
+                events.Add((eventOverride, overriddenEventHeight));
             }
         }
 
@@ -446,19 +491,25 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
             var selectedEvent = events[index];
             var isFirst = index == 0;
             var isLast = index == events.Count - 1;
+            var currentStartContribution = isFirst ? currentStart : 0;
+            var freshStartContribution = isFirst ? freshStart : continuation;
+            var endingContribution = isLast ? ending : 0;
             var current = checked(
                 selectedEvent.Height
-                + (isFirst ? currentStart : 0)
-                + (isLast ? ending : 0));
+                + currentStartContribution
+                + endingContribution);
             var fresh = checked(
                 selectedEvent.Height
-                + (isFirst ? freshStart : continuation)
-                + (isLast ? ending : 0));
-            units.Add(new(
+                + freshStartContribution
+                + endingContribution);
+            var currentHeight = new LatexHeight(current);
+            var freshHeight = new LatexHeight(fresh);
+            var unit = new ExplicitPageLayoutUnit(
                 section,
                 selectedEvent.List.Title.Value,
-                new(current),
-                new(fresh)));
+                currentHeight,
+                freshHeight);
+            units.Add(unit);
         }
     }
 
@@ -491,7 +542,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
                 : _measurements.GetExperienceHeadingHeight(listId).ScaledPoints;
             height = checked(height + listHeight);
         }
-        else if (hasItems && !_itemizedLists.Contains(admission.List))
+        else if (ShouldAddChromeDifference(hasItems, admission.List))
         {
             var chromeHeight = _measurements.GetExperienceChromeHeight(listId).ScaledPoints;
             var headingHeight = _measurements.GetExperienceHeadingHeight(listId).ScaledPoints;
@@ -532,7 +583,7 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
                 ? _measurements.GetExperienceChromeHeight(listId).ScaledPoints
                 : _measurements.GetExperienceHeadingHeight(listId).ScaledPoints;
         }
-        else if (hasItems && !_itemizedLists.Contains(admission.List))
+        else if (ShouldAddChromeDifference(hasItems, admission.List))
         {
             height = checked(
                 _measurements.GetExperienceChromeHeight(listId).ScaledPoints
@@ -551,6 +602,77 @@ internal sealed class PageLayoutSelectionAdmissionPolicy : ISelectionAdmissionPo
         }
 
         return height;
+    }
+
+    private static bool HasNegativeHeight(params long[] heights)
+    {
+        foreach (var height in heights)
+        {
+            if (height < 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ShouldMeasureSplitSection(Section section)
+    {
+        if (_explicitPageLayout is null)
+        {
+            return false;
+        }
+
+        return _dynamicSections.Contains(section);
+    }
+
+    private bool TryGetPageCountMismatch(
+        out int requiredPageCount,
+        out int actualPageCount)
+    {
+        requiredPageCount = default;
+        actualPageCount = default;
+        if (PageCount.ExactCount is not { } required)
+        {
+            return false;
+        }
+
+        requiredPageCount = required;
+        actualPageCount = _currentLayout!.PageCount;
+        return actualPageCount != required;
+    }
+
+    private static bool TryGetEventOverride(
+        ExperienceList? overriddenList,
+        Section? overriddenSection,
+        Section section,
+        out ExperienceList eventOverride)
+    {
+        eventOverride = null!;
+        if (overriddenList is null)
+        {
+            return false;
+        }
+        if (overriddenSection != section)
+        {
+            return false;
+        }
+
+        eventOverride = overriddenList;
+        return true;
+    }
+
+    private bool ShouldAddChromeDifference(
+        bool hasItems,
+        ExperienceList list)
+    {
+        if (!hasItems)
+        {
+            return false;
+        }
+
+        return !_itemizedLists.Contains(list);
     }
 
     private Section GetSection(ExperienceSelectionGroup group)

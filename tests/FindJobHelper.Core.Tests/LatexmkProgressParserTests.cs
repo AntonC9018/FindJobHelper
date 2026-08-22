@@ -20,17 +20,23 @@ public sealed class LatexmkProgressParserTests
         Assert.Equal(1, parser.StartedPdfConversionPassCount);
         Assert.Contains(
             progress.Reports,
-            static report =>
-                report.CompletedWorkUnits == 1
-                && report.TotalWorkUnits == 3);
+            static report => HasProgress(report, completedWorkUnits: 1));
         Assert.Contains(
             progress.Reports,
-            static report =>
-                report.CompletedWorkUnits == 2
-                && report.TotalWorkUnits == 3);
+            static report => HasProgress(report, completedWorkUnits: 2));
         Assert.DoesNotContain(
             progress.Reports,
             static report => report.CompletedWorkUnits == 3);
+
+        static bool HasProgress(ProgressReport report, double completedWorkUnits)
+        {
+            if (report.CompletedWorkUnits != completedWorkUnits)
+            {
+                return false;
+            }
+
+            return report.TotalWorkUnits == 3;
+        }
 
         parser.CompleteConversionAndValidation();
 

@@ -68,7 +68,7 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
 
         var containsStrings = entries.Any(static entry => entry.ValueKind == JsonValueKind.String);
         var containsObjects = entries.Any(static entry => entry.ValueKind == JsonValueKind.Object);
-        if (containsStrings && containsObjects)
+        if (ContainsMixedEntryTypes(containsStrings, containsObjects))
         {
             errors.Add(
                 "'sectionOrder' must be entirely strings or entirely layout objects; mixed forms are not allowed.");
@@ -96,6 +96,18 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
             pageLayout: null,
             isExplicit: false,
             validationErrors: [.. errors]);
+
+        static bool ContainsMixedEntryTypes(
+            bool containsStrings,
+            bool containsObjects)
+        {
+            if (!containsStrings)
+            {
+                return false;
+            }
+
+            return containsObjects;
+        }
     }
 
     internal void Write(Utf8JsonWriter writer)
@@ -108,44 +120,54 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
         writer.WriteStartArray();
         if (IsExplicit)
         {
-            if (PageLayout is null)
-            {
-                throw new JsonException(
-                    "An explicit section-order collection must contain a page layout.");
-            }
-
-            foreach (var block in PageLayout.Blocks)
-            {
-                writer.WriteStartObject();
-                if (block.FirstPage == block.LastPage)
-                {
-                    writer.WriteNumber("page", block.FirstPage);
-                }
-                else
-                {
-                    writer.WriteString(
-                        "pages",
-                        new ConfiguredPageRange(block.FirstPage, block.LastPage).ToString());
-                }
-
-                writer.WritePropertyName("sections");
-                writer.WriteStartArray();
-                foreach (var section in block.Sections)
-                {
-                    writer.WriteStringValue(section.ToString());
-                }
-                writer.WriteEndArray();
-                writer.WriteEndObject();
-            }
+            WriteExplicitLayout(writer);
         }
         else
         {
             foreach (var section in _sections)
             {
-                writer.WriteStringValue(section.ToString());
+                var sectionName = section.ToString();
+                writer.WriteStringValue(sectionName);
             }
         }
         writer.WriteEndArray();
+    }
+
+    private void WriteExplicitLayout(Utf8JsonWriter writer)
+    {
+        if (PageLayout is null)
+        {
+            throw new JsonException(
+                "An explicit section-order collection must contain a page layout.");
+        }
+
+        foreach (var block in PageLayout.Blocks)
+        {
+            writer.WriteStartObject();
+            WritePageRange(writer, block);
+            writer.WritePropertyName("sections");
+            writer.WriteStartArray();
+            foreach (var section in block.Sections)
+            {
+                var sectionName = section.ToString();
+                writer.WriteStringValue(sectionName);
+            }
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        static void WritePageRange(Utf8JsonWriter writer, CvPageLayoutBlock block)
+        {
+            if (block.FirstPage == block.LastPage)
+            {
+                writer.WriteNumber("page", block.FirstPage);
+                return;
+            }
+
+            var pageRange = new ConfiguredPageRange(block.FirstPage, block.LastPage);
+            var value = pageRange.ToString();
+            writer.WriteString("pages", value);
+        }
     }
 
     private static SectionOrderCollection ParseLegacy(
@@ -157,8 +179,14 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
         for (var index = 0; index < entries.Count; index++)
         {
             var entry = entries[index];
-            if (entry.ValueKind != JsonValueKind.String
-                || !TryParseSection(entry.GetString(), out var section))
+            if (entry.ValueKind != JsonValueKind.String)
+            {
+                errors.Add(
+                    $"'sectionOrder[{index}]' must be a valid section-name string.");
+                continue;
+            }
+
+            if (!TryParseSection(entry.GetString(), out var section))
             {
                 errors.Add(
                     $"'sectionOrder[{index}]' must be a valid section-name string.");
@@ -219,52 +247,15 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
                 }
             }
 
-            var hasPage = properties.TryGetValue("page", out var pageElement);
-            var hasPages = properties.TryGetValue("pages", out var pagesElement);
-            if (hasPage == hasPages)
-            {
-                errors.Add(
-                    $"'sectionOrder[{index}]' must contain exactly one of 'page' or 'pages'.");
-                hasLayoutErrors = true;
-            }
-
-            ConfiguredPageRange? pageRange = null;
-            if (hasPage && !hasPages)
-            {
-                if (pageElement.ValueKind != JsonValueKind.Number
-                    || !pageElement.TryGetInt32(out var page)
-                    || page <= 0)
-                {
-                    errors.Add(
-                        $"'sectionOrder[{index}].page' must be a positive 32-bit integer.");
-                    hasLayoutErrors = true;
-                }
-                else
-                {
-                    pageRange = new(page, page);
-                }
-            }
-            else if (hasPages && !hasPage)
-            {
-                if (pagesElement.ValueKind != JsonValueKind.String
-                    || !ConfiguredPageRange.TryParse(
-                        pagesElement.GetString(),
-                        out var parsedPageRange))
-                {
-                    errors.Add(
-                        $"'sectionOrder[{index}].pages' must be an inclusive 'start-end' range of positive 32-bit integers where start is less than end.");
-                    hasLayoutErrors = true;
-                }
-                else
-                {
-                    pageRange = parsedPageRange;
-                }
-            }
+            var pageRange = ParsePageRange(
+                properties,
+                index,
+                errors,
+                ref hasLayoutErrors);
 
             var blockSections = ImmutableArray.CreateBuilder<Section>();
             var validSections = true;
-            if (!properties.TryGetValue("sections", out var sectionsElement)
-                || sectionsElement.ValueKind != JsonValueKind.Array)
+            if (!TryGetSections(properties, out var sectionsElement))
             {
                 errors.Add(
                     $"'sectionOrder[{index}].sections' must be a nonempty array of valid section names.");
@@ -286,8 +277,15 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
                 for (var sectionIndex = 0; sectionIndex < sectionEntries.Length; sectionIndex++)
                 {
                     var sectionEntry = sectionEntries[sectionIndex];
-                    if (sectionEntry.ValueKind != JsonValueKind.String
-                        || !TryParseSection(sectionEntry.GetString(), out var section))
+                    if (sectionEntry.ValueKind != JsonValueKind.String)
+                    {
+                        errors.Add(
+                            $"'sectionOrder[{index}].sections[{sectionIndex}]' must be a valid section name.");
+                        hasLayoutErrors = true;
+                        validSections = false;
+                        continue;
+                    }
+                    if (!TryParseSection(sectionEntry.GetString(), out var section))
                     {
                         errors.Add(
                             $"'sectionOrder[{index}].sections[{sectionIndex}]' must be a valid section name.");
@@ -341,9 +339,11 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
                 }
             }
 
-            if (pageRange is { } range
-                && validSections
-                && blockSections.Count > 0)
+            if (TryGetBlockRange(
+                    pageRange,
+                    validSections,
+                    blockSections.Count,
+                    out var range))
             {
                 blocks.Add(new(
                     range.FirstPage,
@@ -353,7 +353,7 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
         }
 
         CvPageLayout? pageLayout = null;
-        if (!hasLayoutErrors && blocks.Count == entries.Count)
+        if (CanCreatePageLayout(hasLayoutErrors, blocks.Count, entries.Count))
         {
             pageLayout = new(blocks.DrainToImmutable());
         }
@@ -366,8 +366,145 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
     }
 
     private static bool TryParseSection(string? value, out Section section)
-        => Enum.TryParse(value, ignoreCase: false, out section)
-           && Enum.IsDefined(section);
+    {
+        if (!Enum.TryParse(value, ignoreCase: false, out section))
+        {
+            return false;
+        }
+
+        return Enum.IsDefined(section);
+    }
+
+    private static bool TryParsePositivePage(JsonElement element, out int page)
+    {
+        page = default;
+        if (element.ValueKind != JsonValueKind.Number)
+        {
+            return false;
+        }
+        if (!element.TryGetInt32(out page))
+        {
+            return false;
+        }
+
+        return page > 0;
+    }
+
+    private static ConfiguredPageRange? ParsePageRange(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        int index,
+        List<string> errors,
+        ref bool hasLayoutErrors)
+    {
+        var hasPage = properties.TryGetValue("page", out var pageElement);
+        var hasPages = properties.TryGetValue("pages", out var pagesElement);
+        if (hasPage == hasPages)
+        {
+            errors.Add(
+                $"'sectionOrder[{index}]' must contain exactly one of 'page' or 'pages'.");
+            hasLayoutErrors = true;
+            return null;
+        }
+
+        if (!hasPage)
+        {
+            return ParsePageRangeValue(
+                pagesElement,
+                index,
+                errors,
+                ref hasLayoutErrors);
+        }
+
+        if (!TryParsePositivePage(pageElement, out var page))
+        {
+            errors.Add(
+                $"'sectionOrder[{index}].page' must be a positive 32-bit integer.");
+            hasLayoutErrors = true;
+            return null;
+        }
+
+        return new(page, page);
+    }
+
+    private static ConfiguredPageRange? ParsePageRangeValue(
+        JsonElement pagesElement,
+        int index,
+        List<string> errors,
+        ref bool hasLayoutErrors)
+    {
+        if (TryParsePageRange(pagesElement, out var pageRange))
+        {
+            return pageRange;
+        }
+
+        errors.Add(
+            $"'sectionOrder[{index}].pages' must be an inclusive 'start-end' range of positive 32-bit integers where start is less than end.");
+        hasLayoutErrors = true;
+        return null;
+    }
+
+    private static bool TryParsePageRange(
+        JsonElement element,
+        out ConfiguredPageRange pageRange)
+    {
+        pageRange = default;
+        if (element.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        return ConfiguredPageRange.TryParse(element.GetString(), out pageRange);
+    }
+
+    private static bool TryGetSections(
+        IReadOnlyDictionary<string, JsonElement> properties,
+        out JsonElement sections)
+    {
+        if (!properties.TryGetValue("sections", out sections))
+        {
+            return false;
+        }
+
+        return sections.ValueKind == JsonValueKind.Array;
+    }
+
+    private static bool TryGetBlockRange(
+        ConfiguredPageRange? pageRange,
+        bool validSections,
+        int sectionCount,
+        out ConfiguredPageRange range)
+    {
+        range = default;
+        if (pageRange is not { } pageRangeValue)
+        {
+            return false;
+        }
+        if (!validSections)
+        {
+            return false;
+        }
+
+        if (sectionCount <= 0)
+        {
+            return false;
+        }
+
+        range = pageRangeValue;
+        return true;
+    }
+
+    private static bool CanCreatePageLayout(
+        bool hasLayoutErrors,
+        int blockCount,
+        int entryCount)
+    {
+        if (hasLayoutErrors)
+        {
+            return false;
+        }
+
+        return blockCount == entryCount;
+    }
 
     private readonly record struct ConfiguredPageRange(int FirstPage, int LastPage)
     {
@@ -382,27 +519,51 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
             }
 
             var separator = value.IndexOf('-');
-            if (separator <= 0
-                || separator != value.LastIndexOf('-')
-                || separator >= value.Length - 1
-                || !int.TryParse(
+            if (!HasValidSeparator(value, separator))
+            {
+                return false;
+            }
+            if (!int.TryParse(
                     value.AsSpan(0, separator),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
-                    out var firstPage)
-                || !int.TryParse(
+                    out var firstPage))
+            {
+                return false;
+            }
+            if (firstPage <= 0)
+            {
+                return false;
+            }
+            if (!int.TryParse(
                     value.AsSpan(separator + 1),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
-                    out var lastPage)
-                || firstPage <= 0
-                || firstPage >= lastPage)
+                    out var lastPage))
+            {
+                return false;
+            }
+            if (firstPage >= lastPage)
             {
                 return false;
             }
 
             pageRange = new(firstPage, lastPage);
             return true;
+
+            static bool HasValidSeparator(string value, int separator)
+            {
+                if (separator <= 0)
+                {
+                    return false;
+                }
+                if (separator >= value.Length - 1)
+                {
+                    return false;
+                }
+
+                return separator == value.LastIndexOf('-');
+            }
         }
 
         public override string ToString()

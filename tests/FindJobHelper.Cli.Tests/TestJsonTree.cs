@@ -71,8 +71,14 @@ internal sealed class TestJsonTree
         for (var index = 0; index < segments.Length - 1; index++)
         {
             var segment = segments[index];
-            if (!current.TryGetPropertyValue(segment, out var child)
-                || child is null)
+            if (!current.TryGetPropertyValue(segment, out var child))
+            {
+                var created = new JsonObject();
+                current[segment] = created;
+                current = created;
+                continue;
+            }
+            if (child is null)
             {
                 var created = new JsonObject();
                 current[segment] = created;
