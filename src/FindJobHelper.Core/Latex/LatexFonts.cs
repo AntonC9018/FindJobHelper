@@ -126,7 +126,10 @@ public static class LatexFontConfigurationRenderer
     public static string Render(LatexFontOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        return string.Join('\n', LatexFontRoles.All.Select(
-            role => $"\\{LatexFontRoles.SetCommands[role]}{{{options[role].Value}}}"));
+        return $$"""
+            \setmainfont{{{options.Families.Main.Value}}}
+            \setsansfont[Scale=MatchLowercase]{{{options.Families.Sans.Value}}}
+            \setmonofont[Scale=MatchLowercase]{{{options.Families.Monospace.Value}}}
+            """;
     }
 }
