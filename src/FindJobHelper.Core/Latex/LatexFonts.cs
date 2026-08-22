@@ -128,8 +128,8 @@ public static class LatexFontConfigurationRenderer
         ArgumentNullException.ThrowIfNull(options);
         return $$"""
             \setmainfont{{{options.Families.Main.Value}}}
-            \setsansfont[Scale=MatchLowercase]{{{options.Families.Sans.Value}}}
-            \setmonofont[Scale=MatchLowercase]{{{options.Families.Monospace.Value}}}
+            \setsansfont{{{options.Families.Sans.Value}}}
+            \setmonofont[Scale=0.92]{{{options.Families.Monospace.Value}}}
             """;
     }
 }

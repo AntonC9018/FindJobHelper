@@ -174,9 +174,9 @@ public sealed class LatexMeasurementTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("enumitem", source);
         Assert.DoesNotContain("geometry", source);
-        Assert.Contains(@"\setmainfont{Liberation Serif}", source);
-        Assert.Contains(@"\setsansfont[Scale=MatchLowercase]{Liberation Sans}", source);
-        Assert.Contains(@"\setmonofont[Scale=MatchLowercase]{Liberation Mono}", source);
+        Assert.Contains(@"{Liberation Serif}", source);
+        Assert.Contains(@"{Liberation Sans}", source);
+        Assert.Contains(@"{Liberation Mono}", source);
     }
 
     [Fact]

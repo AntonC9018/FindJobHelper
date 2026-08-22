@@ -32,3 +32,6 @@
   and value selectors.
 - Apply these rules to all hand-written code, including tests and code generators.
   Generated files are exempt.
+- If a function does a guard chain, with the same return in each indicating 
+  a successful early check, continue the guard chain all the way through,
+  explicitly returning the "good" value at the end. 
