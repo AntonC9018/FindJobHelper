@@ -311,7 +311,8 @@ public sealed class CvGenerationCliEndToEndTests
         var outputDirectory = Path.Combine(rootDirectory, "output");
         try
         {
-            var config = TestJsonTree.Parse(await File.ReadAllTextAsync(FixturePath))
+            var fixtureContent = await File.ReadAllTextAsync(FixturePath);
+            var config = TestJsonTree.Parse(fixtureContent)
                 .Set("profession", "Config Profession")
                 .SetJson("header.links.order", """["linkedin", "GITHUB"]""")
                 .ToJsonString();
@@ -353,7 +354,8 @@ public sealed class CvGenerationCliEndToEndTests
         var outputDirectory = Path.Combine(rootDirectory, "output");
         try
         {
-            var config = TestJsonTree.Parse(await File.ReadAllTextAsync(FixturePath))
+            var fixtureContent = await File.ReadAllTextAsync(FixturePath);
+            var config = TestJsonTree.Parse(fixtureContent)
                 .SetJson("header.links.order", """["YouTube", "Portfolio"]""")
                 .ToJsonString();
             await File.WriteAllTextAsync(configPath, config);
@@ -747,9 +749,9 @@ public sealed class CvGenerationCliEndToEndTests
         var acceptsExperienceDatabase = command is not "example-config" and not "new-config";
         if (ShouldAddExperienceDatabase())
         {
+            var experienceDatabasePath = typeof(ExperienceDatabaseProvider).Assembly.Location;
             startInfo.ArgumentList.Add("--experience-database");
-            startInfo.ArgumentList.Add(
-                typeof(ExperienceDatabaseProvider).Assembly.Location);
+            startInfo.ArgumentList.Add(experienceDatabasePath);
         }
 
         bool ShouldAddExperienceDatabase()
