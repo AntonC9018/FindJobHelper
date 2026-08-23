@@ -86,6 +86,24 @@ In principle, without that setting, it takes as many items as fit the page, ensu
    Inspect and edit the run script (`run.sh` or `run.ps1`)
    to specify your personal data and overwrite default fonts.
 
+#### Font configuration
+
+The generator accepts separate family and scale settings for its main, sans-serif,
+and monospaced fonts. A command-line option takes precedence over its environment
+variable.
+
+| Command-line option | Environment variable | Default |
+| --- | --- | --- |
+| `--main-font` | `CV_MAIN_FONT` | `Liberation Serif` |
+| `--sans-font` | `CV_SANS_FONT` | `Liberation Sans` |
+| `--mono-font` | `CV_MONO_FONT` | `Liberation Mono` |
+| `--main-font-size` | `CV_MAIN_FONT_SIZE` | No `Scale` option |
+| `--sans-font-size` | `CV_SANS_FONT_SIZE` | No `Scale` option |
+| `--mono-font-size` | `CV_MONO_FONT_SIZE` | `0.92` |
+
+The font-size options are dimensionless positive, finite scale factors. The
+generator passes them to `fontspec` as `Scale=<value>`; they are not point sizes.
+
 To generate a CV, do the following:
 
 1. Make a config by using `dotnet find-job-helper new-config` in a new directory for the current run.

@@ -4,11 +4,15 @@ namespace FindJobHelper.CVGeneration;
 
 internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
     private static readonly LatexFontRoleArray<string> FontParameterNames = new(
         main: "$main_font",
         sans: "$sans_font",
         monospace: "$mono_font");
+    private static readonly LatexFontRoleArray<string> FontScaleParameterNames = new(
+        main: "$main_scale",
+        sans: "$sans_scale",
+        monospace: "$mono_scale");
     private readonly string _databasePath = databasePath;
     private readonly int _ruleVersion = ruleVersion;
 
@@ -47,7 +51,17 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
                 main_font TEXT NOT NULL,
                 sans_font TEXT NOT NULL,
                 mono_font TEXT NOT NULL,
-                UNIQUE (rule_version, main_font, sans_font, mono_font)
+                main_scale TEXT NOT NULL,
+                sans_scale TEXT NOT NULL,
+                mono_scale TEXT NOT NULL,
+                UNIQUE (
+                    rule_version,
+                    main_font,
+                    sans_font,
+                    mono_font,
+                    main_scale,
+                    sans_scale,
+                    mono_scale)
             );
             CREATE TABLE IF NOT EXISTS latex_height_measurement (
                 run_id INTEGER NOT NULL REFERENCES latex_measurement_run(run_id) ON DELETE CASCADE,
@@ -82,7 +96,10 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
             WHERE run.rule_version = $rule_version
               AND run.main_font = $main_font
               AND run.sans_font = $sans_font
-              AND run.mono_font = $mono_font;
+              AND run.mono_font = $mono_font
+              AND run.main_scale = $main_scale
+              AND run.sans_scale = $sans_scale
+              AND run.mono_scale = $mono_scale;
             """;
         AddContextParameters(command, fonts);
 
@@ -150,12 +167,35 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO latex_measurement_run (rule_version, main_font, sans_font, mono_font)
-            VALUES ($rule_version, $main_font, $sans_font, $mono_font)
-            ON CONFLICT(rule_version, main_font, sans_font, mono_font) DO NOTHING;
+            INSERT INTO latex_measurement_run (
+                rule_version,
+                main_font,
+                sans_font,
+                mono_font,
+                main_scale,
+                sans_scale,
+                mono_scale)
+            VALUES (
+                $rule_version,
+                $main_font,
+                $sans_font,
+                $mono_font,
+                $main_scale,
+                $sans_scale,
+                $mono_scale)
+            ON CONFLICT(
+                rule_version,
+                main_font,
+                sans_font,
+                mono_font,
+                main_scale,
+                sans_scale,
+                mono_scale) DO NOTHING;
             SELECT run_id FROM latex_measurement_run
             WHERE rule_version = $rule_version AND main_font = $main_font
-              AND sans_font = $sans_font AND mono_font = $mono_font;
+              AND sans_font = $sans_font AND mono_font = $mono_font
+              AND main_scale = $main_scale AND sans_scale = $sans_scale
+              AND mono_scale = $mono_scale;
             """;
         AddContextParameters(command, fonts);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
@@ -167,6 +207,8 @@ internal sealed class LatexHeightCache(string databasePath, int ruleVersion)
         foreach (var role in LatexFontRoles.All)
         {
             command.Parameters.AddWithValue(FontParameterNames[role], fonts[role].Value);
+            var scaleValue = fonts.Scales[role]?.ToString() ?? string.Empty;
+            command.Parameters.AddWithValue(FontScaleParameterNames[role], scaleValue);
         }
     }
 

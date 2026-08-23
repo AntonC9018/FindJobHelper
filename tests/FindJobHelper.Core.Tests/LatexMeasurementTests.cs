@@ -174,9 +174,9 @@ public sealed class LatexMeasurementTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("enumitem", source);
         Assert.DoesNotContain("geometry", source);
-        Assert.Contains(@"{Liberation Serif}", source);
-        Assert.Contains(@"{Liberation Sans}", source);
-        Assert.Contains(@"{Liberation Mono}", source);
+        Assert.Contains(@"\setmainfont{Liberation Serif}", source);
+        Assert.Contains(@"\setsansfont{Liberation Sans}", source);
+        Assert.Contains(@"\setmonofont[Scale=0.92]{Liberation Mono}", source);
     }
 
     [Fact]
@@ -444,7 +444,7 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public async Task CacheScopesMeasurementsByEffectiveFontTupleAndReusesEarlierContext()
+    public async Task CacheScopesMeasurementsByEffectiveFontConfigurationAndReusesEarlierContext()
     {
         using var fixture = new CacheFixture();
         var database = CreateDatabase(CreateRichText(new PlainText { Text = "font-sensitive" }));
@@ -455,8 +455,23 @@ public sealed class LatexMeasurementTests
         var changedMain = WithFont(original, LatexFontRole.Main, "Noto Serif");
         var changedSans = WithFont(original, LatexFontRole.Sans, "Noto Sans");
         var changedMono = WithFont(original, LatexFontRole.Mono, "Noto Sans Mono");
+        var changedMainScale = WithScale(original, LatexFontRole.Main, 1.1);
+        var changedSansScale = WithScale(original, LatexFontRole.Sans, 1.2);
+        var changedMonoScale = WithScale(original, LatexFontRole.Mono, 0.8);
 
-        foreach (var fonts in new[] { original, original, changedMain, changedSans, changedMono, original })
+        var fontConfigurations = new[]
+        {
+            original,
+            original,
+            changedMain,
+            changedSans,
+            changedMono,
+            changedMainScale,
+            changedSansScale,
+            changedMonoScale,
+            original,
+        };
+        foreach (var fonts in fontConfigurations)
         {
             var result = await service.MeasureAsync(
                 database,
@@ -469,7 +484,7 @@ public sealed class LatexMeasurementTests
             Assert.IsType<CvMeasurementSnapshot>(result);
         }
 
-        Assert.Equal(4, runner.CallCount);
+        Assert.Equal(7, runner.CallCount);
         await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = fixture.CachePath,
@@ -479,21 +494,29 @@ public sealed class LatexMeasurementTests
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT run.run_id, run.rule_version, run.main_font, run.sans_font, run.mono_font,
-                   COUNT(height.run_id)
+                   run.main_scale, run.sans_scale, run.mono_scale, COUNT(height.run_id)
             FROM latex_measurement_run AS run
             INNER JOIN latex_height_measurement AS height ON height.run_id = run.run_id
             GROUP BY run.run_id
             ORDER BY run.run_id;
             """;
         await using var reader = await command.ExecuteReaderAsync();
-        var contexts = new List<(long Id, int Rule, string Main, string Sans, string Mono, long Heights)>();
+        var contexts = new List<FontCacheContext>();
         while (await reader.ReadAsync())
         {
-            contexts.Add((reader.GetInt64(0), reader.GetInt32(1), reader.GetString(2), reader.GetString(3),
-                reader.GetString(4), reader.GetInt64(5)));
+            contexts.Add(new(
+                Id: reader.GetInt64(0),
+                Rule: reader.GetInt32(1),
+                Main: reader.GetString(2),
+                Sans: reader.GetString(3),
+                Mono: reader.GetString(4),
+                MainScale: reader.GetString(5),
+                SansScale: reader.GetString(6),
+                MonoScale: reader.GetString(7),
+                Heights: reader.GetInt64(8)));
         }
 
-        Assert.Equal(4, contexts.Count);
+        Assert.Equal(7, contexts.Count);
         Assert.All(contexts, context =>
         {
             Assert.Equal(23, context.Rule);
@@ -511,11 +534,29 @@ public sealed class LatexMeasurementTests
                 return false;
             }
 
-            return context.Mono == "Liberation Mono";
+            if (context.Mono != "Liberation Mono")
+            {
+                return false;
+            }
+
+            if (context.MainScale != string.Empty)
+            {
+                return false;
+            }
+
+            if (context.SansScale != string.Empty)
+            {
+                return false;
+            }
+
+            return context.MonoScale == "0.92";
         });
         Assert.Contains(contexts, context => context.Main == "Noto Serif");
         Assert.Contains(contexts, context => context.Sans == "Noto Sans");
         Assert.Contains(contexts, context => context.Mono == "Noto Sans Mono");
+        Assert.Contains(contexts, context => context.MainScale == "1.1");
+        Assert.Contains(contexts, context => context.SansScale == "1.2");
+        Assert.Contains(contexts, context => context.MonoScale == "0.8");
 
     }
 
@@ -542,14 +583,58 @@ public sealed class LatexMeasurementTests
         }
 
         var families = new LatexFontRoleArray<LatexFontFamilyName>(
-            main,
-            sans,
-            monospace);
-        return new(families);
+            main: main,
+            sans: sans,
+            monospace: monospace);
+        return new(
+            families: families,
+            scales: original.Scales);
     }
 
+    private static LatexFontOptions WithScale(
+        LatexFontOptions original,
+        LatexFontRole role,
+        double value)
+    {
+        var replacement = new LatexFontScale(value);
+        var main = original.Scales.Main;
+        var sans = original.Scales.Sans;
+        var monospace = original.Scales.Monospace;
+        switch (role)
+        {
+            case LatexFontRole.Main:
+                main = replacement;
+                break;
+            case LatexFontRole.Sans:
+                sans = replacement;
+                break;
+            case LatexFontRole.Mono:
+                monospace = replacement;
+                break;
+        }
+
+        var scales = new LatexFontRoleArray<LatexFontScale?>(
+            main: main,
+            sans: sans,
+            monospace: monospace);
+        return new(
+            families: original.Families,
+            scales: scales);
+    }
+
+    private sealed record FontCacheContext(
+        long Id,
+        int Rule,
+        string Main,
+        string Sans,
+        string Mono,
+        string MainScale,
+        string SansScale,
+        string MonoScale,
+        long Heights);
+
     [Fact]
-    public async Task VersionOneCacheIsRecreatedWithoutReusingUnsafeHeights()
+    public async Task VersionTwoCacheIsRecreatedWithoutReusingScaleAgnosticHeights()
     {
         using var fixture = new CacheFixture();
         await using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder
@@ -561,14 +646,24 @@ public sealed class LatexMeasurementTests
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
             command.CommandText = """
-                CREATE TABLE latex_height_measurement (
+                CREATE TABLE latex_measurement_run (
+                    run_id INTEGER PRIMARY KEY,
                     rule_version INTEGER NOT NULL,
+                    main_font TEXT NOT NULL,
+                    sans_font TEXT NOT NULL,
+                    mono_font TEXT NOT NULL,
+                    UNIQUE (rule_version, main_font, sans_font, mono_font));
+                CREATE TABLE latex_height_measurement (
+                    run_id INTEGER NOT NULL REFERENCES latex_measurement_run(run_id) ON DELETE CASCADE,
                     measurement_kind TEXT NOT NULL,
                     content_hash TEXT NOT NULL,
                     height_sp INTEGER NOT NULL,
-                    PRIMARY KEY (rule_version, measurement_kind, content_hash));
-                INSERT INTO latex_height_measurement VALUES (31, 'ExperienceItem', 'unsafe', 42);
-                PRAGMA user_version=1;
+                    PRIMARY KEY (run_id, measurement_kind, content_hash));
+                INSERT INTO latex_measurement_run
+                    (run_id, rule_version, main_font, sans_font, mono_font)
+                VALUES (1, 31, 'Liberation Serif', 'Liberation Sans', 'Liberation Mono');
+                INSERT INTO latex_height_measurement VALUES (1, 'ExperienceItem', 'unsafe', 42);
+                PRAGMA user_version=2;
                 """;
             await command.ExecuteNonQueryAsync();
         }

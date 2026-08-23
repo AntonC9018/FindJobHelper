@@ -15,10 +15,13 @@ public sealed partial class GeneratedPdfFontTests
     public async Task GeneratedPdf_EmbedsEachConfiguredFontForItsFamilyRole()
     {
         using var fixture = new GeneratedPdfFixture();
-        var fonts = new LatexFontOptions(new(
+        var families = new LatexFontRoleArray<LatexFontFamilyName>(
             main: new("Liberation Sans"),
             sans: new("Liberation Serif"),
-            monospace: new("Liberation Mono")));
+            monospace: new("Liberation Mono"));
+        var fonts = new LatexFontOptions(
+            families: families,
+            scales: LatexFontOptions.Default.Scales);
 
         var result = await CvTemplate.Generate(new()
         {

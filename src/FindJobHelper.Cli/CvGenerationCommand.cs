@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text;
 using CodegenCS;
 using CommandDotNet;
@@ -627,27 +628,56 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
     public string? MainFont { get; set; }
 
     [Option(
+        "main-font-size",
+        Description = "Positive finite LaTeX Scale factor for the main font. Overrides CV_MAIN_FONT_SIZE; default: no Scale option.")]
+    public string? MainFontSize { get; set; }
+
+    [Option(
         "sans-font",
         Description = "Installed LaTeX sans-serif font family. Overrides CV_SANS_FONT; default: Liberation Sans.")]
     public string? SansFont { get; set; }
+
+    [Option(
+        "sans-font-size",
+        Description = "Positive finite LaTeX Scale factor for the sans-serif font. Overrides CV_SANS_FONT_SIZE; default: no Scale option.")]
+    public string? SansFontSize { get; set; }
 
     [Option(
         "mono-font",
         Description = "Installed LaTeX monospaced font family. Overrides CV_MONO_FONT; default: Liberation Mono.")]
     public string? MonoFont { get; set; }
 
+    [Option(
+        "mono-font-size",
+        Description = "Positive finite LaTeX Scale factor for the monospaced font. Overrides CV_MONO_FONT_SIZE; default: 0.92.")]
+    public string? MonoFontSize { get; set; }
 }
 
 internal static class CvGenerationArgumentsExtensions
 {
     extension(CvGenerationArguments arguments)
     {
-        internal LatexFontRoleArray<string?> FontFlags => new(
-            main: arguments.MainFont,
-            sans: arguments.SansFont,
-            monospace: arguments.MonoFont);
+        internal LatexFontConfigurationValues FontFlags
+        {
+            get
+            {
+                var families = new LatexFontRoleArray<string?>(
+                    main: arguments.MainFont,
+                    sans: arguments.SansFont,
+                    monospace: arguments.MonoFont);
+                var scales = new LatexFontRoleArray<string?>(
+                    main: arguments.MainFontSize,
+                    sans: arguments.SansFontSize,
+                    monospace: arguments.MonoFontSize);
+                return new(Families: families, Scales: scales);
+            }
+        }
     }
 }
+
+internal sealed record LatexFontConfigurationValues(
+    LatexFontRoleArray<string?> Families,
+    LatexFontRoleArray<string?> Scales);
 
 internal sealed record ResolvedLatexFontConfiguration(
     LatexFontOptions Options,
@@ -657,7 +687,7 @@ internal sealed class LatexFontConfigurationException(string message) : Exceptio
 
 internal static class LatexFontConfigurationResolver
 {
-    public static LatexFontRoleArray<LatexFontSetting> Settings { get; } = new(
+    public static LatexFontRoleArray<LatexFontSetting> FamilySettings { get; } = new(
         main: new(
             Role: LatexFontRole.Main,
             FlagName: "--main-font",
@@ -671,54 +701,100 @@ internal static class LatexFontConfigurationResolver
             FlagName: "--mono-font",
             EnvironmentVariable: "CV_MONO_FONT"));
 
-    public static LatexFontRoleArray<string?> GetEnvironmentValues() =>
-        Settings.Map(static setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable));
+    public static LatexFontRoleArray<LatexFontSetting> ScaleSettings { get; } = new(
+        main: new(
+            Role: LatexFontRole.Main,
+            FlagName: "--main-font-size",
+            EnvironmentVariable: "CV_MAIN_FONT_SIZE"),
+        sans: new(
+            Role: LatexFontRole.Sans,
+            FlagName: "--sans-font-size",
+            EnvironmentVariable: "CV_SANS_FONT_SIZE"),
+        monospace: new(
+            Role: LatexFontRole.Mono,
+            FlagName: "--mono-font-size",
+            EnvironmentVariable: "CV_MONO_FONT_SIZE"));
+
+    public static LatexFontConfigurationValues GetEnvironmentValues()
+    {
+        var families = FamilySettings.Map(
+            static setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable));
+        var scales = ScaleSettings.Map(
+            static setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable));
+        return new(Families: families, Scales: scales);
+    }
 
     public static ResolvedLatexFontConfiguration Resolve(
+        LatexFontConfigurationValues flags,
+        LatexFontConfigurationValues environments)
+    {
+        var resolvedFamilies = ResolveFamilies(
+            flags: flags.Families,
+            environments: environments.Families);
+        var families = resolvedFamilies.Map(static resolved => resolved.Family);
+        var scales = ResolveScales(
+            flags: flags.Scales,
+            environments: environments.Scales);
+        var options = new LatexFontOptions(
+            families: families,
+            scales: scales);
+        var manuallySpecified = resolvedFamilies.Map(
+            static resolved => resolved.ManuallySpecified);
+        return new(Options: options, ManuallySpecified: manuallySpecified);
+    }
+
+    private static LatexFontRoleArray<ResolvedFontFamily> ResolveFamilies(
         LatexFontRoleArray<string?> flags,
         LatexFontRoleArray<string?> environments)
     {
-        var main = ResolveRole(
-            flag: flags.Main,
-            environment: environments.Main,
-            defaultValue: LatexFontOptions.Default.Families.Main,
-            setting: Settings.Main,
-            manuallySpecified: out var mainManuallySpecified);
-        var sans = ResolveRole(
-            flag: flags.Sans,
-            environment: environments.Sans,
-            defaultValue: LatexFontOptions.Default.Families.Sans,
-            setting: Settings.Sans,
-            manuallySpecified: out var sansManuallySpecified);
-        var monospace = ResolveRole(
-            flag: flags.Monospace,
-            environment: environments.Monospace,
-            defaultValue: LatexFontOptions.Default.Families.Monospace,
-            setting: Settings.Monospace,
-            manuallySpecified: out var monospaceManuallySpecified);
-        return new(
-            new LatexFontOptions(new(
-                main: main,
-                sans: sans,
-                monospace: monospace)),
-            new(
-                main: mainManuallySpecified,
-                sans: sansManuallySpecified,
-                monospace: monospaceManuallySpecified));
+        ResolvedFontFamily ResolveRole(LatexFontRole role)
+        {
+            var flag = flags[role];
+            var environment = environments[role];
+            var defaultValue = LatexFontOptions.Default.Families[role];
+            var setting = FamilySettings[role];
+            return ResolveFamilyRole(
+                flag: flag,
+                environment: environment,
+                defaultValue: defaultValue,
+                setting: setting);
+        }
+
+        return LatexFontRoleArray<ResolvedFontFamily>.Create(ResolveRole);
     }
 
-    private static LatexFontFamilyName ResolveRole(
+    private static LatexFontRoleArray<LatexFontScale?> ResolveScales(
+        LatexFontRoleArray<string?> flags,
+        LatexFontRoleArray<string?> environments)
+    {
+        LatexFontScale? ResolveRole(LatexFontRole role)
+        {
+            var flag = flags[role];
+            var environment = environments[role];
+            var defaultValue = LatexFontOptions.Default.Scales[role];
+            var setting = ScaleSettings[role];
+            return ResolveScaleRole(
+                flag: flag,
+                environment: environment,
+                defaultValue: defaultValue,
+                setting: setting);
+        }
+
+        return LatexFontRoleArray<LatexFontScale?>.Create(ResolveRole);
+    }
+
+    private static ResolvedFontFamily ResolveFamilyRole(
         string? flag,
         string? environment,
         LatexFontFamilyName defaultValue,
-        LatexFontSetting setting,
-        out bool manuallySpecified)
+        LatexFontSetting setting)
     {
-        manuallySpecified = false;
         var value = flag ?? environment;
         if (value is null)
         {
-            return defaultValue;
+            return new(
+                Family: defaultValue,
+                ManuallySpecified: false);
         }
         var source = flag is not null ? setting.FlagName : setting.EnvironmentVariable;
         if (string.IsNullOrWhiteSpace(value))
@@ -728,14 +804,57 @@ internal static class LatexFontConfigurationResolver
         try
         {
             var family = new LatexFontFamilyName(value);
-            manuallySpecified = true;
-            return family;
+            return new(
+                Family: family,
+                ManuallySpecified: true);
         }
         catch (ArgumentException exception)
         {
             throw new LatexFontConfigurationException($"Invalid value for {source}: {exception.Message}");
         }
     }
+
+    private static LatexFontScale? ResolveScaleRole(
+        string? flag,
+        string? environment,
+        LatexFontScale? defaultValue,
+        LatexFontSetting setting)
+    {
+        var value = flag ?? environment;
+        if (value is null)
+        {
+            return defaultValue;
+        }
+
+        var source = flag is not null ? setting.FlagName : setting.EnvironmentVariable;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new LatexFontConfigurationException($"{source} must not be blank.");
+        }
+
+        var parsedSuccessfully = double.TryParse(
+            value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var parsedValue);
+        if (!parsedSuccessfully)
+        {
+            throw new LatexFontConfigurationException($"{source} must be a number using invariant decimal notation.");
+        }
+
+        try
+        {
+            return new(parsedValue);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            throw new LatexFontConfigurationException($"{source} must be positive and finite.");
+        }
+    }
+
+    private sealed record ResolvedFontFamily(
+        LatexFontFamilyName Family,
+        bool ManuallySpecified);
 
 }
 
