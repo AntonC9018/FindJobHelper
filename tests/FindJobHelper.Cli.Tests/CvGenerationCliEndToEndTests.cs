@@ -1,9 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
-using FindJobHelper.CVGeneration;
 using ProviderFixtures.SyntheticProvider;
-using MainCli;
 
 namespace MainCli.Tests;
 
@@ -276,6 +274,14 @@ public sealed class CvGenerationCliEndToEndTests
                 markdown,
                 StringComparison.Ordinal);
             Assert.Contains("**Skills:** E2E Skill", markdown, StringComparison.Ordinal);
+            var gitHubIndex = markdown.IndexOf("**GitHub:**", StringComparison.Ordinal);
+            var linkedInIndex = markdown.IndexOf("**LinkedIn:**", StringComparison.Ordinal);
+            var youTubeIndex = markdown.IndexOf("**YouTube:**", StringComparison.Ordinal);
+            var portfolioIndex = markdown.IndexOf("**Portfolio:**", StringComparison.Ordinal);
+            Assert.True(gitHubIndex >= 0);
+            Assert.True(linkedInIndex > gitHubIndex);
+            Assert.True(youTubeIndex > linkedInIndex);
+            Assert.True(portfolioIndex > youTubeIndex);
             Assert.Contains("## Work Experience", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain("<details>", markdown, StringComparison.Ordinal);
             Assert.DoesNotContain("raw:", markdown, StringComparison.Ordinal);
@@ -291,6 +297,88 @@ public sealed class CvGenerationCliEndToEndTests
             {
                 Directory.Delete(outputDirectory, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public async Task Generate_ConfigProfessionAndCustomHeaderOrderOverrideDefaults()
+    {
+        var rootDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-header-e2e-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(rootDirectory);
+        var configPath = Path.Combine(rootDirectory, "config.json");
+        var outputDirectory = Path.Combine(rootDirectory, "output");
+        try
+        {
+            var config = TestJsonTree.Parse(await File.ReadAllTextAsync(FixturePath))
+                .Set("profession", "Config Profession")
+                .SetJson("header.links.order", """["linkedin", "GITHUB"]""")
+                .ToJsonString();
+            await File.WriteAllTextAsync(configPath, config);
+
+            var result = await RunCliAsync(
+                "--config",
+                configPath,
+                "--output-directory",
+                outputDirectory,
+                "--output-format",
+                "md");
+
+            AssertSuccessful(result);
+            var markdownPath = Path.Combine(outputDirectory, "ExampleAlex.md");
+            var markdown = await ReadAndAssertMarkdownEncodingAsync(markdownPath);
+            Assert.Contains("\nConfig Profession\n", markdown, StringComparison.Ordinal);
+            var linkedInIndex = markdown.IndexOf("**LinkedIn:**", StringComparison.Ordinal);
+            var gitHubIndex = markdown.IndexOf("**GitHub:**", StringComparison.Ordinal);
+            Assert.True(linkedInIndex >= 0);
+            Assert.True(gitHubIndex > linkedInIndex);
+            Assert.DoesNotContain("**YouTube:**", markdown, StringComparison.Ordinal);
+            Assert.DoesNotContain("**Portfolio:**", markdown, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(rootDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Generate_CustomHeaderOrderReportsEveryMissingValue()
+    {
+        var rootDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-missing-header-e2e-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(rootDirectory);
+        var configPath = Path.Combine(rootDirectory, "config.json");
+        var outputDirectory = Path.Combine(rootDirectory, "output");
+        try
+        {
+            var config = TestJsonTree.Parse(await File.ReadAllTextAsync(FixturePath))
+                .SetJson("header.links.order", """["YouTube", "Portfolio"]""")
+                .ToJsonString();
+            await File.WriteAllTextAsync(configPath, config);
+            var environment = new Dictionary<string, string?>
+            {
+                ["PersonalInfo__YouTube"] = null,
+                ["PersonalInfo__Portfolio"] = null,
+            };
+
+            var result = await RunCliWithEnvironmentAsync(
+                environment,
+                "--config",
+                configPath,
+                "--output-directory",
+                outputDirectory,
+                "--output-format",
+                "md");
+
+            Assert.Equal(2, result.ExitCode);
+            Assert.Contains("Header link 'YouTube' is required", result.StandardError);
+            Assert.Contains("Header link 'Portfolio' is required", result.StandardError);
+        }
+        finally
+        {
+            Directory.Delete(rootDirectory, recursive: true);
         }
     }
 
@@ -616,14 +704,29 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     private static Task<ProcessResult> RunCliAsync(params string[] arguments) =>
-        RunCliCoreAsync(addExperienceDatabase: true, arguments);
+        RunCliCoreAsync(
+            addExperienceDatabase: true,
+            environmentOverrides: null,
+            arguments);
+
+    private static Task<ProcessResult> RunCliWithEnvironmentAsync(
+        IReadOnlyDictionary<string, string?> environmentOverrides,
+        params string[] arguments) =>
+        RunCliCoreAsync(
+            addExperienceDatabase: true,
+            environmentOverrides,
+            arguments);
 
     private static Task<ProcessResult> RunCliWithoutExperienceDatabaseAsync(
         params string[] arguments) =>
-        RunCliCoreAsync(addExperienceDatabase: false, arguments);
+        RunCliCoreAsync(
+            addExperienceDatabase: false,
+            environmentOverrides: null,
+            arguments);
 
     private static async Task<ProcessResult> RunCliCoreAsync(
         bool addExperienceDatabase,
+        IReadOnlyDictionary<string, string?>? environmentOverrides,
         params string[] arguments)
     {
         var startInfo = new ProcessStartInfo("dotnet")
@@ -674,6 +777,21 @@ public sealed class CvGenerationCliEndToEndTests
         startInfo.Environment["PersonalInfo__Country"] = "Example Country";
         startInfo.Environment["PersonalInfo__GitHub"] = "https://example.test/github";
         startInfo.Environment["PersonalInfo__LinkedIn"] = "https://example.test/linkedin";
+        startInfo.Environment["PersonalInfo__YouTube"] = "https://example.test/youtube";
+        startInfo.Environment["PersonalInfo__Portfolio"] = "https://example.test/portfolio";
+        if (environmentOverrides is not null)
+        {
+            foreach (var (name, value) in environmentOverrides)
+            {
+                if (value is null)
+                {
+                    startInfo.Environment.Remove(name);
+                    continue;
+                }
+
+                startInfo.Environment[name] = value;
+            }
+        }
 
         using var process = Process.Start(startInfo);
         Assert.NotNull(process);

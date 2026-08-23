@@ -163,6 +163,7 @@ public sealed class CvGenerationCommand
             latexExecutables.Paths,
             cancellationToken);
         var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
+        var profession = ResolveProfession(configuration, personalInfo);
         var artifactPlan = CvArtifactPlan.Create(
             outputFormat,
             isDebug,
@@ -185,13 +186,16 @@ public sealed class CvGenerationCommand
                 First = personalInfo.FirstName,
                 Last = personalInfo.LastName,
             },
-            CategorizedInfoLists = CreateMetadataLists(searchConfiguration, personalInfo),
+            CategorizedInfoLists = CreateMetadataLists(
+                searchConfiguration,
+                configuration,
+                personalInfo),
             CategorizedInfos = [
                 new(Category.Location, location.FormatInfo()),
                 new(Category.Email, personalInfo.Email),
                 new(Category.Phone, personalInfo.Phone),
             ],
-            Profession = new(personalInfo.Profession),
+            Profession = new(profession),
             Languages = [
                 new(
                     Language.Russian,
@@ -517,14 +521,111 @@ public sealed class CvGenerationCommand
         }
     }
 
+    private static string ResolveProfession(
+        CvSelectionConfiguration configuration,
+        PersonalInfoOptions personalInfo)
+    {
+        var profession = configuration.Profession ?? personalInfo.Profession;
+        if (profession is null)
+        {
+            throw new CvConfigurationException(
+                "Profession must be supplied by 'profession' or 'PersonalInfo__Profession'.");
+        }
+
+        return profession;
+    }
+
     private static ImmutableArray<CategorizedInfoList> CreateMetadataLists(
         ConfiguredCvSearch searchConfiguration,
-        PersonalInfoOptions personalInfo) =>
+        CvSelectionConfiguration configuration,
+        PersonalInfoOptions personalInfo)
+    {
+        var lists = new List<CategorizedInfoList>
+        {
+            new(Category.Skills, searchConfiguration.Skills),
+            new(Category.Technologies, searchConfiguration.Technologies),
+        };
+        var usesDefaultOrder = configuration.HeaderLinkOrder.IsDefault;
+        var linkOrder = usesDefaultOrder
+            ? DefaultHeaderLinkOrder
+            : configuration.HeaderLinkOrder;
+        var errors = new List<string>();
+        foreach (var linkName in linkOrder)
+        {
+            if (!TryResolveHeaderLink(
+                    linkName,
+                    personalInfo,
+                    out var category,
+                    out var value))
+            {
+                errors.Add($"Header link '{linkName}' is not supported.");
+                continue;
+            }
+            if (value is null)
+            {
+                if (usesDefaultOrder)
+                {
+                    continue;
+                }
+
+                errors.Add(
+                    $"Header link '{linkName}' is required by 'header.links.order' but has no configured value.");
+                continue;
+            }
+
+            lists.Add(new(category, [value]));
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new CvConfigurationException(errors);
+        }
+
+        return [.. lists];
+    }
+
+    private static bool TryResolveHeaderLink(
+        HeaderLinkName linkName,
+        PersonalInfoOptions personalInfo,
+        out Category category,
+        out string? value)
+    {
+        if (linkName == HeaderLinkName.GitHub)
+        {
+            category = Category.GitHub;
+            value = personalInfo.GitHub;
+            return true;
+        }
+        if (linkName == HeaderLinkName.LinkedIn)
+        {
+            category = Category.LinkedIn;
+            value = personalInfo.LinkedIn;
+            return true;
+        }
+        if (linkName == HeaderLinkName.YouTube)
+        {
+            category = Category.YouTube;
+            value = personalInfo.YouTube;
+            return true;
+        }
+        if (linkName == HeaderLinkName.Portfolio)
+        {
+            category = Category.Portfolio;
+            value = personalInfo.Portfolio;
+            return true;
+        }
+
+        category = default;
+        value = null;
+        return false;
+    }
+
+    private static readonly ImmutableArray<HeaderLinkName> DefaultHeaderLinkOrder =
     [
-        new(Category.Skills, searchConfiguration.Skills),
-        new(Category.Technologies, searchConfiguration.Technologies),
-        new(Category.GitHub, [personalInfo.GitHub]),
-        new(Category.LinkedIn, [personalInfo.LinkedIn]),
+        HeaderLinkName.GitHub,
+        HeaderLinkName.LinkedIn,
+        HeaderLinkName.YouTube,
+        HeaderLinkName.Portfolio,
     ];
 
     internal static string ExampleConfigPath => Path.Combine(

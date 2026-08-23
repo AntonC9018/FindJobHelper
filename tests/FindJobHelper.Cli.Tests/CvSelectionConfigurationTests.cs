@@ -3,7 +3,6 @@ using System.Text.Json.Nodes;
 using FindJobHelper.Core;
 using FindJobHelper.CVGeneration;
 using ProviderFixtures.SyntheticProvider;
-using MainCli;
 
 namespace MainCli.Tests;
 
@@ -85,6 +84,78 @@ public sealed class CvSelectionConfigurationTests
         Assert.Equal(CvPageCount.OnePage, search.PageCount);
         Assert.Null(configuration.PageLayout);
         Assert.Null(search.PageLayout);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MapsProfessionAndCanonicalizesKnownHeaderLinks()
+    {
+        var json = (await ReadFixtureTreeAsync())
+            .Set("profession", "Platform Engineer")
+            .SetJson(
+                "header.links.order",
+                """
+                ["portfolio", "YOUTUBE", "LinkedIn", "github"]
+                """)
+            .ToJsonString();
+
+        var configuration = await LoadAsync(json);
+
+        Assert.Equal("Platform Engineer", configuration.Profession);
+        Assert.Equal(
+            new[]
+            {
+                HeaderLinkName.Portfolio,
+                HeaderLinkName.YouTube,
+                HeaderLinkName.LinkedIn,
+                HeaderLinkName.GitHub,
+            },
+            configuration.HeaderLinkOrder);
+    }
+
+    [Fact]
+    public async Task LoadAsync_UsesDefaultHeaderOrderForNullAndEmptyCustomOrderForEmptyArray()
+    {
+        var nullOrderJson = (await ReadFixtureTreeAsync())
+            .Set("header.links.order", null)
+            .ToJsonString();
+        var emptyOrderJson = (await ReadFixtureTreeAsync())
+            .SetJson("header.links.order", "[]")
+            .ToJsonString();
+
+        var nullOrderConfiguration = await LoadAsync(nullOrderJson);
+        var emptyOrderConfiguration = await LoadAsync(emptyOrderJson);
+
+        Assert.True(nullOrderConfiguration.HeaderLinkOrder.IsDefault);
+        Assert.False(emptyOrderConfiguration.HeaderLinkOrder.IsDefault);
+        Assert.Empty(emptyOrderConfiguration.HeaderLinkOrder);
+    }
+
+    [Fact]
+    public async Task LoadAsync_RejectsDuplicateKnownHeaderLinksIgnoringCase()
+    {
+        var json = (await ReadFixtureTreeAsync())
+            .SetJson("header.links.order", """["GitHub", "github"]""")
+            .ToJsonString();
+
+        var exception = await LoadInvalidAsync(json, buildSearch: false);
+
+        Assert.Contains(
+            "Header link 'GitHub' is configured more than once",
+            exception.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadAsync_PreservesUnknownHeaderLinkNames()
+    {
+        var json = (await ReadFixtureTreeAsync())
+            .SetJson("header.links.order", """["Mastodon"]""")
+            .ToJsonString();
+
+        var configuration = await LoadAsync(json);
+
+        var name = Assert.Single(configuration.HeaderLinkOrder);
+        Assert.Equal(new HeaderLinkName("Mastodon"), name);
     }
 
     [Fact]

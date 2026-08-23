@@ -127,7 +127,8 @@ but which are actually irrelevant, so be careful of those.
 
 ## Hardcoded defaults
 
-* User parameters are configured per invocation via environment variables, or via user-secrets, not stored in the config.
+* User parameters are configured per invocation via environment variables or user-secrets. A config can override the profession and the displayed link order for one CV.
+* Header links use `PersonalInfo__GitHub`, `PersonalInfo__LinkedIn`, `PersonalInfo__YouTube`, and `PersonalInfo__Portfolio`. Missing links are omitted in the default GitHub, LinkedIn, YouTube, Portfolio order.
 * If education is included, each education experience is forced to appear, unless no bullets pass an earlier filter.
 * All job experiences are included bare even if they have no matching bullets.
 * Personal projects are not included unless they have at least one selected bullet.

@@ -1,4 +1,10 @@
 {
+    // "profession": "Example Software Engineer",
+    // "header": {
+    //     "links": {
+    //         "order": ["GitHub", "LinkedIn", "YouTube", "Portfolio"],
+    //     },
+    // },
     "pageCount": 1,
     "requiredTags": [
         { "name": ".NET", "weight": 1.0 },
