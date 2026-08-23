@@ -473,13 +473,6 @@ public static class OpenApiSchemaPatcher
             return false;
         }
 
-        if (description.Any(char.IsDigit))
-        {
-            p.Type = JsonObjectType.Integer;
-            p.Format = JsonFormatStrings.Integer;
-            return;
-        }
-
         var containsDateFormat = ContainsDateFormat();
 
         if (IsDateTimeDescription(containsDateFormat))
@@ -492,6 +485,13 @@ public static class OpenApiSchemaPatcher
         {
             p.Type = JsonObjectType.String;
             p.Format = JsonFormatStrings.Date;
+            return;
+        }
+
+        if (description.Any(char.IsDigit))
+        {
+            p.Type = JsonObjectType.Integer;
+            p.Format = JsonFormatStrings.Integer;
             return;
         }
         if (IsBooleanDescription())
