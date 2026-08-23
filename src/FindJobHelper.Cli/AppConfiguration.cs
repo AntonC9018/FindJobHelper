@@ -5,7 +5,6 @@ using System.Text.Json;
 using FindJobHelper.CVGeneration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 internal static class AppConfiguration
 {
@@ -115,8 +114,7 @@ public sealed class PersonalInfoOptions
     [Required]
     public required string LastName { get; set; }
 
-    [Required]
-    public required string Profession { get; set; }
+    public string? Profession { get; set; }
 
     [Required]
     public required string City { get; set; }
@@ -134,11 +132,11 @@ public sealed class PersonalInfoOptions
     [DebuggerBrowsable(DebuggerBrowsableState.Never)]
     public required string Email { get; set; }
 
-    [Url]
-    [Required]
-    public required string GitHub { get; set; }
+    public string? GitHub { get; set; }
 
-    [Url]
-    [Required]
-    public required string LinkedIn { get; set; }
+    public string? LinkedIn { get; set; }
+
+    public string? YouTube { get; set; }
+
+    public string? Portfolio { get; set; }
 }

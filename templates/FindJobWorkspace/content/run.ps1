@@ -31,6 +31,8 @@ $env:PersonalInfo__City = 'Example City'
 $env:PersonalInfo__Country = 'Example Country'
 $env:PersonalInfo__GitHub = 'https://example.test/github'
 $env:PersonalInfo__LinkedIn = 'https://example.test/linkedin'
+$env:PersonalInfo__YouTube = 'https://example.test/youtube'
+$env:PersonalInfo__Portfolio = 'https://example.test/portfolio'
 # Alternatively, remove these assignments and configure email and phone with
 # user-secrets if you do not want to commit real contact information.
 $env:PersonalInfo__Email = 'alex@example.test'

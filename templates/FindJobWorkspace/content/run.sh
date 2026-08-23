@@ -33,6 +33,8 @@ PersonalInfo__City='Example City' \
 PersonalInfo__Country='Example Country' \
 PersonalInfo__GitHub='https://example.test/github' \
 PersonalInfo__LinkedIn='https://example.test/linkedin' \
+PersonalInfo__YouTube='https://example.test/youtube' \
+PersonalInfo__Portfolio='https://example.test/portfolio' \
 PersonalInfo__Email='alex@example.test' \
 PersonalInfo__Phone='202-555-0100' \
 dotnet tool run find-job-helper -- \

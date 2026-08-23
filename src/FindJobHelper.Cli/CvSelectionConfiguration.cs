@@ -82,12 +82,15 @@ internal sealed class JsonCvSelectionConfiguration
     public MmrConfiguration? Mmr { get; init; }
     public required SelectionConfiguration Selection { get; init; }
     public required SectionOrderCollection SectionOrder { get; init; }
+    public string? Profession { get; init; }
+    public JsonHeaderConfiguration? Header { get; init; }
 
     public CvSelectionConfiguration ToDomain()
     {
         var errors = new List<string>();
         errors.AddRange(SectionOrder.ValidationErrors);
         var pageLayout = SectionOrder.PageLayout;
+        var headerLinkOrder = MapHeaderLinkOrder(errors);
         CollectPageConfigurationErrors();
 
         void CollectPageConfigurationErrors()
@@ -195,14 +198,16 @@ internal sealed class JsonCvSelectionConfiguration
             ? ResolvePageCount()
             : CvPageCount.Exact(pageLayout.PageCount);
         return new(
-            pageCount,
-            [.. RequiredTags!],
-            [.. Skills!],
-            [.. Technologies!],
-            Mmr?.ToDomain() ?? MmrOptions.Default,
-            Selection!,
-            SectionOrder.Sections,
-            pageLayout);
+            pageCount: pageCount,
+            requiredTags: [.. RequiredTags!],
+            skills: [.. Skills!],
+            technologies: [.. Technologies!],
+            mmr: Mmr?.ToDomain() ?? MmrOptions.Default,
+            selection: Selection!,
+            sectionOrder: SectionOrder.Sections,
+            profession: Profession,
+            headerLinkOrder: headerLinkOrder,
+            pageLayout: pageLayout);
 
         bool TryGetExplicitPageCountConflict(
             out int configuredPageCount,
@@ -253,6 +258,53 @@ internal sealed class JsonCvSelectionConfiguration
         }
     }
 
+    private ImmutableArray<HeaderLinkName> MapHeaderLinkOrder(List<string> errors)
+    {
+        var configuredOrder = Header?.Links?.Order;
+        if (configuredOrder is null)
+        {
+            return default;
+        }
+
+        var mappedOrder = configuredOrder
+            .Select(MapHeaderLinkName)
+            .ToImmutableArray();
+        var uniqueNames = new HashSet<HeaderLinkName>();
+        foreach (var name in mappedOrder)
+        {
+            if (uniqueNames.Add(name))
+            {
+                continue;
+            }
+
+            errors.Add($"Header link '{name}' is configured more than once in 'header.links.order'.");
+        }
+
+        return mappedOrder;
+    }
+
+    private static HeaderLinkName MapHeaderLinkName(string name)
+    {
+        if (string.Equals(name, HeaderLinkName.GitHub.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return HeaderLinkName.GitHub;
+        }
+        if (string.Equals(name, HeaderLinkName.LinkedIn.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return HeaderLinkName.LinkedIn;
+        }
+        if (string.Equals(name, HeaderLinkName.YouTube.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return HeaderLinkName.YouTube;
+        }
+        if (string.Equals(name, HeaderLinkName.Portfolio.Value, StringComparison.OrdinalIgnoreCase))
+        {
+            return HeaderLinkName.Portfolio;
+        }
+
+        return new(name);
+    }
+
     private CvPageCount ResolvePageCount()
     {
         if (IsPageCountSpecified)
@@ -278,6 +330,26 @@ internal sealed class JsonCvSelectionConfiguration
         }
     }
 
+}
+
+internal sealed class JsonHeaderConfiguration
+{
+    public JsonHeaderLinksConfiguration? Links { get; init; }
+}
+
+internal sealed class JsonHeaderLinksConfiguration
+{
+    public List<string>? Order { get; init; }
+}
+
+public readonly record struct HeaderLinkName(string Value)
+{
+    public static HeaderLinkName GitHub => new("GitHub");
+    public static HeaderLinkName LinkedIn => new("LinkedIn");
+    public static HeaderLinkName YouTube => new("YouTube");
+    public static HeaderLinkName Portfolio => new("Portfolio");
+
+    public override string ToString() => Value;
 }
 
 public static class CvSelectionConfigurationLoader
@@ -339,6 +411,8 @@ public sealed class CvSelectionConfiguration
         MmrOptions mmr,
         SelectionConfiguration selection,
         ImmutableArray<Section> sectionOrder,
+        string? profession,
+        ImmutableArray<HeaderLinkName> headerLinkOrder,
         CvPageLayout? pageLayout = null)
     {
         PageCount = pageCount;
@@ -348,6 +422,8 @@ public sealed class CvSelectionConfiguration
         Mmr = mmr;
         Selection = selection;
         SectionOrder = sectionOrder;
+        Profession = profession;
+        HeaderLinkOrder = headerLinkOrder;
         PageLayout = pageLayout;
     }
 
@@ -364,6 +440,10 @@ public sealed class CvSelectionConfiguration
     public SelectionConfiguration Selection { get; }
 
     public ImmutableArray<Section> SectionOrder { get; }
+
+    public string? Profession { get; }
+
+    public ImmutableArray<HeaderLinkName> HeaderLinkOrder { get; }
 
     public CvPageLayout? PageLayout { get; }
 
