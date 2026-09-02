@@ -1,11 +1,9 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Security;
-using FindJobHelper.Core;
+namespace FindJobHelper.Core;
 
-namespace MainCli;
-
-internal static class ExperienceDatabaseProviderLoader
+public static class ExperienceDatabaseProviderLoader
 {
     public static LoadedExperienceDatabaseProvider Load(string path)
     {
@@ -201,11 +199,11 @@ internal static class ExperienceDatabaseProviderLoader
             : exception;
 }
 
-internal sealed record LoadedExperienceDatabaseProvider(
+public sealed record LoadedExperienceDatabaseProvider(
     ExperienceDatabaseProviderResult Result,
     Assembly Assembly);
 
-internal sealed class ExperienceDatabaseProviderLoadException : Exception
+public sealed class ExperienceDatabaseProviderLoadException : Exception
 {
     public ExperienceDatabaseProviderLoadException(string message)
         : base(message)

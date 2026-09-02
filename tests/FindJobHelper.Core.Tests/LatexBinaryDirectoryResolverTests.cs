@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using FindJobHelper.CVGeneration;
 
 public sealed class LatexBinaryDirectoryResolverTests
 {

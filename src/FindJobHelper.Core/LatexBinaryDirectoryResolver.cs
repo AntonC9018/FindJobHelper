@@ -1,9 +1,11 @@
-internal sealed record ResolvedLatexExecutables(
+namespace FindJobHelper.CVGeneration;
+
+public sealed record ResolvedLatexExecutables(
     string SelectionSource,
     string Directory,
-    FindJobHelper.CVGeneration.LatexExecutablePaths Paths);
+    LatexExecutablePaths Paths);
 
-internal static class LatexBinaryDirectoryResolver
+public static class LatexBinaryDirectoryResolver
 {
     public const string EnvironmentVariable = "FINDJOBHELPER_LATEX_BIN_DIRECTORY";
     public const string TeXLiveRootEnvironmentVariable = "FINDJOBHELPER_TEXLIVE_ROOT";
@@ -119,7 +121,7 @@ internal static class LatexBinaryDirectoryResolver
         }
 
         var executables =
-            new FindJobHelper.CVGeneration.LatexExecutablePaths(latexmk, xelatex);
+            new LatexExecutablePaths(latexmk, xelatex);
         return new(
             selectionSource,
             normalizedDirectory,

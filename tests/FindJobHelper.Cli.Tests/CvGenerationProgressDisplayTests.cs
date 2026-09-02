@@ -263,7 +263,7 @@ public sealed class CvGenerationProgressDisplayTests
         Assert.True(condition());
     }
 
-    private sealed class RecordingProgressSink : ICvProgressSink
+    private sealed class RecordingProgressSink : ICvGenerationProgressSink
     {
         public CvProgressDisplayState Last { get; private set; }
 

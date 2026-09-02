@@ -1,21 +1,32 @@
 using System.Collections.Immutable;
 
-internal enum CvArtifactKind
+namespace FindJobHelper.CVGeneration;
+
+public enum CvOutputFormat
+{
+    // CommandDotNet treats a zero-valued value-type property as having no default.
+    // Starting at 1 makes the Tex property initializer an optional CLI default.
+    // None = 0,
+    Tex = 1,
+    Md = 2,
+}
+
+public enum CvArtifactKind
 {
     Pdf,
     CleanMarkdown,
     AnnotatedMarkdown,
 }
 
-internal readonly record struct CvPlannedArtifact(
+public readonly record struct CvPlannedArtifact(
     CvArtifactKind Kind,
     string FileName);
 
-internal sealed record CvArtifactPlan(
+public sealed record CvArtifactPlan(
     ImmutableArray<CvPlannedArtifact> Artifacts,
     CvArtifactKind OpenTarget)
 {
-    internal static CvArtifactPlan Create(
+    public static CvArtifactPlan Create(
         CvOutputFormat outputFormat,
         bool isDebug,
         string baseFileName = "ExampleAlex")

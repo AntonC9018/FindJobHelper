@@ -1,10 +1,8 @@
 using System.Collections.Immutable;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 
 namespace FindJobHelper.CVGeneration;
 
-internal enum CvGenerationModule
+public enum CvGenerationModule
 {
     ComputingHeights,
     MatchingExperiences,
@@ -13,11 +11,11 @@ internal enum CvGenerationModule
     CreatingMarkdownFiles,
 }
 
-internal readonly record struct CvGenerationProgressModule(
+public readonly record struct CvGenerationProgressModule(
     CvGenerationModule Module,
     string Description);
 
-internal sealed class CvGenerationProgressPlan
+public sealed class CvGenerationProgressPlan
 {
     private readonly ImmutableDictionary<
         CvGenerationModule,
@@ -50,12 +48,12 @@ internal sealed class CvGenerationProgressPlan
                 $"Progress module '{module}' is not applicable to this generation.");
 }
 
-internal readonly record struct EqualShareProgressUpdate(
+public readonly record struct EqualShareProgressUpdate(
     double ModulePercentage,
     double OverallPercentage,
     string? Detail);
 
-internal sealed class EqualShareProgressAggregator
+public sealed class EqualShareProgressAggregator
 {
     private readonly object _sync = new();
     private readonly ImmutableHashSet<CvGenerationModule> _modules;
@@ -117,7 +115,7 @@ internal sealed class EqualShareProgressAggregator
     }
 }
 
-internal enum CvProgressDisplayEvent
+public enum CvProgressDisplayEvent
 {
     Progress,
     ModuleTransition,
@@ -127,25 +125,25 @@ internal enum CvProgressDisplayEvent
     FinalCompletion,
 }
 
-internal readonly record struct CvProgressDisplayState(
+public readonly record struct CvProgressDisplayState(
     string ModuleDescription,
     string DisplayDescription,
     double ModulePercentage,
     double OverallPercentage);
 
-internal interface ICvProgressSink
+public interface ICvGenerationProgressSink
 {
     void Update(
         CvProgressDisplayState state,
         CvProgressDisplayEvent displayEvent);
 }
 
-internal sealed class CvGenerationProgressContext
+public sealed class CvGenerationProgressContext
 {
     private readonly object _sync = new();
     private readonly CvGenerationProgressPlan _plan;
     private readonly EqualShareProgressAggregator _aggregator;
-    private readonly ICvProgressSink _sink;
+    private readonly ICvGenerationProgressSink _sink;
     private readonly Dictionary<CvGenerationModule, IProgressReporter> _reporters = new();
     private CvGenerationModule? _currentModule;
     private CvProgressDisplayState _lastState;
@@ -154,7 +152,7 @@ internal sealed class CvGenerationProgressContext
 
     public CvGenerationProgressContext(
         CvGenerationProgressPlan plan,
-        ICvProgressSink sink)
+        ICvGenerationProgressSink sink)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(sink);
@@ -290,7 +288,7 @@ internal sealed class CvGenerationProgressContext
     }
 }
 
-internal interface ICvGenerationProgressDisplay
+public interface ICvGenerationProgressDisplay
 {
     Task<T> RunAsync<T>(
         CvGenerationProgressPlan plan,
@@ -298,103 +296,7 @@ internal interface ICvGenerationProgressDisplay
         CancellationToken cancellationToken);
 }
 
-internal sealed class InteractiveCvGenerationProgressDisplay(
-    IAnsiConsole console,
-    TimeProvider? timeProvider = null) : ICvGenerationProgressDisplay
-{
-    public async Task<T> RunAsync<T>(
-        CvGenerationProgressPlan plan,
-        Func<CvGenerationProgressContext, Task<T>> action,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(action);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var progress = new Progress(
-            console ?? throw new ArgumentNullException(nameof(console)),
-            timeProvider ?? TimeProvider.System)
-        {
-            AutoRefresh = false,
-            AutoClear = false,
-            HideCompleted = false,
-        };
-        progress.Columns(
-            new StackedProgressColumn());
-
-        return await progress.StartAsync(async spectreContext =>
-        {
-            var overall = spectreContext.AddTask(
-                "Overall",
-                autoStart: true,
-                maxValue: 100);
-            var current = spectreContext.AddTask(
-                "Current task",
-                autoStart: true,
-                maxValue: 100);
-            var sink = new SpectreProgressSink(
-                spectreContext,
-                overall,
-                current);
-            var context = new CvGenerationProgressContext(plan, sink);
-            try
-            {
-                var result = await action(context);
-                context.Complete();
-                return result;
-            }
-            catch
-            {
-                context.Fail();
-                throw;
-            }
-        });
-    }
-
-    private sealed class StackedProgressColumn : ProgressColumn
-    {
-        private const int Width = 50;
-        private readonly ProgressBarColumn _progressBar = new();
-        private readonly PercentageColumn _percentage = new();
-
-        public override int? GetColumnWidth(RenderOptions options) => Width;
-
-        public override IRenderable Render(
-            RenderOptions options,
-            ProgressTask task,
-            TimeSpan deltaTime) =>
-            new Rows(
-                new Columns(
-                    _progressBar.Render(options, task, deltaTime),
-                    _percentage.Render(options, task, deltaTime)),
-                new Markup(task.Description));
-    }
-
-    private sealed class SpectreProgressSink(
-        ProgressContext context,
-        ProgressTask overall,
-        ProgressTask current) : ICvProgressSink
-    {
-        private readonly object _sync = new();
-
-        public void Update(
-            CvProgressDisplayState state,
-            CvProgressDisplayEvent displayEvent)
-        {
-            _ = displayEvent;
-            lock (_sync)
-            {
-                overall.Value = Math.Clamp(state.OverallPercentage, 0, 100);
-                current.Value = Math.Clamp(state.ModulePercentage, 0, 100);
-                current.Description =
-                    $"Current task: {Markup.Escape(state.DisplayDescription)}";
-                context.Refresh();
-            }
-        }
-    }
-}
-
-internal sealed class RedirectedCvGenerationProgressDisplay(
+public sealed class RedirectedCvGenerationProgressDisplay(
     TextWriter writer,
     TimeProvider? timeProvider = null,
     TimeSpan? heartbeatInterval = null) : ICvGenerationProgressDisplay
@@ -465,7 +367,7 @@ internal sealed class RedirectedCvGenerationProgressDisplay(
         }
     }
 
-    private sealed class RedirectedProgressSink(TextWriter writer) : ICvProgressSink
+    private sealed class RedirectedProgressSink(TextWriter writer) : ICvGenerationProgressSink
     {
         private readonly object _sync = new();
         private CvProgressDisplayState? _state;
@@ -535,21 +437,49 @@ internal sealed class RedirectedCvGenerationProgressDisplay(
     }
 }
 
-internal static class CvGenerationProgressDisplay
+public sealed class NullCvGenerationProgressDisplay : ICvGenerationProgressDisplay
 {
-    public static ICvGenerationProgressDisplay CreateDefault()
+    public static NullCvGenerationProgressDisplay Instance { get; } = new();
+
+    public Task<T> RunAsync<T>(
+        CvGenerationProgressPlan plan,
+        Func<CvGenerationProgressContext, Task<T>> action,
+        CancellationToken cancellationToken)
     {
-        var console = AnsiConsole.Console;
-        if (Console.IsOutputRedirected)
-        {
-            return new RedirectedCvGenerationProgressDisplay(Console.Out);
-        }
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
+        return RunCore(plan, action);
 
-        if (!console.Profile.Capabilities.Interactive)
+        async Task<T> RunCore(
+            CvGenerationProgressPlan plan,
+            Func<CvGenerationProgressContext, Task<T>> action)
         {
-            return new RedirectedCvGenerationProgressDisplay(Console.Out);
+            var context = new CvGenerationProgressContext(plan, NullSink.Instance);
+            try
+            {
+                var result = await action(context);
+                context.Complete();
+                return result;
+            }
+            catch
+            {
+                context.Fail();
+                throw;
+            }
         }
+    }
 
-        return new InteractiveCvGenerationProgressDisplay(console);
+    private sealed class NullSink : ICvGenerationProgressSink
+    {
+        public static NullSink Instance { get; } = new();
+
+        public void Update(
+            CvProgressDisplayState state,
+            CvProgressDisplayEvent displayEvent)
+        {
+            _ = state;
+            _ = displayEvent;
+        }
     }
 }

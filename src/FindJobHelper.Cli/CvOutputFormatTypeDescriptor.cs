@@ -1,3 +1,4 @@
+using FindJobHelper.CVGeneration;
 using CommandDotNet;
 using CommandDotNet.TypeDescriptors;
 

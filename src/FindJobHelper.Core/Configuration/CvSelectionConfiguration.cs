@@ -3,9 +3,8 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FindJobHelper.Core;
-using FindJobHelper.CVGeneration;
 
-namespace MainCli;
+namespace FindJobHelper.CVGeneration;
 
 public sealed class CvConfigurationException : Exception
 {
@@ -45,7 +44,7 @@ public sealed class CvConfigurationException : Exception
     }
 }
 
-internal sealed class JsonCvSelectionConfiguration
+public sealed class JsonCvSelectionConfiguration
 {
     private bool _limitToOnePage = true;
     private int? _pageCount;
@@ -332,12 +331,12 @@ internal sealed class JsonCvSelectionConfiguration
 
 }
 
-internal sealed class JsonHeaderConfiguration
+public sealed class JsonHeaderConfiguration
 {
     public JsonHeaderLinksConfiguration? Links { get; init; }
 }
 
-internal sealed class JsonHeaderLinksConfiguration
+public sealed class JsonHeaderLinksConfiguration
 {
     public List<string>? Order { get; init; }
 }
@@ -687,7 +686,7 @@ public readonly struct SelectionOptionsEnumerable(SelectionConfiguration configu
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
 
-internal struct SelectionOptionsFieldMask
+public struct SelectionOptionsFieldMask
 {
     public bool MinItemBudget { get; set; }
     public bool ItemBudget { get; set; }
@@ -704,7 +703,7 @@ public sealed class SelectionOptionsConfiguration
     private float _recencyBoost;
     private float? _directMatchBoost = 0;
 
-    internal SelectionOptionsFieldMask SpecifiedFields;
+    public SelectionOptionsFieldMask SpecifiedFields;
 
     public int MinItemBudget
     {

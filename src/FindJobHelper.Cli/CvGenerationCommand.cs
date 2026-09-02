@@ -1,15 +1,7 @@
-using System.Collections.Immutable;
-using System.Globalization;
-using System.Text;
-using CodegenCS;
 using CommandDotNet;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
-using MainCli;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
-using Location = FindJobHelper.CVGeneration.Location;
 
 public sealed class CvGenerationCommand
 {
@@ -55,11 +47,6 @@ public sealed class CvGenerationCommand
             Console.Error.WriteLine($"Experience database error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
-        catch (ExpectedCliFailure ex)
-        {
-            Console.Error.WriteLine(ex.Message);
-            return ex.ExitCode;
-        }
         catch (CvLayoutException ex)
         {
             Console.Error.WriteLine($"CV layout validation failed: {ex.Message}");
@@ -85,18 +72,40 @@ public sealed class CvGenerationCommand
     {
         try
         {
-            return await GenerateCore(
-                configPath: arguments.Config,
-                experienceDatabasePath: arguments.ExperienceDatabase,
-                outputDirectory: arguments.OutputDirectory,
-                outputFormat: arguments.OutputFormat,
-                isDebug: arguments.Debug,
-                openInOs: arguments.Open,
-                latexBinDirectory: arguments.LatexBinDirectory,
-                fontConfiguration: LatexFontConfigurationResolver.Resolve(
-                    flags: arguments.FontFlags,
-                    environments: LatexFontConfigurationResolver.GetEnvironmentValues()),
-                cancellationToken: cancellationToken);
+            var result = await CvGenerationPipeline.RunAsync(
+                new CvGenerationPipelineRequest
+                {
+                    ConfigPath = arguments.Config,
+                    ExperienceDatabasePath = arguments.ExperienceDatabase,
+                    OutputDirectory = arguments.OutputDirectory,
+                    OutputFormat = arguments.OutputFormat,
+                    Debug = arguments.Debug,
+                    LatexBinDirectory = arguments.LatexBinDirectory,
+                    Fonts = arguments.FontValues,
+                    ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
+                },
+                cancellationToken);
+            if (!result.Success)
+            {
+                Console.Error.WriteLine(result.Failure!.Message);
+                return result.Failure.Disposition == CvFailureDisposition.Validation
+                    ? ExitCodes.ValidationError
+                    : ExitCodes.Error;
+            }
+
+            foreach (var artifact in result.Artifacts)
+            {
+                Console.WriteLine(
+                    $"Generated '{result.PublishedPaths[artifact.Kind]}'.");
+            }
+
+            if (arguments.Open)
+            {
+                ExplorerHelper.OpenFolderAndSelectFile(
+                    result.PublishedPaths[result.OpenTarget]);
+            }
+
+            return ExitCodes.Success;
         }
         catch (CvConfigurationException ex)
         {
@@ -113,6 +122,11 @@ public sealed class CvGenerationCommand
             Console.Error.WriteLine($"Configuration error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
+        catch (CvGenerationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return ExitCodes.Error;
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"CV generation failed: {ex.Message}");
@@ -120,571 +134,10 @@ public sealed class CvGenerationCommand
         }
     }
 
-    private static async Task<int> GenerateCore(
-        string configPath,
-        string experienceDatabasePath,
-        string outputDirectory,
-        CvOutputFormat outputFormat,
-        bool isDebug,
-        bool openInOs,
-        string? latexBinDirectory,
-        ResolvedLatexFontConfiguration fontConfiguration,
-        CancellationToken cancellationToken)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
-
-        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
-            configPath,
-            cancellationToken);
-        var fullOutputDirectory = Path.GetFullPath(outputDirectory);
-        var loadedProvider = ExperienceDatabaseProviderLoader.Load(
-            experienceDatabasePath);
-        var providerResult = loadedProvider.Result;
-        var searchConfiguration = configuration.BuildSearch(
-            providerResult.TagsDatabase);
-        var experienceDatabase = providerResult.ExperienceDatabase;
-        var templatePath = Path.Combine(
-            AppContext.BaseDirectory,
-            "data",
-            "cv_template_config.tex");
-        if (!File.Exists(templatePath))
-        {
-            throw new FileNotFoundException("CV template file was not found.", templatePath);
-        }
-
-        var latexExecutables = LatexBinaryDirectoryResolver.Resolve(latexBinDirectory);
-        Console.WriteLine($"LaTeX tools selected by {latexExecutables.SelectionSource}: {latexExecutables.Directory}");
-        Console.WriteLine($"latexmk: {latexExecutables.Paths.Latexmk}");
-        Console.WriteLine($"xelatex: {latexExecutables.Paths.XeLatex}");
-        var latexExecutionOptions = CreateLatexExecutionOptions(fontConfiguration);
-        await using var serviceProvider = await AppConfiguration.CreateApp(
-            loadedProvider.Assembly,
-            latexExecutables.Paths,
-            cancellationToken);
-        var personalInfo = serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
-        var profession = ResolveProfession(configuration, personalInfo);
-        var artifactPlan = CvArtifactPlan.Create(
-            outputFormat,
-            isDebug,
-            $"{personalInfo.LastName}{personalInfo.FirstName}");
-        if (isDebug)
-        {
-            personalInfo.Phone = Miscellanious.BlurPhone(new()
-            {
-                String = personalInfo.Phone,
-                MaxVisibleLen = 6,
-                MinVisibleLen = 3,
-            });
-        }
-
-        var location = new Location(personalInfo.City, personalInfo.Country);
-        var currentModel = new CvDataModel
-        {
-            Name = new()
-            {
-                First = personalInfo.FirstName,
-                Last = personalInfo.LastName,
-            },
-            CategorizedInfoLists = CreateMetadataLists(
-                searchConfiguration,
-                configuration,
-                personalInfo),
-            CategorizedInfos = [
-                new(Category.Location, location.FormatInfo()),
-                new(Category.Email, personalInfo.Email),
-                new(Category.Phone, personalInfo.Phone),
-            ],
-            Profession = new(profession),
-            Languages = [
-                new(
-                    Language.Russian,
-                    LanguageProficiencyLevel.Native),
-                new(
-                    Language.English,
-                    LanguageProficiencyLevel.C2,
-                    Skills: [
-                        new("Technical Writing & Reading"),
-                        new("Conversational Fluency"),
-                    ]),
-                new(
-                    Language.Romanian,
-                    LanguageProficiencyLevel.B2,
-                    Skills: [
-                        new("Technical Conversation"),
-                        new("Tutoring"),
-                    ]),
-            ],
-            Location = location,
-            Summary = null,
-            SectionOrder = searchConfiguration.SectionOrder,
-        };
-
-        var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
-        var progressPlan = CreateProgressPlan(artifactPlan);
-        var progressDisplay = CvGenerationProgressDisplay.CreateDefault();
-        CvFailurePresentation? failurePresentation = null;
-        var publishedArtifactPaths = await progressDisplay.RunAsync(
-            progressPlan,
-            async progress =>
-            {
-                progress.BeginModule(CvGenerationModule.ComputingHeights);
-                var measurementResult = await measurementService.MeasureAsync(
-                    experienceDatabase,
-                    currentModel,
-                    templatePath,
-                    progress.Reporter(CvGenerationModule.ComputingHeights),
-                    fontConfiguration.Options,
-                    latexExecutionOptions,
-                    cancellationToken);
-                if (measurementResult is not CvMeasurementSnapshot measurementSnapshot)
-                {
-                    failurePresentation = CvFailurePresenter.Present(measurementResult);
-                    return new Dictionary<CvArtifactKind, string>();
-                }
-                progress.BeginModule(CvGenerationModule.MatchingExperiences);
-                var searchResult = searchConfiguration.Run(
-                    experienceDatabase,
-                    measurementSnapshot,
-                    progress.Reporter(CvGenerationModule.MatchingExperiences));
-
-                searchConfiguration.Sections.Apply(searchResult, currentModel);
-                var artifactResult = await GenerateAndPublishArtifactsAsync(
-                    artifactPlan,
-                    currentModel,
-                    templatePath,
-                    fullOutputDirectory,
-                    searchConfiguration.PageCount,
-                    searchConfiguration.PageLayout,
-                    latexExecutables.Paths,
-                    fontConfiguration.Options,
-                    latexExecutionOptions,
-                    progress,
-                    cancellationToken);
-                if (artifactResult is ArtifactGenerationFailure failure)
-                {
-                    failurePresentation = failure.Presentation;
-                    return new Dictionary<CvArtifactKind, string>();
-                }
-                if (artifactResult is PublishedArtifactPaths published)
-                {
-                    return published.Paths;
-                }
-                throw new InvalidOperationException(
-                    $"Unsupported artifact generation result implementation '{artifactResult.GetType().FullName}'.");
-            },
-            cancellationToken);
-
-        if (failurePresentation is not null)
-        {
-            Console.Error.WriteLine(failurePresentation.Message);
-            return failurePresentation.Disposition == CvFailureDisposition.Validation
-                ? ExitCodes.ValidationError
-                : ExitCodes.Error;
-        }
-
-        foreach (var artifact in artifactPlan.Artifacts)
-        {
-            Console.WriteLine(
-                $"Generated '{publishedArtifactPaths[artifact.Kind]}'.");
-        }
-
-        if (openInOs)
-        {
-            ExplorerHelper.OpenFolderAndSelectFile(
-                publishedArtifactPaths[artifactPlan.OpenTarget]);
-        }
-
-        return ExitCodes.Success;
-    }
-
-    private static async Task<string> StageMarkdownAsync(
-        CvDataModel model,
-        CvMarkdownRenderMode renderMode,
-        string fileName,
-        string stagingDirectory,
-        IProgressReporter progress,
-        CancellationToken cancellationToken)
-    {
-        var stagedArtifactPath = Path.Combine(stagingDirectory, fileName);
-        using var writer = new CodegenTextWriter
-        {
-            NewLine = "\n",
-            PreserveNonWhitespaceIndentBehavior =
-                CodegenTextWriter.PreserveNonWhitespaceIndentBehaviorType.PreservePosition,
-        };
-        CvMarkdownRenderer.Render(model, renderMode, progress, writer);
-        await File.WriteAllTextAsync(
-            stagedArtifactPath,
-            writer.ToString(),
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            cancellationToken);
-        var workUnits = CvMarkdownRenderer.GetWorkUnitCount(model);
-        progress.Report(new(
-            CompletedWorkUnits: workUnits,
-            TotalWorkUnits: workUnits,
-            Detail: "Creating Markdown files"));
-        return stagedArtifactPath;
-    }
-
-    private static CvGenerationProgressPlan CreateProgressPlan(
-        CvArtifactPlan artifactPlan)
-    {
-        var modules = new List<CvGenerationProgressModule>
-        {
-            new(
-                CvGenerationModule.ComputingHeights,
-                "Computing heights"),
-            new(
-                CvGenerationModule.MatchingExperiences,
-                "Matching experiences"),
-        };
-
-        if (artifactPlan.Artifacts.Any(
-                static artifact => artifact.Kind == CvArtifactKind.Pdf))
-        {
-            modules.Add(new(
-                CvGenerationModule.CreatingTexFile,
-                "Creating TeX file"));
-            modules.Add(new(
-                CvGenerationModule.RenderingPdf,
-                "Rendering PDF"));
-        }
-        else
-        {
-            modules.Add(new(
-                CvGenerationModule.CreatingMarkdownFiles,
-                "Creating Markdown files"));
-        }
-
-        return new(modules);
-    }
-
-    private static async Task<IArtifactGenerationResult>
-        GenerateAndPublishArtifactsAsync(
-            CvArtifactPlan artifactPlan,
-            CvDataModel model,
-            string templatePath,
-            string outputDirectory,
-            CvPageCount pageCount,
-            CvPageLayout? pageLayout,
-            LatexExecutablePaths latexExecutables,
-            LatexFontOptions fontOptions,
-            LatexExecutionOptions latexExecutionOptions,
-            CvGenerationProgressContext progress,
-            CancellationToken cancellationToken)
-    {
-        var stagingDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"FindJobHelper-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(stagingDirectory);
-        var retainStagingDirectory = false;
-
-        try
-        {
-            var stagedArtifactPaths =
-                new Dictionary<CvArtifactKind, string>(
-                    artifactPlan.Artifacts.Length);
-            var markdownFileCount = artifactPlan.Artifacts.Count(
-                static artifact => artifact.Kind
-                    is CvArtifactKind.CleanMarkdown
-                    or CvArtifactKind.AnnotatedMarkdown);
-            var markdownWorkUnits = CvMarkdownRenderer.GetWorkUnitCount(model);
-            var allMarkdownWorkUnits = checked(
-                markdownWorkUnits * markdownFileCount);
-            var markdownFileIndex = 0;
-
-            foreach (var artifact in artifactPlan.Artifacts)
-            {
-                switch (artifact.Kind)
-                {
-                    case CvArtifactKind.Pdf:
-                        progress.BeginModule(
-                            CvGenerationModule.CreatingTexFile);
-                        var artifacts = await CvTemplate.Generate(
-                            new()
-                            {
-                                Model = model,
-                                CancellationToken = cancellationToken,
-                                ConfigFilePath = templatePath,
-                                OutputDirectory = stagingDirectory,
-                                PageCount = pageCount,
-                                PageLayout = pageLayout,
-                                LatexExecutables = latexExecutables,
-                                FontOptions = fontOptions,
-                                ExecutionOptions = latexExecutionOptions,
-                            },
-                            new(
-                                progress.Reporter(
-                                    CvGenerationModule.CreatingTexFile),
-                                progress.Reporter(
-                                    CvGenerationModule.RenderingPdf)));
-                        if (artifacts is not GeneratedCvArtifacts generatedArtifacts)
-                        {
-                            retainStagingDirectory = true;
-                            var presentation = CvFailurePresenter.Present(artifacts);
-                            return new ArtifactGenerationFailure(
-                                presentation with
-                                {
-                                    Message = $"{presentation.Message} Retained generation files: '{stagingDirectory}'.",
-                                });
-                        }
-                        stagedArtifactPaths.Add(
-                            artifact.Kind,
-                            generatedArtifacts.PdfPath);
-                        break;
-                    case CvArtifactKind.CleanMarkdown:
-                    case CvArtifactKind.AnnotatedMarkdown:
-                        if (markdownFileIndex == 0)
-                        {
-                            progress.BeginModule(
-                                CvGenerationModule.CreatingMarkdownFiles);
-                        }
-                        var markdownProgress = new ProgressRangeReporter(
-                            progress.Reporter(
-                                CvGenerationModule.CreatingMarkdownFiles),
-                            offset: markdownFileIndex * markdownWorkUnits,
-                            length: markdownWorkUnits,
-                            targetTotal: allMarkdownWorkUnits);
-                        var renderMode = artifact.Kind == CvArtifactKind.CleanMarkdown
-                            ? CvMarkdownRenderMode.Clean
-                            : CvMarkdownRenderMode.Annotated;
-                        var stagedMarkdownPath = await StageMarkdownAsync(
-                            model,
-                            renderMode,
-                            artifact.FileName,
-                            stagingDirectory,
-                            markdownProgress,
-                            cancellationToken);
-                        stagedArtifactPaths.Add(
-                            artifact.Kind,
-                            stagedMarkdownPath);
-                        markdownFileIndex++;
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(
-                            nameof(artifact),
-                            artifact,
-                            "Unsupported CV artifact kind.");
-                }
-            }
-
-            Directory.CreateDirectory(outputDirectory);
-            var publishedArtifactPaths =
-                new Dictionary<CvArtifactKind, string>(
-                    artifactPlan.Artifacts.Length);
-            foreach (var artifact in artifactPlan.Artifacts)
-            {
-                var publishedArtifactPath = Path.Combine(
-                    outputDirectory,
-                    artifact.FileName);
-                File.Move(
-                    stagedArtifactPaths[artifact.Kind],
-                    publishedArtifactPath,
-                    overwrite: true);
-                publishedArtifactPaths.Add(
-                    artifact.Kind,
-                    publishedArtifactPath);
-            }
-
-            return new PublishedArtifactPaths(publishedArtifactPaths);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            retainStagingDirectory = true;
-            Console.Error.WriteLine(
-                $"Retained generation files: '{stagingDirectory}'.");
-            throw;
-        }
-        finally
-        {
-            try
-            {
-                if (!retainStagingDirectory)
-                {
-                    Directory.Delete(stagingDirectory, recursive: true);
-                }
-            }
-            catch (DirectoryNotFoundException)
-            {
-                // Nothing remains to clean up.
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(
-                    $"Failed to clean temporary CV generation directory '{stagingDirectory}': {ex.Message}");
-            }
-        }
-    }
-
-    private static string ResolveProfession(
-        CvSelectionConfiguration configuration,
-        PersonalInfoOptions personalInfo)
-    {
-        var profession = configuration.Profession ?? personalInfo.Profession;
-        if (profession is null)
-        {
-            throw new CvConfigurationException(
-                "Profession must be supplied by 'profession' or 'PersonalInfo__Profession'.");
-        }
-
-        return profession;
-    }
-
-    private static ImmutableArray<CategorizedInfoList> CreateMetadataLists(
-        ConfiguredCvSearch searchConfiguration,
-        CvSelectionConfiguration configuration,
-        PersonalInfoOptions personalInfo)
-    {
-        var lists = new List<CategorizedInfoList>
-        {
-            new(Category.Skills, searchConfiguration.Skills),
-            new(Category.Technologies, searchConfiguration.Technologies),
-        };
-        var usesDefaultOrder = configuration.HeaderLinkOrder.IsDefault;
-        var linkOrder = usesDefaultOrder
-            ? DefaultHeaderLinkOrder
-            : configuration.HeaderLinkOrder;
-        var errors = new List<string>();
-        foreach (var linkName in linkOrder)
-        {
-            if (!TryResolveHeaderLink(
-                    linkName,
-                    personalInfo,
-                    out var category,
-                    out var value))
-            {
-                errors.Add($"Header link '{linkName}' is not supported.");
-                continue;
-            }
-            if (value is null)
-            {
-                if (usesDefaultOrder)
-                {
-                    continue;
-                }
-
-                errors.Add(
-                    $"Header link '{linkName}' is required by 'header.links.order' but has no configured value.");
-                continue;
-            }
-
-            lists.Add(new(category, [value]));
-        }
-
-        if (errors.Count > 0)
-        {
-            throw new CvConfigurationException(errors);
-        }
-
-        return [.. lists];
-    }
-
-    private static bool TryResolveHeaderLink(
-        HeaderLinkName linkName,
-        PersonalInfoOptions personalInfo,
-        out Category category,
-        out string? value)
-    {
-        if (linkName == HeaderLinkName.GitHub)
-        {
-            category = Category.GitHub;
-            value = personalInfo.GitHub;
-            return true;
-        }
-        if (linkName == HeaderLinkName.LinkedIn)
-        {
-            category = Category.LinkedIn;
-            value = personalInfo.LinkedIn;
-            return true;
-        }
-        if (linkName == HeaderLinkName.YouTube)
-        {
-            category = Category.YouTube;
-            value = personalInfo.YouTube;
-            return true;
-        }
-        if (linkName == HeaderLinkName.Portfolio)
-        {
-            category = Category.Portfolio;
-            value = personalInfo.Portfolio;
-            return true;
-        }
-
-        category = default;
-        value = null;
-        return false;
-    }
-
-    private static readonly ImmutableArray<HeaderLinkName> DefaultHeaderLinkOrder =
-    [
-        HeaderLinkName.GitHub,
-        HeaderLinkName.LinkedIn,
-        HeaderLinkName.YouTube,
-        HeaderLinkName.Portfolio,
-    ];
-
     internal static string ExampleConfigPath => Path.Combine(
         AppContext.BaseDirectory,
         "data",
         "cv-selection.example.json");
-
-    private static LatexExecutionOptions CreateLatexExecutionOptions(
-        ResolvedLatexFontConfiguration fontConfiguration)
-    {
-        // Keep this declaration synchronized with scripts/setup-latex.sh. A match
-        // means the supported installation is incomplete; custom resources that
-        // are not declared here remain ordinary LaTeX compilation failures.
-        List<ILatexRequirement> requirements =
-        [
-            new ExecutableLatexRequirement(new("xelatex")),
-            new ExecutableLatexRequirement(new("latexmk")),
-            new TexFileLatexRequirement(new("babel.sty")),
-            new TexFileLatexRequirement(new("xifthen.sty")),
-            new TexFileLatexRequirement(new("ifmtarg.sty")),
-            new TexFileLatexRequirement(new("moresize.sty")),
-            new TexFileLatexRequirement(new("zref-lastpage.sty")),
-            new TexFileLatexRequirement(new("needspace.sty")),
-            new TexFileLatexRequirement(new("multirow.sty")),
-            new TexFileLatexRequirement(new("wrapfig.sty")),
-            new TexFileLatexRequirement(new("varwidth.sty")),
-            new TexFileLatexRequirement(new("environ.sty")),
-            new BabelLanguageLatexRequirement(new("romanian")),
-        ];
-        requirements.AddRange(LatexFontRoles.All.Select(role => new FontLatexRequirement(
-            fontConfiguration.Options[role],
-            IsManuallySpecified: fontConfiguration.ManuallySpecified[role])));
-        return new(requirements, setupCommandHint: "./scripts/setup-latex.sh");
-    }
-
-}
-
-internal interface IArtifactGenerationResult;
-
-internal sealed record PublishedArtifactPaths(Dictionary<CvArtifactKind, string> Paths) : IArtifactGenerationResult;
-
-internal sealed record ArtifactGenerationFailure(CvFailurePresentation Presentation) : IArtifactGenerationResult;
-
-internal sealed class ExpectedCliFailure(string message, int exitCode) : Exception(message)
-{
-    public int ExitCode { get; } = exitCode;
-
-    public static ExpectedCliFailure Validation(string message) => new(message, ExitCodes.ValidationError);
-
-    public static ExpectedCliFailure General(string message) => new(message, ExitCodes.Error);
-}
-
-public enum CvOutputFormat
-{
-    // CommandDotNet treats a zero-valued value-type property as having no default.
-    // Starting at 1 makes the Tex property initializer an optional CLI default.
-    // None = 0,
-    Tex = 1,
-    Md = 2,
 }
 
 public class ExperienceDatabaseArguments : IArgumentModel
@@ -752,214 +205,14 @@ public sealed class CvGenerationArguments : ExperienceDatabaseArguments
         "mono-font-size",
         Description = "Positive finite LaTeX Scale factor for the monospaced font. Overrides CV_MONO_FONT_SIZE; default: 0.92.")]
     public string? MonoFontSize { get; set; }
+
+    internal LatexFontConfigurationValues FontValues => new(
+        Families: new(
+            main: MainFont,
+            sans: SansFont,
+            monospace: MonoFont),
+        Scales: new(
+            main: MainFontSize,
+            sans: SansFontSize,
+            monospace: MonoFontSize));
 }
-
-internal static class CvGenerationArgumentsExtensions
-{
-    extension(CvGenerationArguments arguments)
-    {
-        internal LatexFontConfigurationValues FontFlags
-        {
-            get
-            {
-                var families = new LatexFontRoleArray<string?>(
-                    main: arguments.MainFont,
-                    sans: arguments.SansFont,
-                    monospace: arguments.MonoFont);
-                var scales = new LatexFontRoleArray<string?>(
-                    main: arguments.MainFontSize,
-                    sans: arguments.SansFontSize,
-                    monospace: arguments.MonoFontSize);
-                return new(Families: families, Scales: scales);
-            }
-        }
-    }
-}
-
-internal sealed record LatexFontConfigurationValues(
-    LatexFontRoleArray<string?> Families,
-    LatexFontRoleArray<string?> Scales);
-
-internal sealed record ResolvedLatexFontConfiguration(
-    LatexFontOptions Options,
-    LatexFontRoleArray<bool> ManuallySpecified);
-
-internal sealed class LatexFontConfigurationException(string message) : Exception(message);
-
-internal static class LatexFontConfigurationResolver
-{
-    public static LatexFontRoleArray<LatexFontSetting> FamilySettings { get; } = new(
-        main: new(
-            Role: LatexFontRole.Main,
-            FlagName: "--main-font",
-            EnvironmentVariable: "CV_MAIN_FONT"),
-        sans: new(
-            Role: LatexFontRole.Sans,
-            FlagName: "--sans-font",
-            EnvironmentVariable: "CV_SANS_FONT"),
-        monospace: new(
-            Role: LatexFontRole.Mono,
-            FlagName: "--mono-font",
-            EnvironmentVariable: "CV_MONO_FONT"));
-
-    public static LatexFontRoleArray<LatexFontSetting> ScaleSettings { get; } = new(
-        main: new(
-            Role: LatexFontRole.Main,
-            FlagName: "--main-font-size",
-            EnvironmentVariable: "CV_MAIN_FONT_SIZE"),
-        sans: new(
-            Role: LatexFontRole.Sans,
-            FlagName: "--sans-font-size",
-            EnvironmentVariable: "CV_SANS_FONT_SIZE"),
-        monospace: new(
-            Role: LatexFontRole.Mono,
-            FlagName: "--mono-font-size",
-            EnvironmentVariable: "CV_MONO_FONT_SIZE"));
-
-    public static LatexFontConfigurationValues GetEnvironmentValues()
-    {
-        var families = FamilySettings.Map(
-            static setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable));
-        var scales = ScaleSettings.Map(
-            static setting => Environment.GetEnvironmentVariable(setting.EnvironmentVariable));
-        return new(Families: families, Scales: scales);
-    }
-
-    public static ResolvedLatexFontConfiguration Resolve(
-        LatexFontConfigurationValues flags,
-        LatexFontConfigurationValues environments)
-    {
-        var resolvedFamilies = ResolveFamilies(
-            flags: flags.Families,
-            environments: environments.Families);
-        var families = resolvedFamilies.Map(static resolved => resolved.Family);
-        var scales = ResolveScales(
-            flags: flags.Scales,
-            environments: environments.Scales);
-        var options = new LatexFontOptions(
-            families: families,
-            scales: scales);
-        var manuallySpecified = resolvedFamilies.Map(
-            static resolved => resolved.ManuallySpecified);
-        return new(Options: options, ManuallySpecified: manuallySpecified);
-    }
-
-    private static LatexFontRoleArray<ResolvedFontFamily> ResolveFamilies(
-        LatexFontRoleArray<string?> flags,
-        LatexFontRoleArray<string?> environments)
-    {
-        ResolvedFontFamily ResolveRole(LatexFontRole role)
-        {
-            var flag = flags[role];
-            var environment = environments[role];
-            var defaultValue = LatexFontOptions.Default.Families[role];
-            var setting = FamilySettings[role];
-            return ResolveFamilyRole(
-                flag: flag,
-                environment: environment,
-                defaultValue: defaultValue,
-                setting: setting);
-        }
-
-        return LatexFontRoleArray<ResolvedFontFamily>.Create(ResolveRole);
-    }
-
-    private static LatexFontRoleArray<LatexFontScale?> ResolveScales(
-        LatexFontRoleArray<string?> flags,
-        LatexFontRoleArray<string?> environments)
-    {
-        LatexFontScale? ResolveRole(LatexFontRole role)
-        {
-            var flag = flags[role];
-            var environment = environments[role];
-            var defaultValue = LatexFontOptions.Default.Scales[role];
-            var setting = ScaleSettings[role];
-            return ResolveScaleRole(
-                flag: flag,
-                environment: environment,
-                defaultValue: defaultValue,
-                setting: setting);
-        }
-
-        return LatexFontRoleArray<LatexFontScale?>.Create(ResolveRole);
-    }
-
-    private static ResolvedFontFamily ResolveFamilyRole(
-        string? flag,
-        string? environment,
-        LatexFontFamilyName defaultValue,
-        LatexFontSetting setting)
-    {
-        var value = flag ?? environment;
-        if (value is null)
-        {
-            return new(
-                Family: defaultValue,
-                ManuallySpecified: false);
-        }
-        var source = flag is not null ? setting.FlagName : setting.EnvironmentVariable;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new LatexFontConfigurationException($"{source} must not be blank.");
-        }
-        try
-        {
-            var family = new LatexFontFamilyName(value);
-            return new(
-                Family: family,
-                ManuallySpecified: true);
-        }
-        catch (ArgumentException exception)
-        {
-            throw new LatexFontConfigurationException($"Invalid value for {source}: {exception.Message}");
-        }
-    }
-
-    private static LatexFontScale? ResolveScaleRole(
-        string? flag,
-        string? environment,
-        LatexFontScale? defaultValue,
-        LatexFontSetting setting)
-    {
-        var value = flag ?? environment;
-        if (value is null)
-        {
-            return defaultValue;
-        }
-
-        var source = flag is not null ? setting.FlagName : setting.EnvironmentVariable;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new LatexFontConfigurationException($"{source} must not be blank.");
-        }
-
-        var parsedSuccessfully = double.TryParse(
-            value,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out var parsedValue);
-        if (!parsedSuccessfully)
-        {
-            throw new LatexFontConfigurationException($"{source} must be a number using invariant decimal notation.");
-        }
-
-        try
-        {
-            return new(parsedValue);
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            throw new LatexFontConfigurationException($"{source} must be positive and finite.");
-        }
-    }
-
-    private sealed record ResolvedFontFamily(
-        LatexFontFamilyName Family,
-        bool ManuallySpecified);
-
-}
-
-internal sealed record LatexFontSetting(
-    LatexFontRole Role,
-    string FlagName,
-    string EnvironmentVariable);

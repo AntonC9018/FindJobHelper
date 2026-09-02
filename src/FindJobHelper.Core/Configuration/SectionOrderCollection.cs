@@ -3,12 +3,10 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using FindJobHelper.CVGeneration;
-
-namespace MainCli;
+namespace FindJobHelper.CVGeneration;
 
 [JsonConverter(typeof(SectionOrderCollectionJsonConverter))]
-internal sealed class SectionOrderCollection : IReadOnlyList<Section>
+public sealed class SectionOrderCollection : IReadOnlyList<Section>
 {
     private readonly ImmutableArray<Section> _sections;
 
@@ -571,7 +569,7 @@ internal sealed class SectionOrderCollection : IReadOnlyList<Section>
     }
 }
 
-internal sealed class SectionOrderCollectionJsonConverter
+public sealed class SectionOrderCollectionJsonConverter
     : JsonConverter<SectionOrderCollection>
 {
     public override bool HandleNull => true;
