@@ -1,0 +1,55 @@
+/* Config editor (fjw-w4u.6): single inline editor on the Config tab. */
+
+.config-editor-toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 8px 0;
+    flex-wrap: wrap;
+}
+
+.config-editor-status {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+}
+
+.config-editor-status.dirty { color: var(--sent); }
+.config-editor-status.ok { color: var(--followed-up); }
+.config-editor-status.bad { color: var(--danger); }
+
+.config-editor-wrap .cm-editor {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    max-height: 440px;
+    overflow: auto;
+    font-size: 0.78rem;
+}
+
+.config-editor-errors {
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: rgba(224, 82, 82, 0.08);
+    font-size: 0.78rem;
+    max-height: 180px;
+    overflow: auto;
+}
+
+.config-editor-errors:empty { display: none; }
+
+.config-editor-errors .err-title {
+    color: var(--danger);
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.config-editor-errors ul { margin: 4px 0 0; padding-left: 18px; }
+
+.config-editor-errors li { margin: 2px 0; word-break: break-word; }
+
+.config-editor-errors.valid {
+    background: rgba(70, 192, 122, 0.08);
+}
+
+.config-editor-errors.valid .err-title { color: var(--followed-up); }

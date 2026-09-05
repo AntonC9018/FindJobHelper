@@ -1,7 +1,8 @@
-# Lockstep family for the 1.0.0-test local-feed release (fjw-w4u.2):
-# Configuration, Configuration.Json, Core, Generation, Cli, Templates.
-# Package ID Anton.FindJobHelper.WebUi is reserved for the workspace WebUi
-# tool packaging (fjw-w4u.8); it ships from the workspace repo, not here.
+# Lockstep family for the 1.0.0-test local-feed release (fjw-w4u.2, fjw-w4u.8):
+# Configuration, Configuration.Json, Core, Generation, Cli, Templates, WebUi.
+# The WebUi sources live here as src/FindJobHelper.WebUi (canonical copy for
+# packaging, moved from the workspace repo); the workspace branch keeps its
+# own copy until cutover.
 profile = "custom"
 
 [msbuild]
@@ -12,6 +13,7 @@ project = [
   "src/FindJobHelper.Generation/FindJobHelper.Generation.csproj",
   "templates/FindJobWorkspace/Anton.FindJobHelper.Templates.csproj",
   "src/FindJobHelper.Cli/FindJobHelper.Cli.csproj",
+  "src/FindJobHelper.WebUi/FindJobHelper.WebUi.csproj",
 ]
 configuration = "Release"
 

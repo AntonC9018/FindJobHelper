@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.Data.Sqlite": {
+        "type": "Direct",
+        "requested": "[10.0.9, )",
+        "resolved": "10.0.9",
+        "contentHash": "/eBwiZPcNisn0qZX+Zk4YCftlK/vnoWqv7hHnmSk8MjPxFdYYkmPObpogT0MfCCWN6oAIZnMCo0SoOtZlbbmgQ==",
+        "dependencies": {
+          "Microsoft.Data.Sqlite.Core": "10.0.9",
+          "SQLitePCLRaw.bundle_e_sqlite3": "2.1.11",
+          "SQLitePCLRaw.core": "2.1.11"
+        }
+      },
+      "MinVer": {
+        "type": "Direct",
+        "requested": "[7.0.0, )",
+        "resolved": "7.0.0",
+        "contentHash": "2lMTCQl5bGP4iv0JNkockPnyllC6eHLz+CoK2ICvalvHod+exXSxueu9hq+zNkU7bZBJf8wMfeRC/Edn8AGmEg=="
+      },
+      "SQLitePCLRaw.bundle_e_sqlite3": {
+        "type": "Direct",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "nzPPFpELY9U1scLvQpA1k1GIgR9ror83DCPmirT2/i5NCPdTBfhTDA6MZqFZonGDayye5mUQRQLOVyEiJNYr0g==",
+        "dependencies": {
+          "SQLitePCLRaw.config.e_sqlite3": "3.0.2",
+          "SourceGear.sqlite3": "3.50.4.2"
+        }
+      },
+      "CliWrap": {
+        "type": "Transitive",
+        "resolved": "3.9.0",
+        "contentHash": "3IpuZUbTsWhgD3jhd5mKK7VVyVu/LhfsHXUlYrAOV8mZkJCTasum8Klgv7wyMIl5tttwUralTuTQzCNDLicMRw=="
+      },
+      "CodegenCS.Core": {
+        "type": "Transitive",
+        "resolved": "3.5.0",
+        "contentHash": "Mh0qmK2PJi/7jr2A0fOvXqxRC21RZcBzqwPgSAkwYfM3m6X2ASRRvPntVN6NcdMb8O/wyGUdUjLFXSf9qgZQow=="
+      },
+      "Microsoft.Data.Sqlite.Core": {
+        "type": "Transitive",
+        "resolved": "10.0.9",
+        "contentHash": "iZrONyMKPjxfVZnUktqO30QjzNwAGH+AxM61s8lKQnVhgbQ3bn0hiXI129ZmVicEbIcwljyy2OVsIYUR51ZHKQ==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "2.1.11"
+        }
+      },
+      "SourceGear.sqlite3": {
+        "type": "Transitive",
+        "resolved": "3.50.4.2",
+        "contentHash": "eV9HwQ88WyoU+reGVxJz1SwME9NbYnl9h2LOY15j0LGdXN4JkTJDk8JRRg/yNgt00O3Cn5/qnska10FEZNoU5g=="
+      },
+      "SQLitePCLRaw.config.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "QPHR1Axs8YCCapb0TnmT7PxY9DX3sg4I4T9HOSKeFBiT5l482mjrOIxuyt+xOCwEQ2Enq5h0tgDOXMnJi+i0sw==",
+        "dependencies": {
+          "SQLitePCLRaw.provider.e_sqlite3": "3.0.2"
+        }
+      },
+      "SQLitePCLRaw.core": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "tnbRf0muOOSJK1RLCfyYK13jynFScgL4xMj7yC3oy8lrrGKXTKmOoWjfdV+cFfBRdppm4qST31hvp8ihgIgvMQ=="
+      },
+      "SQLitePCLRaw.provider.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "3.0.2",
+        "contentHash": "RQIliDp47mQxGYNcBB6W+ezHbegkImrSZVTuWjQCSTTl3pQ37Q3rALkkkdTAMEmcIz71PEOCqNZMp7lXCnVqEQ==",
+        "dependencies": {
+          "SQLitePCLRaw.core": "3.0.2"
+        }
+      },
+      "Anton.FindJobHelper.Configuration": {
+        "type": "Project"
+      },
+      "Anton.FindJobHelper.Configuration.Json": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )"
+        }
+      },
+      "Anton.FindJobHelper.Core": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
+          "CliWrap": "[3.9.0, )",
+          "CodegenCS.Core": "[3.5.0, )",
+          "Microsoft.Data.Sqlite": "[10.0.9, )",
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.2, )"
+        }
+      },
+      "Anton.FindJobHelper.Generation": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "CodegenCS.Core": "[3.5.0, )"
+        }
+      }
+    }
+  }
+}
