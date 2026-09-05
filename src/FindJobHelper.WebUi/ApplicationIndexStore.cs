@@ -129,14 +129,16 @@ public static class ApplicationStateExtensions
 }
 
 /// <summary>
-/// Owns `sent/index.csv`: reads rows and rewrites the `status` column in
+/// Owns `data/index.csv`: reads rows and rewrites the `status` column in
 /// place. All file access goes through an exclusive lock so concurrent agent
 /// appends stay safe, and updates are applied with an atomic file replace.
 ///
-/// Frozen since fjw-w4u.4: the UI reads and writes sqlite only, so nothing
-/// constructs this class anymore; `index.csv` stays an untouched archive
-/// until the w4u.5 migration. Kept (not deleted) because the enum and helpers
-/// above stay live, and the CSV parsing may inform the local migration.
+/// Frozen since fjw-w4u.5: the UI reads and writes sqlite only, so nothing
+/// constructs this class anymore; `data/index.csv` stays an untouched
+/// archive of the pre-sqlite history (its `path` values still point at the
+/// old `sent/` locations). Kept (not deleted) because the enum and helpers
+/// above stay live, and the CSV parsing documents the format the one-time
+/// local migration consumed.
 /// </summary>
 public sealed class ApplicationIndexStore
 {
@@ -157,7 +159,7 @@ public sealed class ApplicationIndexStore
 
     public ApplicationIndexStore(string workspaceRoot)
     {
-        _indexPath = Path.Combine(workspaceRoot, "sent", "index.csv");
+        _indexPath = Path.Combine(workspaceRoot, "data", "index.csv");
     }
 
     public string IndexPath => _indexPath;
@@ -236,7 +238,7 @@ public sealed class ApplicationIndexStore
                 if (statusIndex < 0)
                 {
                     throw new InvalidOperationException(
-                        "sent/index.csv does not have a 'status' column.");
+                        "data/index.csv does not have a 'status' column.");
                 }
 
                 var updated = false;
@@ -365,7 +367,7 @@ public sealed class ApplicationIndexStore
         if (!File.Exists(_indexPath))
         {
             throw new FileNotFoundException(
-                "sent/index.csv was not found. Is the workspace root correct?",
+                "data/index.csv was not found. Is the workspace root correct?",
                 _indexPath);
         }
 
@@ -474,7 +476,7 @@ public sealed class ApplicationIndexStore
 
         if (inQuotes)
         {
-            throw new InvalidOperationException("sent/index.csv contains an unterminated quoted field.");
+            throw new InvalidOperationException("data/index.csv contains an unterminated quoted field.");
         }
 
         if (sawAnyField || currentField.Length > 0)

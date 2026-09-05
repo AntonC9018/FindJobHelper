@@ -23,8 +23,8 @@ public sealed record RecruiterMetadata(
 /// context freely. Key aliases accept the obvious snake_case/camelCase
 /// variants; <see cref="State"/> is always a canonical wire name
 /// (<c>added</c>, <c>generated</c>, <c>sent</c>, <c>followed-up</c>,
-/// <c>n/a</c>, <c>other</c>), derived with the same rules as the legacy
-/// index.csv statuses.
+/// <c>n/a</c>, <c>other</c>), derived with the same rules as the frozen
+/// <c>data/index.csv</c> statuses.
 /// </summary>
 public sealed record ApplicationMetadata(
     string? Nr,

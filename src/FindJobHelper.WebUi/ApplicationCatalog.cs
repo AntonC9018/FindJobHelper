@@ -72,8 +72,8 @@ public sealed record ApplicationSummary(
 
 /// <summary>
 /// Builds the application list purely from sqlite (fjw-w4u.4). No reads from
-/// <c>sent/index.csv</c>: the csv stays a frozen archive until the w4u.5
-/// migration. Dates render backend strings verbatim; the client never formats
+/// <c>data/index.csv</c>: the csv is a frozen pre-sqlite archive (fjw-w4u.5
+/// migration). Dates render backend strings verbatim; the client never formats
 /// them. Contacted awareness comes from shared <c>recruiter_id</c> plus
 /// followed-up events.
 /// </summary>

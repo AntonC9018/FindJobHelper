@@ -157,8 +157,8 @@ public sealed class JobStore : IDisposable
 
     /// <summary>
     /// Resolves the folder ingestion scans: the explicit override wins, else
-    /// <c>data/</c> once it holds application folders (after the sent-to-data
-    /// rename, fjw-w4u.5), else the legacy <c>sent/</c>.
+    /// <c>data/</c> under the workspace root (the application folders live
+    /// there since the sent-to-data rename, fjw-w4u.5).
     /// </summary>
     public string ResolveApplicationsRoot()
     {
@@ -170,17 +170,7 @@ public sealed class JobStore : IDisposable
         }
 
         var dataRoot = Path.Combine(_options.WorkspaceRoot, "data");
-        if (Directory.Exists(dataRoot))
-        {
-            var hasFolders = Directory.EnumerateDirectories(dataRoot).Any();
-            if (hasFolders)
-            {
-                return dataRoot;
-            }
-        }
-
-        var sentRoot = Path.Combine(_options.WorkspaceRoot, "sent");
-        return Path.GetFullPath(sentRoot);
+        return Path.GetFullPath(dataRoot);
     }
 
     public async Task EnsureSchemaAsync(CancellationToken cancellationToken)
@@ -339,9 +329,11 @@ public sealed class JobStore : IDisposable
 
     /// <summary>
     /// Resolves a UI key to an application row. Accepts the canonical folder
-    /// relative path, legacy <c>sent/</c> or <c>data/</c> prefixed keys,
-    /// <c>nr:123</c>, and bare <c>123</c> numbers. The bare-number fallback
-    /// only runs for keys without a slash (folder paths never match an nr).
+    /// relative path, <c>data/</c> prefixed keys (plus legacy <c>sent/</c>
+    /// prefixed keys from before the fjw-w4u.5 rename and from the frozen
+    /// <c>data/index.csv</c> paths), <c>nr:123</c>, and bare <c>123</c>
+    /// numbers. The bare-number fallback only runs for keys without a slash
+    /// (folder paths never match an nr).
     /// </summary>
     public async Task<StoredApplication?> FindApplicationByKeyAsync(
         string key,

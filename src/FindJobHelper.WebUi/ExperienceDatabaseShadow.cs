@@ -24,7 +24,7 @@ internal static class ExperienceDatabaseShadow
         var hashPrefix = Convert.ToHexString(hash)[..16];
         var shadowDirectory = Path.Combine(
             Path.GetTempPath(),
-            "FindJobWorkspace-webui",
+            "find-job-webui",
             "experience-database",
             hashPrefix);
         Directory.CreateDirectory(shadowDirectory);

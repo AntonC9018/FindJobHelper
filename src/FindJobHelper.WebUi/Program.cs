@@ -127,7 +127,7 @@ app.MapPost("/api/applications/file/open-in-vscode", async (
     ApplicationCatalog catalog,
     CancellationToken cancellationToken) =>
 {
-    if (request.Name.Contains('/') || request.Name.Contains('\\') || request.Name.Contains(".."))
+    if (IsUnsafeFileName(request.Name))
     {
         return Results.BadRequest(new { error = "Invalid file name." });
     }
@@ -166,7 +166,7 @@ app.MapGet("/api/applications/file", async (
     ApplicationCatalog catalog,
     CancellationToken cancellationToken) =>
 {
-    if (name.Contains('/') || name.Contains('\\') || name.Contains(".."))
+    if (IsUnsafeFileName(name))
     {
         return Results.BadRequest(new { error = "Invalid file name." });
     }
@@ -306,6 +306,22 @@ app.MapPost("/api/database/rebuild", async (
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+/// <summary>Rejects path separators and parent traversal in UI-supplied file names.</summary>
+bool IsUnsafeFileName(string name)
+{
+    if (name.Contains('/'))
+    {
+        return true;
+    }
+
+    if (name.Contains('\\'))
+    {
+        return true;
+    }
+
+    return name.Contains("..", StringComparison.Ordinal);
+}
 
 /// <summary>Opens a folder in the OS file manager, whatever the OS.</summary>
 void OpenFolderCrossPlatform(string folder)

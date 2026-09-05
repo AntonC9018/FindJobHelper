@@ -4,7 +4,7 @@ public sealed class WebUiOptions
 {
     public const string SectionName = "WebUi";
 
-    /// <summary>Root of the workspace holding `sent/` and `ExperienceDatabase/`.</summary>
+    /// <summary>Root of the workspace holding `data/` and `ExperienceDatabase/`.</summary>
     public string WorkspaceRoot { get; set; } = Environment.CurrentDirectory;
 
     /// <summary>Compiled experience database DLL used by CV generation.</summary>
@@ -20,8 +20,9 @@ public sealed class WebUiOptions
     public string JobsDbPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// Application folders root override. Empty means <see cref="JobStore"/>
-    /// resolves <c>data/</c> once it holds folders, else legacy <c>sent/</c>.
+    /// Application folders root override. Empty means <c>data/</c> under the
+    /// workspace root, which holds the per-application folders since the
+    /// sent-to-data rename (fjw-w4u.5).
     /// </summary>
     public string ApplicationsRoot { get; set; } = string.Empty;
 
