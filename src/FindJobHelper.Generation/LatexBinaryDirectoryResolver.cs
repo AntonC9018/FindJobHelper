@@ -1,4 +1,6 @@
-namespace FindJobHelper.CVGeneration;
+using FindJobHelper.CVGeneration;
+
+namespace FindJobHelper.Generation;
 
 public sealed record ResolvedLatexExecutables(
     string SelectionSource,

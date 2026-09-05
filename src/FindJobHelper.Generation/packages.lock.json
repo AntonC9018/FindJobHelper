@@ -8,13 +8,14 @@
         "resolved": "3.5.0",
         "contentHash": "Mh0qmK2PJi/7jr2A0fOvXqxRC21RZcBzqwPgSAkwYfM3m6X2ASRRvPntVN6NcdMb8O/wyGUdUjLFXSf9qgZQow=="
       },
-      "CommandDotNet": {
+      "Microsoft.Extensions.Configuration": {
         "type": "Direct",
-        "requested": "[8.1.1, )",
-        "resolved": "8.1.1",
-        "contentHash": "9zdaVX7yKK6yFCP/9/hLBPv0KYuI4wy2wcFLtSAmBJNnqae8Pg5qWSm1XXtHp8Y/2+omC7OqDlZc26Jnntam4g==",
+        "requested": "[10.0.10, )",
+        "resolved": "10.0.10",
+        "contentHash": "plJWK2zpWuuyxI8F8s2scx6Je7N1Ajjs6HvYUGKwRnDMWIVIz9FHwAkiT7ASgrvAOd10T0FPVlh9BzAJJME+jg==",
         "dependencies": {
-          "JetBrains.Annotations": "2024.3.0"
+          "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
+          "Microsoft.Extensions.Primitives": "10.0.10"
         }
       },
       "Microsoft.Extensions.Configuration.Binder": {
@@ -87,24 +88,10 @@
         "resolved": "7.0.0",
         "contentHash": "2lMTCQl5bGP4iv0JNkockPnyllC6eHLz+CoK2ICvalvHod+exXSxueu9hq+zNkU7bZBJf8wMfeRC/Edn8AGmEg=="
       },
-      "Spectre.Console": {
-        "type": "Direct",
-        "requested": "[0.57.2, )",
-        "resolved": "0.57.2",
-        "contentHash": "wzsB+P9i6F9G+cFOJxRotCiQWNSzZVAMxi8YMiHlGXXU1JLMXGp7zSSqBMmROZS2bzpK5jk+Saa7Evp8HwqhKg==",
-        "dependencies": {
-          "Spectre.Console.Ansi": "0.57.2"
-        }
-      },
       "CliWrap": {
         "type": "Transitive",
         "resolved": "3.9.0",
         "contentHash": "3IpuZUbTsWhgD3jhd5mKK7VVyVu/LhfsHXUlYrAOV8mZkJCTasum8Klgv7wyMIl5tttwUralTuTQzCNDLicMRw=="
-      },
-      "JetBrains.Annotations": {
-        "type": "Transitive",
-        "resolved": "2024.3.0",
-        "contentHash": "ox5pkeLQXjvJdyAB4b2sBYAlqZGLh3PjSnP1bQNVx72ONuTJ9+34/+Rq91Fc0dG29XG9RgZur9+NcP4riihTug=="
       },
       "Microsoft.Data.Sqlite": {
         "type": "Transitive",
@@ -122,15 +109,6 @@
         "contentHash": "iZrONyMKPjxfVZnUktqO30QjzNwAGH+AxM61s8lKQnVhgbQ3bn0hiXI129ZmVicEbIcwljyy2OVsIYUR51ZHKQ==",
         "dependencies": {
           "SQLitePCLRaw.core": "2.1.11"
-        }
-      },
-      "Microsoft.Extensions.Configuration": {
-        "type": "Transitive",
-        "resolved": "10.0.10",
-        "contentHash": "plJWK2zpWuuyxI8F8s2scx6Je7N1Ajjs6HvYUGKwRnDMWIVIz9FHwAkiT7ASgrvAOd10T0FPVlh9BzAJJME+jg==",
-        "dependencies": {
-          "Microsoft.Extensions.Configuration.Abstractions": "10.0.10",
-          "Microsoft.Extensions.Primitives": "10.0.10"
         }
       },
       "Microsoft.Extensions.Configuration.Abstractions": {
@@ -211,11 +189,6 @@
         "resolved": "3.50.4.2",
         "contentHash": "eV9HwQ88WyoU+reGVxJz1SwME9NbYnl9h2LOY15j0LGdXN4JkTJDk8JRRg/yNgt00O3Cn5/qnska10FEZNoU5g=="
       },
-      "Spectre.Console.Ansi": {
-        "type": "Transitive",
-        "resolved": "0.57.2",
-        "contentHash": "Y1+u73shwP+JYHmrkdN6bSt2kaGBEAafhi2nrecczbXdFRey+k7J/WF9YPfcB0rqivv2S8fmif6FSBq9m/AFvw=="
-      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
         "resolved": "3.0.2",
@@ -249,12 +222,6 @@
       "Anton.FindJobHelper.Configuration": {
         "type": "Project"
       },
-      "Anton.FindJobHelper.Configuration.Json": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Configuration": "[1.0.0, )"
-        }
-      },
       "Anton.FindJobHelper.Core": {
         "type": "Project",
         "dependencies": {
@@ -263,21 +230,6 @@
           "CodegenCS.Core": "[3.5.0, )",
           "Microsoft.Data.Sqlite": "[10.0.9, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.2, )"
-        }
-      },
-      "Anton.FindJobHelper.Generation": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
-          "Anton.FindJobHelper.Core": "[1.0.0, )",
-          "CodegenCS.Core": "[3.5.0, )",
-          "Microsoft.Extensions.Configuration": "[10.0.10, )",
-          "Microsoft.Extensions.Configuration.Binder": "[10.0.10, )",
-          "Microsoft.Extensions.Configuration.EnvironmentVariables": "[10.0.10, )",
-          "Microsoft.Extensions.Configuration.UserSecrets": "[10.0.10, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.0.10, )",
-          "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
-          "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )"
         }
       }
     }

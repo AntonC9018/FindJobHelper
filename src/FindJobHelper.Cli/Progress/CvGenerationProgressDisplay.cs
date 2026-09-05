@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FindJobHelper.Generation;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 

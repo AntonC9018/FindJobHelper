@@ -25,7 +25,7 @@ public sealed partial class GeneratedPdfFontTests
 
         var result = await CvTemplate.Generate(new()
         {
-            ConfigFilePath = fixture.TemplatePath,
+            TemplatePath = fixture.TemplatePath,
             OutputDirectory = fixture.OutputDirectory,
             Model = CreateEmptyModel(),
             FontOptions = fonts,

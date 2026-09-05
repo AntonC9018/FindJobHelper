@@ -4,6 +4,7 @@ using FindJobHelper.Configuration.Json;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
+using FindJobHelper.Generation;
 
 public sealed class CvGenerationCommand
 {

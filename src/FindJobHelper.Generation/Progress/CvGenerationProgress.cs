@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
+using FindJobHelper.CVGeneration;
 
-namespace FindJobHelper.CVGeneration;
+namespace FindJobHelper.Generation;
 
 public enum CvGenerationModule
 {

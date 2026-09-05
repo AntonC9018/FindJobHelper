@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Security;
-namespace FindJobHelper.Core;
+using FindJobHelper.Core;
+
+namespace FindJobHelper.Generation;
 
 public static class ExperienceDatabaseProviderLoader
 {

@@ -1,6 +1,6 @@
-using FindJobHelper.CVGeneration;
+using FindJobHelper.Generation;
 
-namespace MainCli.Tests;
+namespace FindJobHelper.Generation.Tests;
 
 public sealed class CvArtifactPlanTests
 {

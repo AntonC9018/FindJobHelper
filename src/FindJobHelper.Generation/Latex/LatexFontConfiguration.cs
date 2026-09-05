@@ -1,6 +1,7 @@
 using System.Globalization;
+using FindJobHelper.CVGeneration;
 
-namespace FindJobHelper.CVGeneration;
+namespace FindJobHelper.Generation;
 
 public sealed record LatexFontConfigurationValues(
     LatexFontRoleArray<string?> Families,

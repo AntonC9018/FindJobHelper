@@ -1,4 +1,5 @@
 using FindJobHelper.Core;
+using FindJobHelper.Generation;
 using ProviderFixtures.SyntheticProvider;
 using ProviderFixtures.ConstructorThrows;
 using ProviderFixtures.CreateThrows;
@@ -6,7 +7,7 @@ using ProviderFixtures.MultipleProviders;
 using ProviderFixtures.NoConstructor;
 using ProviderFixtures.NullResult;
 
-namespace MainCli.Tests;
+namespace FindJobHelper.Generation.Tests;
 
 public sealed class ExperienceDatabaseProviderLoaderTests
 {

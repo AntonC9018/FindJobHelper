@@ -4,10 +4,11 @@ using CodegenCS;
 using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
+using FindJobHelper.CVGeneration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace FindJobHelper.CVGeneration;
+namespace FindJobHelper.Generation;
 
 public sealed record CvGenerationPipelineRequest
 {
@@ -258,7 +259,7 @@ public static class CvGenerationPipeline
                 return cachedPath;
             }
 
-            var assembly = typeof(CvGenerationPipeline).Assembly;
+            var assembly = typeof(CvTemplate).Assembly;
             const string resourceName = "FindJobHelper.Core.data.cv_template_config.tex";
             using var stream = assembly.GetManifestResourceStream(resourceName)
                 ?? throw new InvalidOperationException(
@@ -543,7 +544,7 @@ public static class CvGenerationPipeline
                             {
                                 Model = model,
                                 CancellationToken = cancellationToken,
-                                ConfigFilePath = templatePath,
+                                TemplatePath = templatePath,
                                 OutputDirectory = stagingDirectory,
                                 PageCount = pageCount,
                                 PageLayout = pageLayout,

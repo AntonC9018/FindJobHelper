@@ -1,6 +1,6 @@
 using System.Collections.Immutable;
 
-namespace FindJobHelper.CVGeneration;
+namespace FindJobHelper.Generation;
 
 public enum CvOutputFormat
 {

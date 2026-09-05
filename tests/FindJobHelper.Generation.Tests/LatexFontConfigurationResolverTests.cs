@@ -1,4 +1,7 @@
 using FindJobHelper.CVGeneration;
+using FindJobHelper.Generation;
+
+namespace FindJobHelper.Generation.Tests;
 
 public sealed class LatexFontConfigurationResolverTests
 {

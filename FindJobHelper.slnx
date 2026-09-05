@@ -9,6 +9,7 @@
     <Project Path="src/FindJobHelper.Configuration/FindJobHelper.Configuration.csproj" />
     <Project Path="src/FindJobHelper.Configuration.Json/FindJobHelper.Configuration.Json.csproj" />
     <Project Path="src/FindJobHelper.Core/FindJobHelper.Core.csproj" />
+    <Project Path="src/FindJobHelper.Generation/FindJobHelper.Generation.csproj" />
     <Project Path="src/TheirStack.Client/TheirStack.Client.csproj" />
     <Project Path="src/TheirStack.ClientGenerator/TheirStack.ClientGenerator.csproj" />
   </Folder>
@@ -24,6 +25,7 @@
     <Project Path="tests/FindJobHelper.Cli.Tests/FindJobHelper.Cli.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Configuration.Tests/FindJobHelper.Configuration.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Core.Tests/FindJobHelper.Core.Tests.csproj" />
+    <Project Path="tests/FindJobHelper.Generation.Tests/FindJobHelper.Generation.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/ProviderFixtures/">
     <Project Path="tests/ProviderFixtures/ConstructorThrows/ConstructorThrows.csproj" />
