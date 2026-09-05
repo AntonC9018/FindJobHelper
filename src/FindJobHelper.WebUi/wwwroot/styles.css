@@ -347,7 +347,7 @@ tr.detail-row td { padding: 0 10px 14px; background: rgba(23, 29, 36, 0.6); }
 .toast-text { flex: 1; }
 
 .toast-close {
-    display: none;
+    visibility: hidden;
     background: none;
     border: none;
     color: var(--text-dim);
@@ -356,6 +356,8 @@ tr.detail-row td { padding: 0 10px 14px; background: rgba(23, 29, 36, 0.6); }
     padding: 2px 4px;
     cursor: pointer;
 }
+
+.toast:hover .toast-close { visibility: visible; }
 
 .toast:hover .toast-close { display: block; }
 
