@@ -35,13 +35,63 @@ async function api(path, options) {
     return body;
 }
 
+const toastTimers = new Map();
+
 function toast(message, kind = "info") {
+    const stack = el("toasts");
     const node = document.createElement("div");
     node.className = `toast ${kind}`;
-    node.textContent = message;
-    el("toasts").appendChild(node);
-    setTimeout(() => node.remove(), kind === "error" ? 10000 : 4000);
+    const text = document.createElement("span");
+    text.className = "toast-text";
+    text.textContent = message;
+    node.append(text);
+    const close = document.createElement("button");
+    close.className = "toast-close";
+    close.type = "button";
+    close.textContent = "×";
+    close.title = "Dismiss";
+    close.setAttribute("aria-label", "Dismiss notification");
+    close.addEventListener("click", () => dismissToast(node));
+    node.append(close);
+    stack.append(node);
+    armToast(node, 3000);
 }
+
+function armToast(node, remaining) {
+    const state = { remaining, startedAt: Date.now(), timer: 0 };
+    toastTimers.set(node, state);
+    // A toast born under the pointer starts paused: the stack's
+    // pointerleave re-arms it with the full duration.
+    if (!el("toasts").matches(":hover")) {
+        state.timer = setTimeout(() => dismissToast(node), remaining);
+    }
+}
+
+function pauseToasts() {
+    for (const state of toastTimers.values()) {
+        clearTimeout(state.timer);
+        state.timer = 0;
+        state.remaining = Math.max(0, state.remaining - (Date.now() - state.startedAt));
+    }
+}
+
+function resumeToasts() {
+    for (const [node, state] of toastTimers) {
+        clearTimeout(state.timer);
+        state.startedAt = Date.now();
+        state.timer = setTimeout(() => dismissToast(node), state.remaining);
+    }
+}
+
+function dismissToast(node) {
+    const state = toastTimers.get(node);
+    if (state) clearTimeout(state.timer);
+    toastTimers.delete(node);
+    node.remove();
+}
+
+el("toasts").addEventListener("pointerenter", pauseToasts);
+el("toasts").addEventListener("pointerleave", resumeToasts);
 
 async function loadStatus() {
     app.status = await api("/api/status");

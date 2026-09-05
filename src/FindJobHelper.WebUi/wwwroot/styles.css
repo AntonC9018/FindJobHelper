@@ -339,7 +339,27 @@ tr.detail-row td { padding: 0 10px 14px; background: rgba(23, 29, 36, 0.6); }
     font-size: 0.82rem;
     max-width: 420px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
+
+.toast-text { flex: 1; }
+
+.toast-close {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+
+.toast:hover .toast-close { display: block; }
+
+.toast-close:hover { color: var(--text); }
 
 .toast.error { border-left-color: var(--danger); }
 
