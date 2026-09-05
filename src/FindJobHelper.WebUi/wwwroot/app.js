@@ -61,7 +61,7 @@ async function loadStatus() {
 
 async function loadApplications() {
     const body = await api("/api/applications");
-    app.applications = body.applications;
+    app.applications = (body.applications || []).map(normalizeFiles);
     app.activeGenerations = body.activeGenerations || [];
     for (const job of app.activeGenerations) {
         if (!app.jobs[job.applicationKey]) {
@@ -69,6 +69,21 @@ async function loadApplications() {
         }
     }
     render();
+}
+
+// The catalog always sends a files set, but absent/null payloads must still
+// render: normalize to the empty-files shape so renderFiles, actionsCell,
+// detailTabsFor, and renderDetailRow can read application.files.* directly.
+function normalizeFiles(application) {
+    const files = application.files;
+    if (!files || typeof files !== "object") {
+        application.files = { allFiles: [] };
+        return application;
+    }
+    if (!Array.isArray(files.allFiles)) {
+        files.allFiles = [];
+    }
+    return application;
 }
 
 /* --- rendering ---------------------------------------------------------- */
@@ -488,20 +503,7 @@ function renderDetailRow(application) {
     });
 
     const links = root.querySelector("[data-role=links]");
-    if (application.jobUrl) {
-        links.append(makeLink("Job posting", application.jobUrl));
-    }
-    if (application.files.pdf) {
-        links.append(makeLink(application.files.pdf, fileUrl(application.key, application.files.pdf)));
-    }
-    if (application.files.annotatedMarkdown) {
-        links.append(makeLink(
-            application.files.annotatedMarkdown,
-            fileUrl(application.key, application.files.annotatedMarkdown)));
-    }
-    if (!links.children.length) {
-        links.textContent = "No links yet.";
-    }
+    renderDetailLinks(links, application);
 
     const progressWrap = root.querySelector("[data-role=generation-progress]");
     const progressLabel = root.querySelector("[data-role=progress-label]");
@@ -602,6 +604,23 @@ function makeLink(label, href) {
     link.rel = "noopener";
     link.textContent = label;
     return link;
+}
+
+function renderDetailLinks(links, application) {
+    if (application.jobUrl) {
+        links.append(makeLink("Job posting", application.jobUrl));
+    }
+    if (application.files.pdf) {
+        links.append(makeLink(application.files.pdf, fileUrl(application.key, application.files.pdf)));
+    }
+    if (application.files.annotatedMarkdown) {
+        links.append(makeLink(
+            application.files.annotatedMarkdown,
+            fileUrl(application.key, application.files.annotatedMarkdown)));
+    }
+    if (!links.children.length) {
+        links.textContent = "No links yet.";
+    }
 }
 
 function detailTabsFor(application) {
@@ -715,7 +734,9 @@ async function startGeneration(key, debug) {
         });
         app.jobs[key] = job;
         toast(`Generation started${debug ? " (debug markdown)" : ""}.`);
-        renderRows();
+        // In place only: a full renderRows() rebuilds the table and flashes
+        // the open detail panel (destroying a mounted editor) for a frame.
+        updateProgressInPlace(key, job);
         pollJobs();
     } catch (error) {
         toast(error.message, "error");
@@ -736,11 +757,11 @@ async function pollJobs() {
                 if (snapshot.state === "Succeeded") {
                     toast(`CV generated for ${key}.`, "success");
                     delete app.jobs[key];
-                    await loadApplications();
+                    await refreshGenerationResult(key);
                     await loadStatus();
                 } else if (snapshot.state === "Failed") {
                     toast(`Generation failed: ${snapshot.error}`, "error");
-                    renderRows();
+                    showGenerationErrorInPlace(key, snapshot.error);
                 } else {
                     updateProgressInPlace(key, snapshot);
                 }
@@ -766,6 +787,91 @@ function updateProgressInPlace(key, job) {
     fill.style.width = `${Math.round(job.overallPercent)}%`;
     const phase = job.state === "Queued" ? "Queued" : job.moduleDescription || "Working";
     label.textContent = `${phase} — ${Math.round(job.overallPercent)}%`;
+}
+
+function showGenerationErrorInPlace(key, message) {
+    const { detailRow } = findDetailRow(key);
+    if (!detailRow) return;
+    const wrap = detailRow.querySelector("[data-role=generation-progress]");
+    if (wrap) wrap.classList.add("hidden");
+    const errorNode = detailRow.querySelector("[data-role=generation-error]");
+    if (!errorNode) return;
+    errorNode.textContent = message || "Generation failed.";
+    errorNode.classList.remove("hidden");
+}
+
+// Reloads one application after a finished generation and patches its row
+// and open detail panel in place: a full render() rebuilds the table and
+// flashes the detail (destroying a mounted config editor) for a frame.
+async function refreshGenerationResult(key) {
+    const body = await api("/api/applications");
+    app.applications = (body.applications || []).map(normalizeFiles);
+    app.activeGenerations = body.activeGenerations || [];
+    renderStateFilters();
+    const fresh = app.applications.find(candidate => candidate.key === key);
+    if (!fresh) {
+        renderRows();
+        return;
+    }
+    patchRowCells(key, fresh);
+    patchOpenDetail(key, fresh);
+}
+
+function patchRowCells(key, fresh) {
+    const appRow = document.querySelector(`tr.app-row[data-key="${CSS.escape(key)}"]`);
+    if (!appRow) {
+        renderRows();
+        return;
+    }
+    const builders = {
+        "col-state": stateCell,
+        "col-files": renderFiles,
+        "col-events": renderEvents,
+        "col-actions": actionsCell,
+    };
+    for (const [cellClass, build] of Object.entries(builders)) {
+        const cell = appRow.querySelector(`.${cellClass}`);
+        if (!cell) continue;
+        cell.innerHTML = "";
+        build(cell, fresh);
+    }
+}
+
+function patchOpenDetail(key, fresh) {
+    const { detailRow } = findDetailRow(key);
+    if (!detailRow) return;
+    const wrap = detailRow.querySelector("[data-role=generation-progress]");
+    if (wrap) wrap.classList.add("hidden");
+    const errorNode = detailRow.querySelector("[data-role=generation-error]");
+    if (errorNode) {
+        errorNode.textContent = "";
+        errorNode.classList.add("hidden");
+    }
+    const links = detailRow.querySelector("[data-role=links]");
+    if (links) {
+        links.innerHTML = "";
+        renderDetailLinks(links, fresh);
+    }
+    const eventsNode = detailRow.querySelector("[data-role=events]");
+    if (eventsNode) renderDetailEvents(eventsNode, fresh);
+    const createdInfo = detailRow.querySelector("[data-role=created-info]");
+    if (createdInfo) {
+        const eventCount = (fresh.events || []).length;
+        createdInfo.textContent = `created: ${fresh.createdAt} • ${eventCount} events`;
+    }
+    const select = detailRow.querySelector("[data-role=state-select]");
+    if (select) {
+        // added → generated: the option already exists, just reselect it.
+        // Unknown values are appended selected (same as renderDetailRow).
+        let match = [...select.options].find(option => option.value === fresh.state);
+        if (!match) {
+            match = document.createElement("option");
+            match.value = fresh.state;
+            match.textContent = fresh.state;
+            select.append(match);
+        }
+        select.value = fresh.state;
+    }
 }
 
 setInterval(() => {
