@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <IncludeUserSecrets>true</IncludeUserSecrets>
         <PackageId>Anton.FindJobHelper.Cli</PackageId>
         <Description>Command-line CV generator for FindJobHelper workspaces.</Description>
         <IsPackable>true</IsPackable>
@@ -17,12 +16,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
-    </ItemGroup>
-
-    <ItemGroup>
         <PackageReference Include="CommandDotNet" Version="8.1.1" />
-        <PackageReference Include="CodegenCS.Core" Version="3.5.0" />
         <PackageReference Include="Spectre.Console" Version="0.57.2" />
     </ItemGroup>
 </Project>
