@@ -359,8 +359,6 @@ tr.detail-row td { padding: 0 10px 14px; background: rgba(23, 29, 36, 0.6); }
 
 .toast:hover .toast-close { visibility: visible; }
 
-.toast:hover .toast-close { display: block; }
-
 .toast-close:hover { color: var(--text); }
 
 .toast.error { border-left-color: var(--danger); }
