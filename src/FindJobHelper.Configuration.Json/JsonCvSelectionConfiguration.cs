@@ -44,7 +44,7 @@ public sealed class JsonCvSelectionConfiguration
     public string? Profession { get; init; }
     public JsonHeaderConfiguration? Header { get; init; }
 
-    public CvSelectionConfiguration ToDomain()
+    internal CvSelectionConfiguration ToDomain()
     {
         var errors = new List<string>();
         errors.AddRange(SectionOrder.ValidationErrors);
@@ -307,7 +307,7 @@ public sealed class MmrConfiguration
     public int? SaturationQuota { get; init; }
     public float? SaturationPenalty { get; init; }
 
-    public void CollectValidationErrors(List<string> errors)
+    internal void CollectValidationErrors(List<string> errors)
     {
         if (HasInvalidRelevanceWeight())
         {
@@ -355,7 +355,7 @@ public sealed class MmrConfiguration
         }
     }
 
-    public MmrOptions ToDomain()
+    internal MmrOptions ToDomain()
     {
         var relevanceWeight = RelevanceWeight ?? MmrOptions.Default.RelevanceWeight;
         var saturationQuota = SaturationQuota ?? MmrOptions.Default.SaturationQuota;
