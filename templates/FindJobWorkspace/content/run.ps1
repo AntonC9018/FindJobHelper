@@ -1,18 +1,39 @@
-[CmdletBinding()]
-param(
-    [int]$Port = 5058
-)
+$ErrorActionPreference = "Stop"
 
-$force = $args.Count -gt 0 -and $args[0] -eq '--force'
-$remainingArguments = @($args)
-if ($force) {
-    $remainingArguments = @($remainingArguments | Select-Object -Skip 1)
+# Manual $args parsing (no param block): with [CmdletBinding()] the '--'
+# separator and '--force' never reach the script body — the binder rejects
+# them first — so the CLI-forwarding convention needs raw tokens, exactly
+# like run.sh parses "$@" in bash.
+$Port = 5058
+$force = $false
+$forwardedArguments = @()
+$usage = "Use: run.ps1 [-Port <N>] [--force] [-- <CLI arguments...>]"
+$argIndex = 0
+while ($argIndex -lt $args.Count) {
+    $token = $args[$argIndex]
+    if ($token -eq '--force' -or $token -eq '-Force') {
+        $force = $true
+        $argIndex += 1
+    } elseif ($token -eq '-Port' -or $token -eq '--port') {
+        if ($argIndex + 1 -ge $args.Count) {
+            throw "Missing value for '$token'. $usage"
+        }
+        $portCandidate = 0
+        if (![int]::TryParse($args[$argIndex + 1], [ref]$portCandidate)) {
+            throw "Port must be a number, got '$($args[$argIndex + 1])'. $usage"
+        }
+        $Port = $portCandidate
+        $argIndex += 2
+    } elseif ($token -eq '--') {
+        $restStart = $argIndex + 1
+        if ($restStart -lt $args.Count) {
+            $forwardedArguments = @($args[$restStart..($args.Count - 1)])
+        }
+        break
+    } else {
+        throw "Unexpected argument '$token'. $usage"
+    }
 }
-
-if ($remainingArguments.Count -gt 0 -and $remainingArguments[0] -ne '--') {
-    throw "Unexpected argument '$($remainingArguments[0])'. Use: run.ps1 [-Port <N>] [--force] [-- <CLI arguments...>]"
-}
-$forwardedArguments = @($remainingArguments | Select-Object -Skip 1)
 
 $providerProject = Join-Path $PSScriptRoot 'src/FindJobWorkspace.Provider'
 $buildDirectory = Join-Path $PSScriptRoot 'build'
@@ -25,7 +46,7 @@ function Assert-LastCommandSucceeded([string]$description) {
 }
 
 if ($force -or -not (Test-Path -LiteralPath $providerDll -PathType Leaf)) {
-    dotnet publish $providerProject --output $buildDirectory
+    dotnet publish "$providerProject" --output "$buildDirectory"
     Assert-LastCommandSucceeded 'Publishing the experience database'
 }
 

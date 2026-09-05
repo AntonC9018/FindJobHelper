@@ -81,7 +81,7 @@ plus this file:
 ## Application states
 
 The `state` field of `metadata.json` is a managed vocabulary shared with
-the web UI (`run-webui.ps1`), which ingests the same files into sqlite when
+the web UI (`run-webui.ps1` / `run-webui.sh`), which ingests the same files into sqlite when
 the user presses Refresh. Agents writing folders must keep to this vocabulary:
 
 - `added` — folder and metadata exist, no CV generated yet.

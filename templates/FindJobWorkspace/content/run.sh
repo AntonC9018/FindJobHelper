@@ -45,7 +45,7 @@ provider_project="$script_directory/src/FindJobWorkspace.Provider"
 build_directory="$script_directory/build"
 provider_dll="$build_directory/FindJobWorkspace.Provider.dll"
 
-if [[ $force == true || ! -f $provider_dll ]]; then
+if [[ $force == true || ! -f "$provider_dll" ]]; then
     dotnet publish "$provider_project" --output "$build_directory"
 fi
 

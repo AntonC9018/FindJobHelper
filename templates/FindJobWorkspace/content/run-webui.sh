@@ -81,7 +81,7 @@ export PersonalInfo__Portfolio='https://example.test/portfolio'
 export PersonalInfo__Email='alex@example.test'
 export PersonalInfo__Phone='202-555-0100'
 
-if [[ $rebuild_database == true || ! -f $provider_dll ]]; then
+if [[ $rebuild_database == true || ! -f "$provider_dll" ]]; then
     dotnet publish "$provider_project" --output "$build_directory"
 fi
 

@@ -34,7 +34,7 @@ $env:PersonalInfo__Email = 'alex@example.test'
 $env:PersonalInfo__Phone = '202-555-0100'
 
 if ($RebuildDatabase -or !(Test-Path -Path $providerDll -PathType Leaf)) {
-    dotnet publish $providerProject --output $buildDirectory
+    dotnet publish "$providerProject" --output "$buildDirectory"
     if ($LASTEXITCODE -ne 0) {
         throw "Building the experience database failed with exit code $LASTEXITCODE."
     }
