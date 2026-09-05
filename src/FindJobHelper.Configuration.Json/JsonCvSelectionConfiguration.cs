@@ -225,7 +225,25 @@ public sealed class JsonCvSelectionConfiguration
             return default;
         }
 
-        var mappedOrder = configuredOrder
+        var hasBlank = false;
+        var validEntries = new List<string>();
+        foreach (var entry in configuredOrder)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                hasBlank = true;
+                continue;
+            }
+
+            validEntries.Add(entry);
+        }
+
+        if (hasBlank)
+        {
+            errors.Add("'header.links.order' cannot contain blank items.");
+        }
+
+        var mappedOrder = validEntries
             .Select(MapHeaderLinkName)
             .ToImmutableArray();
         var uniqueNames = new HashSet<HeaderLinkName>();

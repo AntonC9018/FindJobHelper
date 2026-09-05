@@ -63,6 +63,11 @@ async function loadApplications() {
     const body = await api("/api/applications");
     app.applications = body.applications;
     app.activeGenerations = body.activeGenerations || [];
+    for (const job of app.activeGenerations) {
+        if (!app.jobs[job.applicationKey]) {
+            app.jobs[job.applicationKey] = job;
+        }
+    }
     render();
 }
 
@@ -574,6 +579,9 @@ function loadDetailContent(root, application, selectedTab, fileContent) {
             }).catch(error => {
                 fileContent.textContent = `Failed to load: ${error.message}`;
             });
+        }).catch(error => {
+            fileContent.style.display = "";
+            fileContent.textContent = `Failed to load: ${error.message}`;
         });
     } else {
         fileContent.style.display = "";
@@ -761,7 +769,7 @@ function updateProgressInPlace(key, job) {
 }
 
 setInterval(() => {
-    if (Object.keys(app.jobs).length) pollJobs();
+    if (Object.keys(app.jobs).length || app.activeGenerations.length) pollJobs();
 }, 900);
 
 /* --- database ------------------------------------------------------------------ */

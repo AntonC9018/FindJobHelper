@@ -22,6 +22,9 @@ while ($argIndex -lt $args.Count) {
         if (![int]::TryParse($args[$argIndex + 1], [ref]$portCandidate)) {
             throw "Port must be a number, got '$($args[$argIndex + 1])'. $usage"
         }
+        if ($portCandidate -lt 1 -or $portCandidate -gt 65535) {
+            throw "Port must be between 1 and 65535, got '$($args[$argIndex + 1])'. $usage"
+        }
         $Port = $portCandidate
         $argIndex += 2
     } elseif ($token -eq '--') {
@@ -82,9 +85,25 @@ function Test-UiPortOpen([int]$probePort) {
     }
 }
 
+function Test-FindJobUi([string]$baseUrl) {
+    try {
+        $status = Invoke-RestMethod -Uri "$baseUrl/api/status" -TimeoutSec 2
+        if ($null -ne $status.workspaceRoot) {
+            return $true
+        }
+        return $false
+    } catch {
+        return $false
+    }
+}
+
 $uiUrl = "http://localhost:$Port"
 if (Test-UiPortOpen $Port) {
-    Write-Host "FindJob web UI is already running on $uiUrl."
+    if (Test-FindJobUi $uiUrl) {
+        Write-Host "FindJob web UI is already running on $uiUrl."
+    } else {
+        throw "Port $Port is already in use by another process (not the FindJob web UI). Stop it or pass -Port <N>."
+    }
 } else {
     # Same shell that runs this script, detached: the UI outlives generation.
     # -NoBrowser because this script opens the browser itself below, so one
@@ -98,7 +117,15 @@ if (Test-UiPortOpen $Port) {
 }
 
 # Unconditional: a double-launch reuses the single server yet still opens the
-# browser. On a cold start the server takes a while to build; refresh once.
+# browser. On a cold start the server takes a while to build: wait until the
+# port answers before opening, then refresh once if it is still warming up.
+$readinessDeadline = [DateTime]::UtcNow.AddSeconds(120)
+while ([DateTime]::UtcNow -lt $readinessDeadline) {
+    if (Test-UiPortOpen $Port) {
+        break
+    }
+    Start-Sleep -Milliseconds 500
+}
 Start-Process $uiUrl
 
 $cliArguments = @(

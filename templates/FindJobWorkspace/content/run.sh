@@ -14,6 +14,10 @@ while (( $# > 0 )); do
                 printf "Missing numeric value for '%s'. Use: run.sh [--force] [--port N] [-- <CLI arguments...>]\n" "$1" >&2
                 exit 2
             fi
+            if (( 10#$2 < 1 || 10#$2 > 65535 )); then
+                printf "Port must be between 1 and 65535, got '%s'. Use: run.sh [--force] [--port N] [-- <CLI arguments...>]\n" "$2" >&2
+                exit 2
+            fi
             port="$2"
             shift 2
             ;;
@@ -49,12 +53,25 @@ if [[ $force == true || ! -f "$provider_dll" ]]; then
     dotnet publish "$provider_project" --output "$build_directory"
 fi
 
-# Single-instance gate for the web UI: a bound port means a server is already
-# up, so the caller must not spawn a second copy. (Best-effort like any
+# Single-instance gate for the web UI: a bound port alone does not identify
+# our UI, so verify /api/status before reusing it. (Best-effort like any
 # port probe: two truly simultaneous launches can still race.)
 ui_url="http://localhost:$port"
 if (exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null; then
-    printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+    if command -v curl >/dev/null 2>&1; then
+        status_response=$(curl -fsS --max-time 2 "$ui_url/api/status" 2>/dev/null || true)
+        case "$status_response" in
+            *workspaceRoot*)
+                printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+                ;;
+            *)
+                printf 'Port %s is already in use by another process (not the FindJob web UI). Stop it or pass --port <N>.\n' "$port" >&2
+                exit 1
+                ;;
+        esac
+    else
+        printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+    fi
 else
     # Detached: the UI outlives generation (nohup plus background). --no-browser
     # because this script opens the browser itself below, so one launch always
@@ -64,7 +81,15 @@ else
 fi
 
 # Unconditional: a double-launch reuses the single server yet still opens the
-# browser. On a cold start the server takes a while to build; refresh once.
+# browser. On a cold start the server takes a while to build: wait until the
+# port answers before opening, then refresh once if it is still warming up.
+deadline=$((SECONDS + 120))
+while (( SECONDS < deadline )); do
+    if (exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null; then
+        break
+    fi
+    sleep 0.5
+done
 open_browser "$ui_url" >/dev/null 2>&1 &
 
 # Alternatively, remove these assignments and configure email and phone with

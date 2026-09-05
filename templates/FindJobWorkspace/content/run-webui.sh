@@ -28,6 +28,10 @@ while (( $# > 0 )); do
                 printf "Missing numeric value for '%s'. Use: run-webui.sh [--workspace DIR] [--port N] [--rebuild-database] [--no-browser]\n" "$1" >&2
                 exit 2
             fi
+            if (( 10#$2 < 1 || 10#$2 > 65535 )); then
+                printf "Port must be between 1 and 65535, got '%s'. Use: run-webui.sh [--workspace DIR] [--port N] [--rebuild-database] [--no-browser]\n" "$2" >&2
+                exit 2
+            fi
             port="$2"
             shift 2
             ;;

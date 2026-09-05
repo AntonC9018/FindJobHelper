@@ -372,11 +372,11 @@ public sealed class RichTextVisitationMapBuilder
                 using var children = childrenFactory(node);
                 while (true)
                 {
-                    if (!children.MoveNext())
+                    if (visitor.Data.Action != VisitationAction.Recurse)
                     {
                         return;
                     }
-                    if (visitor.Data.Action != VisitationAction.Recurse)
+                    if (!children.MoveNext())
                     {
                         return;
                     }

@@ -5,7 +5,7 @@ param(
     # Template workspaces have no WebUi source, so the UI runs from the
     # find-job-webui dotnet tool instead of a local build.
     [string] $Workspace = $PSScriptRoot,
-    [int] $Port = 5058,
+    [ValidateRange(1, 65535)] [int] $Port = 5058,
     [switch] $RebuildDatabase,
     # Skip the browser auto-open. Used when another script (run.ps1) starts the UI
     # in the background and opens the browser itself, so one launch means one tab.

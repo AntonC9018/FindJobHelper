@@ -86,6 +86,40 @@
         return (context) => valueCompletionInner(CM, schema, tagNames, context);
     }
 
+    // Finds the active JSON string token on this line so completion replaces
+    // the whole quoted value ("ASP.NET Co") instead of only the whitespace
+    // word after the cursor. Returns null outside strings (word fallback).
+    function stringTokenRange(lineText, offset) {
+        const closed = [];
+        for (const pattern of [/"[^"\r\n]*"/g, /'[^'\r\n]*'/g]) {
+            let match;
+            while ((match = pattern.exec(lineText)) !== null) {
+                const start = match.index;
+                const end = start + match[0].length;
+                if (start + 1 <= offset && offset <= end - 1) {
+                    return { from: start + 1, to: end - 1 };
+                }
+                closed.push({ start, end });
+            }
+        }
+        const lastDouble = lineText.lastIndexOf('"', offset - 1);
+        const lastSingle = lineText.lastIndexOf("'", offset - 1);
+        const last = Math.max(lastDouble, lastSingle);
+        if (last === -1) {
+            return null;
+        }
+        for (const span of closed) {
+            if (span.end - 1 === last) {
+                return null;
+            }
+        }
+        const quote = lineText[last];
+        if (lineText.indexOf(quote, offset) !== -1) {
+            return null;
+        }
+        return { from: last + 1, to: offset };
+    }
+
     function valueCompletionInner(CM, schema, tagNames, context) {
             let pointer;
             try {
@@ -104,7 +138,21 @@
             }
             if (!values.length) return null;
             const line = context.state.doc.lineAt(context.pos);
-            const prefix = line.text.slice(0, context.pos - line.from);
+            const offset = context.pos - line.from;
+            const stringRange = stringTokenRange(line.text, offset);
+            if (stringRange) {
+                return {
+                    from: line.from + stringRange.from,
+                    to: line.from + stringRange.to,
+                    validFor: /^[\w .+#/()&-]*$/,
+                    options: values.map((label) => ({
+                        label,
+                        apply: label,
+                        type: "value",
+                    })),
+                };
+            }
+            const prefix = line.text.slice(0, offset);
             const word = /[^"'\s:{}\[\],]*$/.exec(prefix)[0];
             const from = context.pos - word.length;
             const quoted = from > line.from && /["']/.test(line.text[from - line.from - 1]);

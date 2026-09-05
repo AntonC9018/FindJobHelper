@@ -138,7 +138,12 @@ app.MapPost("/api/applications/file/open-in-vscode", async (
         return Results.NotFound(new { error = $"No application folder found for key '{request.Key}'." });
     }
 
-    var filePath = Path.Combine(folder, request.Name);
+    var filePath = ResolveFileInFolder(folder, request.Name);
+    if (filePath is null)
+    {
+        return Results.BadRequest(new { error = "Invalid file name." });
+    }
+
     if (!File.Exists(filePath))
     {
         return Results.NotFound(new { error = $"File '{request.Name}' was not found in '{request.Key}'." });
@@ -177,7 +182,12 @@ app.MapGet("/api/applications/file", async (
         return Results.NotFound(new { error = $"No application folder found for key '{key}'." });
     }
 
-    var filePath = Path.Combine(folder, name);
+    var filePath = ResolveFileInFolder(folder, name);
+    if (filePath is null)
+    {
+        return Results.BadRequest(new { error = "Invalid file name." });
+    }
+
     if (!File.Exists(filePath))
     {
         return Results.NotFound(new { error = $"File '{name}' was not found in '{key}'." });
@@ -306,6 +316,82 @@ app.MapPost("/api/database/rebuild", async (
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+/// <summary>
+/// Resolves a UI-supplied file name inside an application folder, rejecting
+/// absolute paths and parent traversal via full-path containment.
+/// </summary>
+string? ResolveFileInFolder(string folder, string name)
+{
+    string combined;
+    try
+    {
+        combined = Path.Combine(folder, name);
+    }
+    catch (ArgumentException)
+    {
+        return null;
+    }
+    catch (NotSupportedException)
+    {
+        return null;
+    }
+
+    string fullPath;
+    try
+    {
+        fullPath = Path.GetFullPath(combined);
+    }
+    catch (ArgumentException)
+    {
+        return null;
+    }
+    catch (PathTooLongException)
+    {
+        return null;
+    }
+    catch (NotSupportedException)
+    {
+        return null;
+    }
+
+    string folderFullPath;
+    try
+    {
+        folderFullPath = Path.GetFullPath(folder);
+    }
+    catch (ArgumentException)
+    {
+        return null;
+    }
+    catch (PathTooLongException)
+    {
+        return null;
+    }
+    catch (NotSupportedException)
+    {
+        return null;
+    }
+
+    var comparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
+    if (string.Equals(fullPath, folderFullPath, comparison))
+    {
+        return null;
+    }
+
+    var trimmedFolder = folderFullPath.TrimEnd(
+        Path.DirectorySeparatorChar,
+        Path.AltDirectorySeparatorChar);
+    var prefix = trimmedFolder + Path.DirectorySeparatorChar;
+    if (!fullPath.StartsWith(prefix, comparison))
+    {
+        return null;
+    }
+
+    return fullPath;
+}
 
 /// <summary>Rejects path separators and parent traversal in UI-supplied file names.</summary>
 bool IsUnsafeFileName(string name)

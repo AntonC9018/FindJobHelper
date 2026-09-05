@@ -256,7 +256,10 @@ public static class CvGenerationPipeline
         {
             if (extractedTemplatePath is { } cachedPath)
             {
-                return cachedPath;
+                if (File.Exists(cachedPath))
+                {
+                    return cachedPath;
+                }
             }
 
             var assembly = typeof(CvTemplate).Assembly;
@@ -269,11 +272,13 @@ public static class CvGenerationPipeline
                 $"FindJobHelper-cv-template-{assembly.GetName().Version}");
             Directory.CreateDirectory(directory);
             var templatePath = Path.Combine(directory, "cv_template_config.tex");
-            using (var fileStream = File.Create(templatePath))
+            var tempPath = Path.Combine(directory, $"cv_template_config-{Guid.NewGuid():N}.tmp");
+            using (var fileStream = File.Create(tempPath))
             {
                 stream.CopyTo(fileStream);
             }
 
+            File.Move(tempPath, templatePath, overwrite: true);
             extractedTemplatePath = templatePath;
             return templatePath;
         }

@@ -95,7 +95,40 @@ public sealed class DatabaseManager : IDisposable
             ?? throw new InvalidOperationException("Failed to start 'dotnet publish'.");
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            KillPublish(process);
+            try
+            {
+                await process.WaitForExitAsync(CancellationToken.None);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await stdoutTask;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await stderrTask;
+            }
+            catch
+            {
+            }
+
+            throw;
+        }
+
         var stdout = await stdoutTask;
         var stderr = await stderrTask;
         if (process.ExitCode != 0)
@@ -105,5 +138,49 @@ public sealed class DatabaseManager : IDisposable
         }
 
         return stdout;
+    }
+
+    private static void KillPublish(Process process)
+    {
+        try
+        {
+            if (process.HasExited)
+            {
+                return;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+        catch (NotSupportedException)
+        {
+            return;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return;
+        }
+
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
     }
 }

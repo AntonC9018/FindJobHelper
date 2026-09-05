@@ -32,6 +32,33 @@ public sealed record CvArtifactPlan(
         string baseFileName = "ExampleAlex")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseFileName);
+        if (Path.IsPathRooted(baseFileName))
+        {
+            throw new ArgumentException(
+                "Base file name must not be a rooted path.",
+                nameof(baseFileName));
+        }
+
+        if (baseFileName.Contains('/'))
+        {
+            throw new ArgumentException(
+                "Base file name must not contain directory separators.",
+                nameof(baseFileName));
+        }
+
+        if (baseFileName.Contains('\\'))
+        {
+            throw new ArgumentException(
+                "Base file name must not contain directory separators.",
+                nameof(baseFileName));
+        }
+
+        if (baseFileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            throw new ArgumentException(
+                "Base file name contains invalid file name characters.",
+                nameof(baseFileName));
+        }
         var pdf = new CvPlannedArtifact(CvArtifactKind.Pdf, $"{baseFileName}.pdf");
         var cleanMarkdown = new CvPlannedArtifact(
             CvArtifactKind.CleanMarkdown,
