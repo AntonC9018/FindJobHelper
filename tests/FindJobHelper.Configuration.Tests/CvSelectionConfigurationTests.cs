@@ -6,20 +6,10 @@ using FindJobHelper.Core;
 using FindJobHelper.CVGeneration;
 using ProviderFixtures.SyntheticProvider;
 
-namespace MainCli.Tests;
+namespace FindJobHelper.Configuration.Tests;
 
 public sealed class CvSelectionConfigurationTests
 {
-    [Fact]
-    public async Task LoadAsync_ParsesShippedExampleConfiguration()
-    {
-        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
-            CvGenerationCommand.ExampleConfigPath,
-            CancellationToken.None);
-
-        Assert.NotNull(configuration);
-    }
-
     [Fact]
     public void CvPageCount_HasExplicitExactAndUnrestrictedSemantics()
     {

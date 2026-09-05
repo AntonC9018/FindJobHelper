@@ -22,6 +22,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FindJobHelper.Cli.Tests/FindJobHelper.Cli.Tests.csproj" />
+    <Project Path="tests/FindJobHelper.Configuration.Tests/FindJobHelper.Configuration.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Core.Tests/FindJobHelper.Core.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/ProviderFixtures/">

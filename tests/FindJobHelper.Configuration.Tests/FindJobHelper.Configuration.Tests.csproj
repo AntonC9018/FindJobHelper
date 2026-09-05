@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\FindJobHelper.Configuration\FindJobHelper.Configuration.csproj" />
+        <ProjectReference Include="..\..\src\FindJobHelper.Configuration.Json\FindJobHelper.Configuration.Json.csproj" />
+        <ProjectReference Include="..\..\src\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\SyntheticProvider\SyntheticProvider.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\FindJobHelper.Cli.Tests\data\cli-e2e-config.json"
+              Link="data\cli-e2e-config.json"
+              CopyToOutputDirectory="Always" />
+    </ItemGroup>
+</Project>
