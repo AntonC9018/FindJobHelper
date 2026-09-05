@@ -11,8 +11,8 @@
  * then rename the single window.ConfigEditorCM assignment if the global changes.
  * Backend: GET /api/config-schema (generated in-process from the pinned
  * Configuration.Json model), POST /api/applications/config/validate,
- * PUT /api/applications/config (server re-validates with the real loader;
- * writes config.json.bak before overwriting),
+ * PUT /api/applications/config (server re-validates with the real loader,
+ * then overwrites directly — no backup, history lives in source control),
  * POST /api/applications/file/open-in-vscode.
  */
 (function () {
@@ -358,7 +358,7 @@
                     // for the dirty comparison above.
                     app.fileCache[cacheKeyOf(application.key, fileName)] = content;
                     renderErrorBox(errorBox, []);
-                    setStatus("saved (backup: config.json.bak)", "ok");
+                    setStatus("saved", "ok");
                     toast("Config saved.", "success");
                 }
             } catch (error) {

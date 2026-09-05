@@ -267,7 +267,6 @@ app.MapPut("/api/applications/config", async (
     return Results.Ok(new
     {
         saved = true,
-        backup = outcome.Backup,
         errors = Array.Empty<string>(),
     });
 });

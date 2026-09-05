@@ -13,7 +13,6 @@ namespace FindJobHelper.WebUi;
 
 public sealed record SaveConfigOutcome(
     bool Saved,
-    string? Backup,
     IReadOnlyList<string> Errors);
 
 /// <summary>
@@ -28,16 +27,11 @@ public sealed record SaveConfigOutcome(
 public sealed class ConfigEditor
 {
     /// <summary>
-    /// Backup policy (decided at the w4u.6 fold): every save overwrites a
-    /// single <c>config.json.bak</c> next to the live file, so one previous
-    /// version is always recoverable and backups never accumulate.
-    /// Timestamped backups were rejected: application folders are scanned and
-    /// ingested, and a growing pile of snapshots would pollute those
-    /// listings. <see cref="ApplicationCatalog"/> excludes this name when
-    /// scanning folders.
+    /// No backup is kept on save: history lives in source control.
+    /// <see cref="ApplicationCatalog"/> still excludes <c>*.bak</c> names
+    /// when scanning folders, so backups left by older builds never leak
+    /// into listings.
     /// </summary>
-    public const string BackupFileName = "config.json.bak";
-
     private const string ConfigFileName = "config.json";
 
     /// <summary>
@@ -132,8 +126,9 @@ public sealed class ConfigEditor
     }
 
     /// <summary>
-    /// Validates with the loader, then writes a <see cref="BackupFileName"/>
-    /// backup before overwriting <c>config.json</c>. Invalid content is
+    /// Validates with the loader, then overwrites <c>config.json</c>
+    /// directly (no backup — history lives in source control). Invalid
+    /// content is
     /// rejected before anything is written. The write is UTF-8 without BOM
     /// and otherwise byte-verbatim (comments and formatting survive because
     /// the editor text is stored raw, never re-serialized); a pre-existing
@@ -149,21 +144,13 @@ public sealed class ConfigEditor
         {
             return new SaveConfigOutcome(
                 Saved: false,
-                Backup: null,
                 Errors: errors);
         }
 
         var configPath = Path.Combine(folder, ConfigFileName);
-        if (File.Exists(configPath))
-        {
-            var backupPath = Path.Combine(folder, BackupFileName);
-            File.Copy(configPath, backupPath, overwrite: true);
-        }
-
         await File.WriteAllTextAsync(configPath, content, cancellationToken);
         return new SaveConfigOutcome(
             Saved: true,
-            Backup: BackupFileName,
             Errors: []);
     }
 
