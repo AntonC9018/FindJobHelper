@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using FindJobHelper.Configuration;
+using FindJobHelper.Configuration.Json;
 using FindJobHelper.Core;
 using FindJobHelper.CVGeneration;
 using ProviderFixtures.SyntheticProvider;

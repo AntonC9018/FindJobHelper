@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using CliWrap;
 using CodegenCS;
 using CodegenCS.IO;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 
@@ -739,14 +740,6 @@ public sealed class CvDataModel
     ];
     public NullableRegularString Website;
     public NullableRegularString GitHub;
-}
-
-public enum Section
-{
-    Languages,
-    WorkExperience,
-    Education,
-    PersonalProjects,
 }
 
 internal static class CvDataModelExtensions

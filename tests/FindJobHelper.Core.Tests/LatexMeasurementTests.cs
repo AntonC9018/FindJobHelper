@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CliWrap;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 using Microsoft.Data.Sqlite;

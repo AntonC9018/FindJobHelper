@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using FindJobHelper.Configuration;
 using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core;

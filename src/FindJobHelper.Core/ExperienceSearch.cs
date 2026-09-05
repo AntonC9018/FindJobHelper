@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using FindJobHelper.Configuration;
 using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core;

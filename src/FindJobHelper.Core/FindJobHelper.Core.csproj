@@ -5,6 +5,9 @@
         <IsPackable>true</IsPackable>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="..\FindJobHelper.Configuration\FindJobHelper.Configuration.csproj" />
+    </ItemGroup>
+    <ItemGroup>
         <PackageReference Include="CliWrap" Version="3.9.0" />
         <PackageReference Include="CodegenCS.Core" Version="3.5.0" />
         <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />

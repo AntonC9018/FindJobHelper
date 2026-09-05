@@ -1,4 +1,4 @@
-namespace FindJobHelper.CVGeneration;
+namespace FindJobHelper.Configuration;
 
 public readonly record struct CvPageCount
 {

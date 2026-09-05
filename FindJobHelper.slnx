@@ -6,6 +6,8 @@
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/FindJobHelper.Cli/FindJobHelper.Cli.csproj" />
+    <Project Path="src/FindJobHelper.Configuration/FindJobHelper.Configuration.csproj" />
+    <Project Path="src/FindJobHelper.Configuration.Json/FindJobHelper.Configuration.Json.csproj" />
     <Project Path="src/FindJobHelper.Core/FindJobHelper.Core.csproj" />
     <Project Path="src/TheirStack.Client/TheirStack.Client.csproj" />
     <Project Path="src/TheirStack.ClientGenerator/TheirStack.ClientGenerator.csproj" />

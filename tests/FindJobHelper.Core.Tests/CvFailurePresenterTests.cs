@@ -1,3 +1,4 @@
+using FindJobHelper.Configuration;
 using FindJobHelper.CVGeneration;
 
 namespace FindJobHelper.Core.Tests;

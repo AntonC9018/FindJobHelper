@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Collections.Frozen;
 using System.Security.Cryptography;
 using System.Text;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 

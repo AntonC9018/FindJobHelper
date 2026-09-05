@@ -221,6 +221,9 @@
         "dependencies": {
           "SQLitePCLRaw.core": "3.0.2"
         }
+      },
+      "Anton.FindJobHelper.Configuration": {
+        "type": "Project"
       }
     }
   }

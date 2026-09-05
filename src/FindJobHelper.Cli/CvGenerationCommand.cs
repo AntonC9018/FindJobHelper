@@ -1,4 +1,6 @@
 using CommandDotNet;
+using FindJobHelper.Configuration;
+using FindJobHelper.Configuration.Json;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
@@ -72,10 +74,13 @@ public sealed class CvGenerationCommand
     {
         try
         {
+            var configuration = await CvSelectionConfigurationLoader.LoadAsync(
+                arguments.Config,
+                cancellationToken);
             var result = await CvGenerationPipeline.RunAsync(
                 new CvGenerationPipelineRequest
                 {
-                    ConfigPath = arguments.Config,
+                    Config = configuration,
                     ExperienceDatabasePath = arguments.ExperienceDatabase,
                     OutputDirectory = arguments.OutputDirectory,
                     OutputFormat = arguments.OutputFormat,

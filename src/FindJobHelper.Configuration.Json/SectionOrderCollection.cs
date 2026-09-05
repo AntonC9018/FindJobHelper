@@ -3,7 +3,9 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-namespace FindJobHelper.CVGeneration;
+using FindJobHelper.Configuration;
+
+namespace FindJobHelper.Configuration.Json;
 
 [JsonConverter(typeof(SectionOrderCollectionJsonConverter))]
 public sealed class SectionOrderCollection : IReadOnlyList<Section>

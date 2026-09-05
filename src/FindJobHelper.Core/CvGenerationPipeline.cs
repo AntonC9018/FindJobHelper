@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text;
 using CodegenCS;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,7 +11,7 @@ namespace FindJobHelper.CVGeneration;
 
 public sealed record CvGenerationPipelineRequest
 {
-    public required string ConfigPath { get; init; }
+    public required CvSelectionConfiguration Config { get; init; }
 
     public required string ExperienceDatabasePath { get; init; }
 
@@ -91,12 +92,10 @@ public static class CvGenerationPipeline
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentException.ThrowIfNullOrWhiteSpace(request.ConfigPath);
+        ArgumentNullException.ThrowIfNull(request.Config);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputDirectory);
 
-        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
-            request.ConfigPath,
-            cancellationToken);
+        var configuration = request.Config;
         var fullOutputDirectory = Path.GetFullPath(request.OutputDirectory);
         var loadedProvider = ExperienceDatabaseProviderLoader.Load(
             request.ExperienceDatabasePath);

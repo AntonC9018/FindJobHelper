@@ -11,6 +11,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+        <ProjectReference Include="..\FindJobHelper.Configuration\FindJobHelper.Configuration.csproj" />
+        <ProjectReference Include="..\FindJobHelper.Configuration.Json\FindJobHelper.Configuration.Json.csproj" />
     </ItemGroup>
 
     <ItemGroup>

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageId>Anton.FindJobHelper.Configuration.Json</PackageId>
+        <Description>JSON loading and validation for the FindJobHelper CV selection configuration. BCL-only.</Description>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\FindJobHelper.Configuration\FindJobHelper.Configuration.csproj" />
+    </ItemGroup>
+</Project>

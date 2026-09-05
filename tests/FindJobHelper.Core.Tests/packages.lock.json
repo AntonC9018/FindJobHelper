@@ -373,9 +373,13 @@
           "xunit.extensibility.core": "[2.9.0]"
         }
       },
+      "Anton.FindJobHelper.Configuration": {
+        "type": "Project"
+      },
       "Anton.FindJobHelper.Core": {
         "type": "Project",
         "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
           "CliWrap": "[3.9.0, )",
           "CodegenCS.Core": "[3.5.0, )",
           "Microsoft.Data.Sqlite": "[10.0.9, )",

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CodegenCS;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 

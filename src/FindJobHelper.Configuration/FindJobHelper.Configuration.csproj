@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageId>Anton.FindJobHelper.Configuration</PackageId>
+        <Description>CV selection configuration contracts and domain model for FindJobHelper. BCL-only.</Description>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>FindJobHelper.Configuration.Json</_Parameter1>
+        </AssemblyAttribute>
+    </ItemGroup>
+</Project>
