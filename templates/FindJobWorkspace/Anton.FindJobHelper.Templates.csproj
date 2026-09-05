@@ -52,6 +52,9 @@
     <JsonPoke ContentPath="$(_StagedToolManifest)"
               Query="$.tools['anton.findjobhelper.cli'].version"
               Value="$(PackageVersion)" />
+    <JsonPoke ContentPath="$(_StagedToolManifest)"
+              Query="$.tools['anton.findjobhelper.webui'].version"
+              Value="$(PackageVersion)" />
     <ItemGroup>
       <Content Include="$(_StagedProviderProject)" Pack="true" PackagePath="content\$(TemplateProviderProjectDirectory)">
         <Link>$(TemplateProviderProjectName)</Link>
