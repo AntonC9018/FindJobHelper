@@ -231,12 +231,15 @@ if [[ ! -f "$font_marker" ]] || [[ "$(<"$font_marker")" != "$font_sha256" ]]; th
 fi
 
 if ((custom_font_root)); then
+  font_root_xml=${font_root//&/\&amp;}
+  font_root_xml=${font_root_xml//</\&lt;}
+  font_root_xml=${font_root_xml//>/\&gt;}
   cat >"$fontconfig_file" <<EOF
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
 <fontconfig>
   <include ignore_missing="no">/etc/fonts/fonts.conf</include>
-  <dir>$font_root</dir>
+  <dir>$font_root_xml</dir>
 </fontconfig>
 EOF
 fi
@@ -244,9 +247,9 @@ activate_custom_fontconfig
 fc-cache -f "$font_root" >/dev/null
 
 {
-  printf "export PATH='%s':\$PATH\n" "$bin_directory"
+  printf 'export PATH=%q:$PATH\n' "$bin_directory"
   if ((custom_font_root)); then
-    printf "export FONTCONFIG_FILE='%s'\n" "$fontconfig_file"
+    printf 'export FONTCONFIG_FILE=%q\n' "$fontconfig_file"
   fi
 } >"$install_root/findjobhelper-env.sh"
 check_installation
