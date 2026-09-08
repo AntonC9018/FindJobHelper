@@ -1,6 +1,11 @@
 <Project>
     <Import Project="TestReferences.targets" />
 
+    <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+        <Compile Include="$(MSBuildThisFileDirectory)RepositoryLatexTestEnvironment.cs"
+                 Link="RepositoryLatexTestEnvironment.cs" />
+    </ItemGroup>
+
     <ItemGroup>
         <None Include="$(MSBuildThisFileDirectory)data\**\*">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>

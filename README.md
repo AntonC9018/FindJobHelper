@@ -2,6 +2,21 @@
 
 This is a tool used to generate a CV by matching the given tags to your experience database.
 
+## Development tests
+
+The LaTeX-dependent tests use a minimal, repository-local TeX Live installation.
+Set it up once before running the complete test suite:
+
+```bash
+./scripts/setup-tests.sh
+dotnet test FindJobHelper.slnx
+```
+
+The toolchain and Liberation fonts are installed beneath the ignored `.tools/`
+directory. Test assemblies discover that installation automatically. Without it,
+tests that render or measure LaTeX fail; tests that do not use LaTeX remain
+available.
+
 ## Usage
 
 ### Basic idea
