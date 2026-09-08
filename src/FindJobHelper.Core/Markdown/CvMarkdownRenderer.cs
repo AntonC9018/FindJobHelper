@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using CodegenCS;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using static FindJobHelper.Core.Helper.DiagnosticFormatting;

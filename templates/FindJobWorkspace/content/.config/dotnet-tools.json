@@ -5,6 +5,10 @@
     "anton.findjobhelper.cli": {
       "version": "0.1.0",
       "commands": [ "find-job-helper" ]
+    },
+    "anton.findjobhelper.webui": {
+      "version": "0.1.0",
+      "commands": [ "find-job-webui" ]
     }
   }
 }

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <PackageId>Anton.FindJobHelper.WebUi</PackageId>
+        <Description>Local web UI for FindJobHelper workspaces.</Description>
+        <IsPackable>true</IsPackable>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>find-job-webui</ToolCommandName>
+        <InvariantGlobalization>false</InvariantGlobalization>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\FindJobHelper.Configuration\FindJobHelper.Configuration.csproj" />
+        <ProjectReference Include="..\FindJobHelper.Configuration.Json\FindJobHelper.Configuration.Json.csproj" />
+        <ProjectReference Include="..\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+        <ProjectReference Include="..\FindJobHelper.Generation\FindJobHelper.Generation.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+        <!-- Override Microsoft.Data.Sqlite's vulnerable transitive native bundle. -->
+        <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="wwwroot\**\*" CopyToOutputDirectory="Always" />
+    </ItemGroup>
+</Project>

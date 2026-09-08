@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CliWrap;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
 using Microsoft.Data.Sqlite;
@@ -1014,7 +1015,7 @@ public sealed class LatexMeasurementTests
             var shortPdfProgress = new ProgressTestReporter();
             await CvTemplate.Generate(new()
             {
-                ConfigFilePath = ProductionTemplatePath,
+                TemplatePath = ProductionTemplatePath,
                 OutputDirectory = shortDirectory,
                 Model = shortModel,
                 CancellationToken = CancellationToken.None,
@@ -1033,7 +1034,7 @@ public sealed class LatexMeasurementTests
             var twoPagePdfProgress = new ProgressTestReporter();
             await CvTemplate.Generate(new()
             {
-                ConfigFilePath = ProductionTemplatePath,
+                TemplatePath = ProductionTemplatePath,
                 OutputDirectory = twoPageDirectory,
                 Model = twoPageModel,
                 CancellationToken = CancellationToken.None,
@@ -1104,7 +1105,7 @@ public sealed class LatexMeasurementTests
 
             await CvTemplate.Generate(new()
             {
-                ConfigFilePath = ProductionTemplatePath,
+                TemplatePath = ProductionTemplatePath,
                 OutputDirectory = outputDirectory,
                 Model = model,
                 CancellationToken = CancellationToken.None,
@@ -1166,7 +1167,7 @@ public sealed class LatexMeasurementTests
 
             var result = await CvTemplate.Generate(new()
                 {
-                    ConfigFilePath = ProductionTemplatePath,
+                    TemplatePath = ProductionTemplatePath,
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,
@@ -1227,7 +1228,7 @@ public sealed class LatexMeasurementTests
 
             var result = await CvTemplate.Generate(new()
                 {
-                    ConfigFilePath = ProductionTemplatePath,
+                    TemplatePath = ProductionTemplatePath,
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,
@@ -1268,7 +1269,7 @@ public sealed class LatexMeasurementTests
             onePageModel.SectionOrder = [];
             var tooFewResult = await CvTemplate.Generate(new()
                 {
-                    ConfigFilePath = ProductionTemplatePath,
+                    TemplatePath = ProductionTemplatePath,
                     OutputDirectory = tooFewDirectory,
                     Model = onePageModel,
                     CancellationToken = CancellationToken.None,
@@ -1289,7 +1290,7 @@ public sealed class LatexMeasurementTests
             twoPageModel.PersonalProjects = CreateRenderedEvents("Project", 12);
             var tooManyResult = await CvTemplate.Generate(new()
                 {
-                    ConfigFilePath = ProductionTemplatePath,
+                    TemplatePath = ProductionTemplatePath,
                     OutputDirectory = tooManyDirectory,
                     Model = twoPageModel,
                     CancellationToken = CancellationToken.None,
@@ -1398,7 +1399,7 @@ public sealed class LatexMeasurementTests
 
             var result = await CvTemplate.Generate(new()
                 {
-                    ConfigFilePath = ProductionTemplatePath,
+                    TemplatePath = ProductionTemplatePath,
                     OutputDirectory = outputDirectory,
                     Model = model,
                     CancellationToken = CancellationToken.None,

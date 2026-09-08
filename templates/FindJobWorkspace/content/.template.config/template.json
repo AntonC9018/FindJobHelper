@@ -20,6 +20,18 @@
         "+x": "run.sh"
       },
       "continueOnError": false
+    },
+    {
+      "condition": "(OS != \"Windows_NT\")",
+      "description": "Make run-webui.sh executable",
+      "manualInstructions": [
+        { "text": "Run 'chmod +x run-webui.sh'." }
+      ],
+      "actionId": "cb9a6cf3-4f5c-4860-b9d2-03a574959774",
+      "args": {
+        "+x": "run-webui.sh"
+      },
+      "continueOnError": false
     }
   ],
   "tags": {

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PackageId>Anton.FindJobHelper.Generation</PackageId>
+        <Description>CV generation pipeline for FindJobHelper.</Description>
+        <IsPackable>true</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\FindJobHelper.Configuration\FindJobHelper.Configuration.csproj" />
+        <ProjectReference Include="..\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="CodegenCS.Core" Version="3.5.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+        <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
+        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
+    </ItemGroup>
+</Project>

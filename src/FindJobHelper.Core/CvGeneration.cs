@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using CliWrap;
 using CodegenCS;
 using CodegenCS.IO;
+using FindJobHelper.Configuration;
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 
@@ -14,7 +15,7 @@ namespace FindJobHelper.CVGeneration;
 
 public record struct GenerateParams()
 {
-    public required string ConfigFilePath;
+    public required string TemplatePath;
     public required string OutputDirectory;
     public required CvDataModel Model;
     public required CancellationToken CancellationToken;
@@ -276,7 +277,7 @@ public static class CvTemplate
         GenerateParams p,
         LatexProgressReporters progress)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(p.ConfigFilePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(p.TemplatePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(p.OutputDirectory);
         ArgumentNullException.ThrowIfNull(p.FontOptions);
         ArgumentNullException.ThrowIfNull(progress.Tex);
@@ -335,7 +336,7 @@ public static class CvTemplate
                     @"\typeout{{FJH_LAYOUT_FOOTER:\number\value{{page}}}}");
 
         writer.Write($$$$"""
-        \input{{{{{p.ConfigFilePath.Replace('\\', '/')}}}}}
+        \input{{{{{p.TemplatePath.Replace('\\', '/')}}}}}
         {{{{LatexFontConfigurationRenderer.Render(p.FontOptions)}}}}
 
         \begin{document}
@@ -739,14 +740,6 @@ public sealed class CvDataModel
     ];
     public NullableRegularString Website;
     public NullableRegularString GitHub;
-}
-
-public enum Section
-{
-    Languages,
-    WorkExperience,
-    Education,
-    PersonalProjects,
 }
 
 internal static class CvDataModelExtensions

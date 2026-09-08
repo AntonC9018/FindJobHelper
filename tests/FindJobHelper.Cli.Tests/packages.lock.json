@@ -405,7 +405,10 @@
       "Anton.FindJobHelper.Cli": {
         "type": "Project",
         "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
+          "Anton.FindJobHelper.Configuration.Json": "[1.0.0, )",
           "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "Anton.FindJobHelper.Generation": "[1.0.0, )",
           "CodegenCS.Core": "[3.5.0, )",
           "CommandDotNet": "[8.1.1, )",
           "Microsoft.Extensions.Configuration.Binder": "[10.0.10, )",
@@ -417,13 +420,38 @@
           "Spectre.Console": "[0.57.2, )"
         }
       },
+      "Anton.FindJobHelper.Configuration": {
+        "type": "Project"
+      },
+      "Anton.FindJobHelper.Configuration.Json": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )"
+        }
+      },
       "Anton.FindJobHelper.Core": {
         "type": "Project",
         "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
           "CliWrap": "[3.9.0, )",
           "CodegenCS.Core": "[3.5.0, )",
           "Microsoft.Data.Sqlite": "[10.0.9, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.2, )"
+        }
+      },
+      "Anton.FindJobHelper.Generation": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Configuration": "[1.0.0, )",
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "CodegenCS.Core": "[3.5.0, )",
+          "Microsoft.Extensions.Configuration": "[10.0.10, )",
+          "Microsoft.Extensions.Configuration.Binder": "[10.0.10, )",
+          "Microsoft.Extensions.Configuration.EnvironmentVariables": "[10.0.10, )",
+          "Microsoft.Extensions.Configuration.UserSecrets": "[10.0.10, )",
+          "Microsoft.Extensions.DependencyInjection": "[10.0.10, )",
+          "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
+          "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )"
         }
       },
       "constructorthrows": {

@@ -9,3 +9,9 @@ debug/
 *.out
 *.xdv
 *.synctex.gz
+data/**/*-debug.md
+# SQLite job store (workspace data, created on first UI run, rebuilt by Refresh).
+data/jobs.db
+data/jobs.db-journal
+data/jobs.db-wal
+data/jobs.db-shm

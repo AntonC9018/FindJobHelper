@@ -35,3 +35,15 @@
 - If a function does a guard chain, with the same return in each indicating 
   a successful early check, continue the guard chain all the way through,
   explicitly returning the "good" value at the end. 
+
+## CV generation entry point
+
+`FindJobHelper.Generation.CvGenerationPipeline` is the single public entry
+point for generating a CV. The CLI and the workspace web UI are thin frontends
+over it: they load the domain config via `FindJobHelper.Configuration.Json`
+and pass it to the pipeline. Keep orchestration (experience database
+loading, LaTeX discovery, font resolution, measurement, matching, artifact
+planning and publishing) in Generation; keep domain/search/rendering/
+measurement internals and the embedded LaTeX template in Core;
+keep console rendering, exit codes, and the Spectre progress display in the
+CLI, and transport concerns (HTTP, job queuing) in the frontend.

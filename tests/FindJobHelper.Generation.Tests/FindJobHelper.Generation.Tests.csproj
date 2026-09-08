@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\FindJobHelper.Generation\FindJobHelper.Generation.csproj" />
+        <ProjectReference Include="..\..\src\FindJobHelper.Core\FindJobHelper.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\ProviderFixtures\SyntheticProvider\SyntheticProvider.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\ConstructorThrows\ConstructorThrows.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\CreateThrows\CreateThrows.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\MultipleProviders\MultipleProviders.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\NoConstructor\NoConstructor.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\NullResult\NullResult.csproj" />
+    </ItemGroup>
+</Project>

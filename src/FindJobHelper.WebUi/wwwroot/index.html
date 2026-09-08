@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FindJob Applications</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="config-editor.css" />
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <h1>FindJob Applications</h1>
+            <span id="workspace-root" class="workspace" title="Workspace root"></span>
+        </div>
+        <div class="topbar-right">
+            <span id="db-status" class="db-status" title="Experience database">
+                <span class="dot"></span><span class="label">database</span>
+            </span>
+            <button id="rebuild-db" class="btn subtle" title="dotnet publish ExperienceDatabase">Rebuild DB</button>
+        </div>
+    </header>
+
+    <section class="toolbar">
+        <input id="search" type="search" placeholder="Search title, company, nr&hellip;" />
+        <div id="state-filters" class="state-filters"></div>
+        <button id="refresh" class="btn subtle" title="Ingest metadata.json into sqlite, then reload">Refresh</button>
+    </section>
+
+    <main>
+        <table class="apps" id="apps-table">
+            <thead>
+                <tr>
+                    <th class="col-nr">#</th>
+                    <th class="col-title">Position</th>
+                    <th class="col-events">Events</th>
+                    <th class="col-state">State</th>
+                    <th class="col-files">Files</th>
+                    <th class="col-actions">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="apps-body"></tbody>
+        </table>
+        <div id="empty-state" class="empty hidden">No applications match the current filter.</div>
+    </main>
+
+    <div id="toasts" class="toasts"></div>
+
+    <template id="detail-template">
+        <div class="detail">
+            <div class="already-texted hidden" data-role="already-texted"></div>
+            <div class="detail-columns">
+                <div class="detail-main">
+                    <div class="detail-tabs">
+                        <button class="tab active" data-tab="job_description.txt">Job description</button>
+                        <button class="tab" data-tab="company_info.md">Company research</button>
+                        <button class="tab" data-tab="config.json">Config</button>
+                    </div>
+                    <pre class="file-content" data-role="file-content">Loading&hellip;</pre>
+                </div>
+                <div class="detail-side">
+                    <div class="side-block">
+                        <h3>State</h3>
+                        <div class="state-editor">
+                            <select data-role="state-select"></select>
+                            <input data-role="state-note" type="text"
+                                   placeholder="Note (optional)" />
+                            <button class="btn primary" data-role="state-save">Save state</button>
+                        </div>
+                        <p class="raw-status" data-role="created-info"></p>
+                    </div>
+                    <div class="side-block">
+                        <h3>Recruiter</h3>
+                        <div class="recruiter" data-role="recruiter"></div>
+                    </div>
+                    <div class="side-block">
+                        <h3>Events</h3>
+                        <div class="events" data-role="events"></div>
+                    </div>
+                    <div class="side-block">
+                        <h3>Links</h3>
+                        <div class="links" data-role="links"></div>
+                    </div>
+                    <div class="side-block">
+                        <h3>Generate</h3>
+                        <div class="generate-buttons">
+                            <button class="btn primary" data-role="generate-pdf">Generate PDF</button>
+                            <button class="btn subtle" data-role="generate-md">Debug MD</button>
+                        </div>
+                        <div class="generation-progress hidden" data-role="generation-progress">
+                            <div class="progress-label" data-role="progress-label"></div>
+                            <div class="progress-track"><div class="progress-fill" data-role="progress-fill"></div></div>
+                        </div>
+                        <p class="generation-error hidden" data-role="generation-error"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="app.js"></script>
+    <script src="codemirror-bundle.js"></script>
+    <script src="config-editor.js"></script>
+</body>
+</html>
