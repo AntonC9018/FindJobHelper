@@ -14,6 +14,10 @@ while (( $# > 0 )); do
                 printf "Missing numeric value for '%s'. Use: run.sh [--force] [--port N] [-- <CLI arguments...>]\n" "$1" >&2
                 exit 2
             fi
+            if (( 10#$2 < 1 || 10#$2 > 65535 )); then
+                printf "Port must be between 1 and 65535, got '%s'. Use: run.sh [--force] [--port N] [-- <CLI arguments...>]\n" "$2" >&2
+                exit 2
+            fi
             port="$2"
             shift 2
             ;;
@@ -40,7 +44,7 @@ open_browser() {
     fi
 }
 
-script_directory=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+script_directory=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 provider_project="$script_directory/src/FindJobWorkspace.Provider"
 build_directory="$script_directory/build"
 provider_dll="$build_directory/FindJobWorkspace.Provider.dll"
@@ -49,12 +53,28 @@ if [[ $force == true || ! -f "$provider_dll" ]]; then
     dotnet publish "$provider_project" --output "$build_directory"
 fi
 
-# Single-instance gate for the web UI: a bound port means a server is already
-# up, so the caller must not spawn a second copy. (Best-effort like any
+# Single-instance gate for the web UI: a bound port alone does not identify
+# our UI, so verify /api/status before reusing it. (Best-effort like any
 # port probe: two truly simultaneous launches can still race.)
 ui_url="http://localhost:$port"
 if (exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null; then
-    printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+    if command -v curl >/dev/null 2>&1; then
+        status_response=$(curl -fsS --max-time 2 "$ui_url/api/status" 2>/dev/null || true)
+        status_workspace_root=$(printf '%s\n' "$status_response" | sed -n 's/.*"workspaceRoot"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        normalized_status_workspace_root=
+        if [[ -n $status_workspace_root && -d $status_workspace_root ]]; then
+            normalized_status_workspace_root=$(CDPATH= cd -- "$status_workspace_root" && pwd -P)
+        fi
+        if [[ $normalized_status_workspace_root == "$script_directory" ]]; then
+            printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+        else
+            printf 'Port %s is already in use by another process (not the FindJob web UI for this workspace). Stop it or pass --port <N>.\n' "$port" >&2
+            exit 1
+        fi
+    else
+        printf 'Port %s is already in use, but curl is unavailable to verify the FindJob web UI. Install curl, stop the listener, or pass --port <N>.\n' "$port" >&2
+        exit 1
+    fi
 else
     # Detached: the UI outlives generation (nohup plus background). --no-browser
     # because this script opens the browser itself below, so one launch always
@@ -64,7 +84,15 @@ else
 fi
 
 # Unconditional: a double-launch reuses the single server yet still opens the
-# browser. On a cold start the server takes a while to build; refresh once.
+# browser. On a cold start the server takes a while to build: wait until the
+# port answers before opening, then refresh once if it is still warming up.
+deadline=$((SECONDS + 120))
+while (( SECONDS < deadline )); do
+    if (exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null; then
+        break
+    fi
+    sleep 0.5
+done
 open_browser "$ui_url" >/dev/null 2>&1 &
 
 # Alternatively, remove these assignments and configure email and phone with

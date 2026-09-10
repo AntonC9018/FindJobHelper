@@ -96,7 +96,13 @@ public static class LatexBinaryDirectoryResolver
         string selectionSource,
         string directory)
     {
-        var fullDirectory = Path.GetFullPath(directory);
+        var fullDirectory = TryNormalizePathDirectory(directory);
+        if (fullDirectory is null)
+        {
+            throw new InvalidOperationException(
+                $"LaTeX binary directory '{directory}' selected by {selectionSource} is not a valid path.");
+        }
+
         var result = TryResolveFromDirectory(selectionSource, fullDirectory);
         if (result is not null)
         {

@@ -6,3 +6,4 @@ artifacts-dotnet-releaser
 *.received*
 ~$*
 .idea
+/.tools/

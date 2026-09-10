@@ -30,8 +30,10 @@ check_only=0
 font_version=2.1.5
 font_url='https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz'
 font_sha256='7191c669bf38899f73a2094ed00f7b800553364f90e2637010a69c0e268f25d0'
-font_root="${HOME}/.local/share/fonts/findjobhelper/liberation-fonts-${font_version}"
-font_marker="$font_root/.archive-sha256-all-families"
+default_font_root="${HOME}/.local/share/fonts/findjobhelper/liberation-fonts-${font_version}"
+font_root="${FINDJOBHELPER_FONT_ROOT:-$default_font_root}"
+custom_font_root=0
+[[ -z "${FINDJOBHELPER_FONT_ROOT:-}" ]] || custom_font_root=1
 packages=(babel-romanian xifthen ifmtarg moresize zref needspace multirow wrapfig varwidth environ)
 temporary_directories=()
 
@@ -44,7 +46,7 @@ cleanup() {
 trap cleanup EXIT
 
 usage() {
-  printf 'Usage: %s [--check] [--install-root PATH]\n' "$0"
+  printf 'Usage: %s [--check] [--install-root PATH] [--font-root PATH]\n' "$0"
 }
 
 while (($#)); do
@@ -53,10 +55,18 @@ while (($#)); do
     --install-root)
       (($# >= 2)) || { printf '%s\n' '--install-root requires a path.' >&2; exit 2; }
       install_root=$2; shift 2 ;;
+    --font-root)
+      (($# >= 2)) || { printf '%s\n' '--font-root requires a path.' >&2; exit 2; }
+      font_root=$2
+      custom_font_root=1
+      shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) printf 'Unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+font_marker="$font_root/.archive-sha256-all-families"
+fontconfig_file="$install_root/findjobhelper-fontconfig.conf"
 
 case "$(uname -s)" in
   Linux) ;;
@@ -108,6 +118,15 @@ verify_font() {
   }
 }
 
+activate_custom_fontconfig() {
+  ((custom_font_root)) || return 0
+  [[ -f "$fontconfig_file" ]] || {
+    printf 'Fontconfig configuration is missing: %s\n' "$fontconfig_file" >&2
+    exit 1
+  }
+  export FONTCONFIG_FILE="$fontconfig_file"
+}
+
 check_installation() {
   require_command fc-match
   local bin_directory
@@ -132,6 +151,7 @@ check_installation() {
 }
 
 if ((check_only)); then
+  activate_custom_fontconfig
   check_installation
   exit 0
 fi
@@ -209,7 +229,27 @@ if [[ ! -f "$font_marker" ]] || [[ "$(<"$font_marker")" != "$font_sha256" ]]; th
   tar -xzf "$font_archive" -C "$font_root" --strip-components=1 --wildcards '*/LiberationSerif-*.ttf' '*/LiberationSans-*.ttf' '*/LiberationMono-*.ttf'
   printf '%s\n' "$font_sha256" >"$font_marker"
 fi
+
+if ((custom_font_root)); then
+  font_root_xml=${font_root//&/\&amp;}
+  font_root_xml=${font_root_xml//</\&lt;}
+  font_root_xml=${font_root_xml//>/\&gt;}
+  cat >"$fontconfig_file" <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <include ignore_missing="no">/etc/fonts/fonts.conf</include>
+  <dir>$font_root_xml</dir>
+</fontconfig>
+EOF
+fi
+activate_custom_fontconfig
 fc-cache -f "$font_root" >/dev/null
 
-printf "export PATH='%s':\$PATH\n" "$bin_directory" >"$install_root/findjobhelper-env.sh"
+{
+  printf 'export PATH=%q:$PATH\n' "$bin_directory"
+  if ((custom_font_root)); then
+    printf 'export FONTCONFIG_FILE=%q\n' "$fontconfig_file"
+  fi
+} >"$install_root/findjobhelper-env.sh"
 check_installation

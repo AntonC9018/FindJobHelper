@@ -103,6 +103,7 @@ public sealed class GenerationJobManager : IDisposable
                 $"The experience database DLL was not found at '{databasePath}'. Rebuild the database first.");
         }
 
+        var resolvedOutputDirectory = ResolveOutputDirectory(folder, outputDirectory);
         var job = new GenerationJob(applicationKey, folder, debug);
         lock (_jobsSync)
         {
@@ -111,9 +112,81 @@ public sealed class GenerationJobManager : IDisposable
         }
 
         _ = Task.Run(
-            () => RunJobAsync(job, configPath, databasePath, outputDirectory),
+            () => RunJobAsync(job, configPath, databasePath, resolvedOutputDirectory),
             CancellationToken.None);
         return job.Snapshot();
+    }
+
+    private static string ResolveOutputDirectory(string jobFolder, string? requested)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            return jobFolder;
+        }
+
+        if (Path.IsPathRooted(requested))
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' must be inside the application folder.");
+        }
+
+        string combined;
+        try
+        {
+            combined = Path.Combine(jobFolder, requested);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' is not valid: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' is not valid: {ex.Message}");
+        }
+
+        string fullPath;
+        try
+        {
+            fullPath = Path.GetFullPath(combined);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' is not valid: {ex.Message}");
+        }
+        catch (PathTooLongException ex)
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' is not valid: {ex.Message}");
+        }
+        catch (NotSupportedException ex)
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' is not valid: {ex.Message}");
+        }
+
+        var folderFullPath = Path.GetFullPath(jobFolder);
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(fullPath, folderFullPath, comparison))
+        {
+            return fullPath;
+        }
+
+        var trimmedFolder = folderFullPath.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        var prefix = trimmedFolder + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(prefix, comparison))
+        {
+            throw new InvalidOperationException(
+                $"Output directory '{requested}' must be inside the application folder.");
+        }
+
+        return fullPath;
     }
 
     private async Task RunJobAsync(

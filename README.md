@@ -2,6 +2,21 @@
 
 This is a tool used to generate a CV by matching the given tags to your experience database.
 
+## Development tests
+
+The LaTeX-dependent tests use a minimal, repository-local TeX Live installation.
+Set it up once before running the complete test suite:
+
+```bash
+./scripts/setup-tests.sh
+dotnet test FindJobHelper.slnx
+```
+
+The toolchain and Liberation fonts are installed beneath the ignored `.tools/`
+directory. Test assemblies discover that installation automatically. Without it,
+tests that render or measure LaTeX fail; tests that do not use LaTeX remain
+available.
+
 ## Usage
 
 ### Basic idea
@@ -141,7 +156,7 @@ Below is an AI-generated summary of the parameters specified in `config.json`.
 ### Search parameters
 
 | Parameter | Default | Effect |
-| --- | --- | --- | --- |
+| --- | --- | --- |
 | `minItemBudget` | `0` | Tries to select at least this many bullets in the section. Minimum filling may accept a candidate even when its MMR score is non-positive, but cannot invent matching candidates or bypass page-layout admission. |
 | `itemBudget` | Unlimited | Maximum number of bullets in the section. Dependencies and other required companion bullets count toward the budget. `minItemBudget` cannot exceed it. |
 | `scoreLowerBound` | `0` | Removes a bullet before MMR ranking when its tag relevance, including the direct-match bonus, is below this value. The later recency bonus remains excluded. |

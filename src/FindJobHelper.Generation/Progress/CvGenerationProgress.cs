@@ -350,6 +350,9 @@ public sealed class RedirectedCvGenerationProgressDisplay(
                 when (heartbeatCancellation.IsCancellationRequested)
             {
             }
+            catch (Exception)
+            {
+            }
         }
     }
 
