@@ -857,6 +857,11 @@ async function refreshGenerationResult(key) {
     const body = await api("/api/applications");
     app.applications = (body.applications || []).map(normalizeFiles);
     app.activeGenerations = body.activeGenerations || [];
+    for (const job of app.activeGenerations) {
+        if (!app.jobs[job.applicationKey]) {
+            app.jobs[job.applicationKey] = job;
+        }
+    }
     renderStateFilters();
     const fresh = app.applications.find(candidate => candidate.key === key);
     if (!fresh) {
