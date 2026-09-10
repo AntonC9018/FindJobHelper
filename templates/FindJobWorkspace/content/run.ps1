@@ -85,21 +85,23 @@ function Test-UiPortOpen([int]$probePort) {
     }
 }
 
-function Test-FindJobUi([string]$baseUrl) {
+function Test-FindJobUi([string]$baseUrl, [string]$workspaceRoot) {
     try {
         $status = Invoke-RestMethod -Uri "$baseUrl/api/status" -TimeoutSec 2
-        if ($null -ne $status.workspaceRoot) {
-            return $true
+        if ($null -eq $status.workspaceRoot) {
+            return $false
         }
-        return $false
+        $statusWorkspaceRoot = [IO.Path]::GetFullPath([string]$status.workspaceRoot)
+        return $statusWorkspaceRoot -eq $workspaceRoot
     } catch {
         return $false
     }
 }
 
 $uiUrl = "http://localhost:$Port"
+$workspaceRoot = [IO.Path]::GetFullPath($PSScriptRoot)
 if (Test-UiPortOpen $Port) {
-    if (Test-FindJobUi $uiUrl) {
+    if (Test-FindJobUi $uiUrl $workspaceRoot) {
         Write-Host "FindJob web UI is already running on $uiUrl."
     } else {
         throw "Port $Port is already in use by another process (not the FindJob web UI). Stop it or pass -Port <N>."

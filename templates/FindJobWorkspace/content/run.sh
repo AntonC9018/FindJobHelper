@@ -44,7 +44,7 @@ open_browser() {
     fi
 }
 
-script_directory=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+script_directory=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 provider_project="$script_directory/src/FindJobWorkspace.Provider"
 build_directory="$script_directory/build"
 provider_dll="$build_directory/FindJobWorkspace.Provider.dll"
@@ -60,17 +60,20 @@ ui_url="http://localhost:$port"
 if (exec 3<>"/dev/tcp/localhost/$port") 2>/dev/null; then
     if command -v curl >/dev/null 2>&1; then
         status_response=$(curl -fsS --max-time 2 "$ui_url/api/status" 2>/dev/null || true)
-        case "$status_response" in
-            *workspaceRoot*)
-                printf 'FindJob web UI is already running on %s.\n' "$ui_url"
-                ;;
-            *)
-                printf 'Port %s is already in use by another process (not the FindJob web UI). Stop it or pass --port <N>.\n' "$port" >&2
-                exit 1
-                ;;
-        esac
+        status_workspace_root=$(printf '%s\n' "$status_response" | sed -n 's/.*"workspaceRoot"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        normalized_status_workspace_root=
+        if [[ -n $status_workspace_root && -d $status_workspace_root ]]; then
+            normalized_status_workspace_root=$(CDPATH= cd -- "$status_workspace_root" && pwd -P)
+        fi
+        if [[ $normalized_status_workspace_root == "$script_directory" ]]; then
+            printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+        else
+            printf 'Port %s is already in use by another process (not the FindJob web UI for this workspace). Stop it or pass --port <N>.\n' "$port" >&2
+            exit 1
+        fi
     else
-        printf 'FindJob web UI is already running on %s.\n' "$ui_url"
+        printf 'Port %s is already in use, but curl is unavailable to verify the FindJob web UI. Install curl, stop the listener, or pass --port <N>.\n' "$port" >&2
+        exit 1
     fi
 else
     # Detached: the UI outlives generation (nohup plus background). --no-browser
