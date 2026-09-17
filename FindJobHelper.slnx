@@ -34,6 +34,8 @@
     <Project Path="tests/ProviderFixtures/MultipleProviders/MultipleProviders.csproj" />
     <Project Path="tests/ProviderFixtures/NoConstructor/NoConstructor.csproj" />
     <Project Path="tests/ProviderFixtures/NullResult/NullResult.csproj" />
+    <Project Path="tests/ProviderFixtures/ReloadableProviderV1/ReloadableProviderV1.csproj" />
+    <Project Path="tests/ProviderFixtures/ReloadableProviderV2/ReloadableProviderV2.csproj" />
     <Project Path="tests/ProviderFixtures/SyntheticProvider/SyntheticProvider.csproj" />
   </Folder>
 </Solution>

@@ -55,13 +55,16 @@ public sealed class CvGenerationCommand
             return ExitCodes.ValidationError;
         }
 
-        var tagsDatabase = loadedProvider.Result.TagsDatabase;
-        foreach (var tag in tagsDatabase.TagsGraph.Keys
-                     .Select(static tag => tag.Name)
-                     .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(static name => name, StringComparer.Ordinal))
+        using (loadedProvider)
         {
-            Console.WriteLine(tag);
+            var tagsDatabase = loadedProvider.Result.TagsDatabase;
+            foreach (var tag in tagsDatabase.TagsGraph.Keys
+                         .Select(static tag => tag.Name)
+                         .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(static name => name, StringComparer.Ordinal))
+            {
+                Console.WriteLine(tag);
+            }
         }
 
         return ExitCodes.Success;
