@@ -193,7 +193,7 @@ public sealed class ConfigEditor
         try
         {
             var shadowPath = ExperienceDatabaseShadow.Copy(databasePath);
-            var loaded = ExperienceDatabaseProviderLoader.Load(shadowPath);
+            using var loaded = ExperienceDatabaseProviderLoader.Load(shadowPath);
             return loaded.Result.TagsDatabase.TagsGraph.Keys
                 .Select(static tag => tag.Name)
                 .Distinct()

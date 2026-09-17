@@ -11,5 +11,20 @@
         <ProjectReference Include="..\ProviderFixtures\MultipleProviders\MultipleProviders.csproj" />
         <ProjectReference Include="..\ProviderFixtures\NoConstructor\NoConstructor.csproj" />
         <ProjectReference Include="..\ProviderFixtures\NullResult\NullResult.csproj" />
+        <ProjectReference Include="..\ProviderFixtures\ReloadableProviderV1\ReloadableProviderV1.csproj"
+                          ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\ProviderFixtures\ReloadableProviderV2\ReloadableProviderV2.csproj"
+                          ReferenceOutputAssembly="false" />
     </ItemGroup>
+
+    <Target Name="CopyReloadableProviderFixture" AfterTargets="Build">
+        <PropertyGroup>
+            <ReloadableProviderV1FixturePath>$(MSBuildThisFileDirectory)..\ProviderFixtures\ReloadableProviderV1\bin\$(Configuration)\$(TargetFramework)\ReloadableProvider.dll</ReloadableProviderV1FixturePath>
+            <ReloadableProviderV2FixturePath>$(MSBuildThisFileDirectory)..\ProviderFixtures\ReloadableProviderV2\bin\$(Configuration)\$(TargetFramework)\ReloadableProvider.dll</ReloadableProviderV2FixturePath>
+        </PropertyGroup>
+        <Copy SourceFiles="$(ReloadableProviderV1FixturePath)"
+              DestinationFolder="$(OutDir)ProviderFixtures\first" />
+        <Copy SourceFiles="$(ReloadableProviderV2FixturePath)"
+              DestinationFolder="$(OutDir)ProviderFixtures\second" />
+    </Target>
 </Project>

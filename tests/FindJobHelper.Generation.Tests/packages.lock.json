@@ -425,6 +425,12 @@
           "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
+      "reloadableprovider": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Core": "[1.0.0, )"
+        }
+      },
       "syntheticprovider": {
         "type": "Project",
         "dependencies": {

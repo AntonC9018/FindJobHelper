@@ -98,7 +98,7 @@ public static class CvGenerationPipeline
 
         var configuration = request.Config;
         var fullOutputDirectory = Path.GetFullPath(request.OutputDirectory);
-        var loadedProvider = ExperienceDatabaseProviderLoader.Load(
+        using var loadedProvider = ExperienceDatabaseProviderLoader.Load(
             request.ExperienceDatabasePath);
         var providerResult = loadedProvider.Result;
         var searchConfiguration = configuration.BuildSearch(
