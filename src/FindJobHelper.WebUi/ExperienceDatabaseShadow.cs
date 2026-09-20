@@ -29,6 +29,12 @@ internal static class ExperienceDatabaseShadow
             hashPrefix);
         Directory.CreateDirectory(shadowDirectory);
         var shadowPath = Path.Combine(shadowDirectory, Path.GetFileName(databasePath));
+        var isFresh = ShadowIsFresh(shadowPath, hash);
+        if (isFresh)
+        {
+            return shadowPath;
+        }
+
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -41,5 +47,36 @@ internal static class ExperienceDatabaseShadow
                 Thread.Sleep(200);
             }
         }
+    }
+
+    /// <summary>
+    /// Reports whether the shadow copy already holds the same content, so a
+    /// path locked by an earlier load is reused instead of overwritten.
+    /// </summary>
+    private static bool ShadowIsFresh(string shadowPath, byte[] hash)
+    {
+        if (!File.Exists(shadowPath))
+        {
+            return false;
+        }
+
+        byte[] existing;
+        try
+        {
+            using (var stream = File.OpenRead(shadowPath))
+            {
+                existing = SHA256.HashData(stream);
+            }
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+
+        return existing.SequenceEqual(hash);
     }
 }
