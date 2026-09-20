@@ -1380,7 +1380,7 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public async Task ProductionGeneration_FailsWhenLeftMetadataExceedsItsColumn()
+    public async Task ProductionGeneration_SupportsLongSkillListsWithWrapping()
     {
         var outputDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -1404,11 +1404,14 @@ public sealed class LatexMeasurementTests
                     Model = model,
                     CancellationToken = CancellationToken.None,
                 }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
-            var exception = Assert.IsType<MetadataOverflowFailure>(result);
+            var generated = Assert.IsType<GeneratedCvArtifacts>(result);
 
-            Assert.Equal(
-                CvLatexErrors.MetadataLeftOverflowMessage,
-                CvFailurePresenter.Present(result).Message);
+            Assert.True(File.Exists(generated.PdfPath), "Expected the wrapped expertise layout to produce a PDF.");
+            var header = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderDocumentHeader(model));
+            Assert.Contains(@"\begin{cvexpertisetable}", header, StringComparison.Ordinal);
+            Assert.Contains(@"\expertiserow{Skills}", header, StringComparison.Ordinal);
+            Assert.Contains(@"\begin{cvcontactmetadatatable}", header, StringComparison.Ordinal);
         }
         finally
         {

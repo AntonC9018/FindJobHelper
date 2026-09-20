@@ -303,64 +303,224 @@ internal static class CvLatexFragmentRenderer
 
     private static FormattableString RenderMetadata(CvDataModel model)
     {
-        var count = Math.Max(model.CategorizedInfos.Length, model.CategorizedInfoLists.Length);
-        var rows = new List<FormattableString>(count);
-        for (var i = 0; i < count; i++)
-        {
-            var info = i < model.CategorizedInfos.Length ? model.CategorizedInfos[i] : default;
-            var list = i < model.CategorizedInfoLists.Length ? model.CategorizedInfoLists[i] : default;
-            var infoText = RenderMetadataInfo(info);
-            var listText = RenderMetadataList(list);
-            FormattableString row =
-                $@"\metasection{{{infoText}}}{{{listText}}}";
-            rows.Add(row);
-        }
-
-        FormattableString table = rows.Count == 0
-            ? Empty
-            : $$"""
-                \begin{cvmetasectiontable}
-                {{Join(rows, Environment.NewLine)}}
-                \end{cvmetasectiontable}
-                """;
-
+        var contactCells = CollectContactCells(model);
+        var expertiseRows = CollectExpertiseRows(model);
+        var contactTable = RenderContactTable(contactCells);
+        var expertiseTable = RenderExpertiseTable(expertiseRows);
         return $$"""
-            {{table}}
+            {{contactTable}}
             \vspace{-2pt}
             \textcolor{softcol}{\hrule}
             \vspace{6pt}
+            {{expertiseTable}}
             \normalsize
             % Match the final event padding and trailing flow-block line that
             % precede every later section.
             \vspace{6pt}
             \vspace{\cvsectionspacing}
             """;
+    }
 
-        static FormattableString RenderMetadataInfo(CategorizedInfo info)
+    private static List<FormattableString> CollectContactCells(CvDataModel model)
+    {
+        var cells = new List<FormattableString>();
+        foreach (var info in model.CategorizedInfos)
         {
-            if (info == default)
+            var isEmpty = info == default;
+            if (isEmpty)
             {
-                return Empty;
+                continue;
             }
 
-            var category = LatexConverter.ToLatexString(info.Category.DisplayName);
-            var value = FormatCategoryValue(info.Category, info.Value);
-            return $@"\textbf{{{category}:}} {value}";
+            var cell = RenderMetadataInfo(info);
+            cells.Add(cell);
         }
 
-        static FormattableString RenderMetadataList(CategorizedInfoList list)
+        foreach (var list in model.CategorizedInfoLists)
         {
-            if (list == default)
+            var isEmpty = list == default;
+            if (isEmpty)
             {
-                return Empty;
+                continue;
             }
 
-            var category = LatexConverter.ToLatexString(list.Category.DisplayName);
-            var renderedValues = list.Values.Select(value =>
-                FormatCategoryValue(list.Category, value));
-            var values = Join(renderedValues, ", ");
-            return $@"\textbf{{{category}:}} {values}";
+            var isExpertise = IsExpertiseCategory(list.Category);
+            if (isExpertise)
+            {
+                continue;
+            }
+
+            var hasValues = !list.Values.IsEmpty;
+            if (!hasValues)
+            {
+                continue;
+            }
+
+            var cell = RenderMetadataList(list);
+            cells.Add(cell);
         }
+
+        return cells;
+    }
+
+    private static List<FormattableString> CollectExpertiseRows(CvDataModel model)
+    {
+        var rows = new List<FormattableString>();
+        foreach (var list in model.CategorizedInfoLists)
+        {
+            var isEmpty = list == default;
+            if (isEmpty)
+            {
+                continue;
+            }
+
+            var isExpertise = IsExpertiseCategory(list.Category);
+            if (!isExpertise)
+            {
+                continue;
+            }
+
+            var hasValues = !list.Values.IsEmpty;
+            if (!hasValues)
+            {
+                continue;
+            }
+
+            var row = RenderExpertiseRow(list);
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
+    private static bool IsExpertiseCategory(Category category)
+    {
+        var isSkills = category.Equals(Category.Skills);
+        if (isSkills)
+        {
+            return true;
+        }
+
+        var isTechnologies = category.Equals(Category.Technologies);
+        if (isTechnologies)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static FormattableString RenderContactTable(List<FormattableString> cells)
+    {
+        var hasCells = cells.Count > 0;
+        if (!hasCells)
+        {
+            return Empty;
+        }
+
+        var rows = BuildContactRows(cells);
+        var joinedRows = Join(rows, Environment.NewLine);
+        return $$"""
+            \begin{cvcontactmetadatatable}
+            {{joinedRows}}
+            \end{cvcontactmetadatatable}
+            """;
+    }
+
+    private static List<FormattableString> BuildContactRows(List<FormattableString> cells)
+    {
+        const int columns = 3;
+        var paddedCount = cells.Count + columns;
+        var adjustedCount = paddedCount - 1;
+        var rowCount = adjustedCount / columns;
+        var rows = new List<FormattableString>(rowCount);
+        for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+        {
+            var row = BuildContactRow(cells, rowIndex, columns);
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
+    private static FormattableString BuildContactRow(
+        List<FormattableString> cells,
+        int rowIndex,
+        int columns)
+    {
+        var start = rowIndex * columns;
+        var first = GetCellOrEmpty(cells, start);
+        var secondIndex = start + 1;
+        var second = GetCellOrEmpty(cells, secondIndex);
+        var thirdIndex = start + 2;
+        var third = GetCellOrEmpty(cells, thirdIndex);
+        return $@"{first} & {second} & {third}\\[1pt]";
+    }
+
+    private static FormattableString GetCellOrEmpty(List<FormattableString> cells, int index)
+    {
+        var inRange = index < cells.Count;
+        if (!inRange)
+        {
+            return Empty;
+        }
+
+        var cell = cells[index];
+        return cell;
+    }
+
+    private static FormattableString RenderExpertiseTable(List<FormattableString> rows)
+    {
+        var hasRows = rows.Count > 0;
+        if (!hasRows)
+        {
+            return Empty;
+        }
+
+        var joinedRows = Join(rows, Environment.NewLine);
+        return $$"""
+            \begin{cvexpertisetable}
+            {{joinedRows}}
+            \end{cvexpertisetable}
+            """;
+    }
+
+    private static FormattableString RenderExpertiseRow(CategorizedInfoList list)
+    {
+        var label = LatexConverter.ToLatexString(list.Category.DisplayName);
+        var category = list.Category;
+        var renderedValues = list.Values.Select(value => FormatCategoryValue(category, value));
+        var values = Join(renderedValues, ", ");
+        return $@"\expertiserow{{{label}}}{{{values}}}";
+    }
+
+    private static FormattableString RenderMetadataInfo(CategorizedInfo info)
+    {
+        var isEmpty = info == default;
+        if (isEmpty)
+        {
+            return Empty;
+        }
+
+        var category = LatexConverter.ToLatexString(info.Category.DisplayName);
+        var value = FormatCategoryValue(info.Category, info.Value);
+        return $@"\textbf{{{category}:}} {value}";
+    }
+
+    private static FormattableString RenderMetadataList(CategorizedInfoList list)
+    {
+        var isEmpty = list == default;
+        if (isEmpty)
+        {
+            return Empty;
+        }
+
+        var category = LatexConverter.ToLatexString(list.Category.DisplayName);
+        var listCategory = list.Category;
+        var renderedValues = list.Values.Select(value =>
+            FormatCategoryValue(listCategory, value));
+        var values = Join(renderedValues, ", ");
+        return $@"\textbf{{{category}:}} {values}";
     }
 
     private static FormattableString FormatCategoryValue(Category category, RegularString value)
