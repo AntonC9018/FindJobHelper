@@ -39,6 +39,20 @@ public sealed class CvGenerationCliEndToEndTests
     }
 
     [Fact]
+    public async Task ExampleConfig_MasterPrintsMinimalConfiguration()
+    {
+        var result = await RunCliWithoutExperienceDatabaseAsync(
+            "example-config",
+            "--master");
+
+        AssertSuccessful(result);
+        Assert.Contains("sectionOrder", result.StandardOutput);
+        Assert.DoesNotContain("requiredTags", result.StandardOutput);
+        Assert.DoesNotContain("selection", result.StandardOutput);
+        Assert.DoesNotContain("pageCount", result.StandardOutput);
+    }
+
+    [Fact]
     public async Task ListTags_LoadsSyntheticProviderDll()
     {
         var result = await RunCliAsync("list-tags");
@@ -95,6 +109,39 @@ public sealed class CvGenerationCliEndToEndTests
                     "cv-selection.example.json")),
                 await File.ReadAllTextAsync(outputPath));
             Assert.Contains($"Created '{outputPath}'.", result.StandardOutput);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task NewConfig_MasterWritesMinimalExampleConfig()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-new-master-config-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliWithoutExperienceDatabaseAsync(
+                "new-config",
+                "--master",
+                "--output-directory",
+                outputDirectory);
+
+            AssertSuccessful(result);
+            var outputPath = Path.Combine(outputDirectory, "config.json");
+            Assert.True(File.Exists(outputPath));
+            Assert.Equal(
+                await File.ReadAllTextAsync(Path.Combine(
+                    AppContext.BaseDirectory,
+                    "data",
+                    "master-cv.example.json")),
+                await File.ReadAllTextAsync(outputPath));
         }
         finally
         {
@@ -229,6 +276,57 @@ public sealed class CvGenerationCliEndToEndTests
                 StringComparison.Ordinal);
             Assert.True(cleanMessageIndex >= 0);
             Assert.True(debugMessageIndex > cleanMessageIndex);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task MasterCv_DebugIncludesEveryExperienceWithoutMeasurementOrMatching()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"FindJobHelper-master-e2e-{Guid.NewGuid():N}");
+        try
+        {
+            var result = await RunCliAsync(
+                "master-cv",
+                "--config",
+                MasterFixturePath,
+                "--output-directory",
+                outputDirectory,
+                "--debug");
+
+            AssertSuccessful(result);
+            AssertProgressModuleTransitions(
+                result.StandardOutput,
+                (0, "Creating Markdown files"),
+                (100, "Creating Markdown files"));
+            Assert.DoesNotContain("Computing heights", result.StandardOutput);
+            Assert.DoesNotContain("Matching experiences", result.StandardOutput);
+
+            var files = GetFileNames(outputDirectory);
+            Assert.Equal(
+                new[] { "ExampleAlexMasterResume-debug.md", "ExampleAlexMasterResume.md" },
+                files);
+            var markdown = await ReadAndAssertMarkdownEncodingAsync(
+                Path.Combine(outputDirectory, "ExampleAlexMasterResume.md"));
+            Assert.StartsWith(
+                "# Alex Example\n\nExample Software Engineer\n",
+                markdown,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("Master Resume", markdown, StringComparison.Ordinal);
+            Assert.Contains("Example Software Engineer", markdown, StringComparison.Ordinal);
+            Assert.Contains("Example Documentation Engineer", markdown, StringComparison.Ordinal);
+            Assert.Contains("Example Portfolio Project", markdown, StringComparison.Ordinal);
+            Assert.Contains("Example Computer Science Degree", markdown, StringComparison.Ordinal);
+            Assert.Contains("Built a fictional \\.NET service", markdown, StringComparison.Ordinal);
+            Assert.Contains("Added deterministic automated tests", markdown, StringComparison.Ordinal);
         }
         finally
         {
@@ -816,6 +914,11 @@ public sealed class CvGenerationCliEndToEndTests
         AppContext.BaseDirectory,
         "data",
         "cli-e2e-multipage-config.json");
+
+    private static string MasterFixturePath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "cli-e2e-master-config.json");
 
     private static string Entry19FixturePath => Path.Combine(
         AppContext.BaseDirectory,

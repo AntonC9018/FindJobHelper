@@ -10,10 +10,8 @@ using Microsoft.Extensions.Options;
 
 namespace FindJobHelper.Generation;
 
-public sealed record CvGenerationPipelineRequest
+public abstract record CvGenerationPipelineRequestBase
 {
-    public required CvSelectionConfiguration Config { get; init; }
-
     public required string ExperienceDatabasePath { get; init; }
 
     public required string OutputDirectory { get; init; }
@@ -40,6 +38,16 @@ public sealed record CvGenerationPipelineRequest
     public string? TemplatePath { get; init; }
 
     public ICvGenerationProgressDisplay? ProgressDisplay { get; init; }
+}
+
+public sealed record CvGenerationPipelineRequest : CvGenerationPipelineRequestBase
+{
+    public required CvSelectionConfiguration Config { get; init; }
+}
+
+public sealed record MasterCvGenerationPipelineRequest : CvGenerationPipelineRequestBase
+{
+    public required MasterCvConfiguration Config { get; init; }
 }
 
 public sealed record CvGenerationPipelineResult
@@ -90,18 +98,40 @@ public static class CvGenerationPipeline
 {
     public static async Task<CvGenerationPipelineResult> RunAsync(
         CvGenerationPipelineRequest request,
+        CancellationToken cancellationToken) =>
+        await RunAsync(
+            request,
+            request.Config,
+            request.Config,
+            CvGenerationKind.Standard,
+            cancellationToken);
+
+    public static async Task<CvGenerationPipelineResult> RunMasterAsync(
+        MasterCvGenerationPipelineRequest request,
+        CancellationToken cancellationToken) =>
+        await RunAsync(
+            request,
+            request.Config,
+            null,
+            CvGenerationKind.Master,
+            cancellationToken);
+
+    private static async Task<CvGenerationPipelineResult> RunAsync(
+        CvGenerationPipelineRequestBase request,
+        ICvDocumentConfiguration configuration,
+        CvSelectionConfiguration? selectionConfiguration,
+        CvGenerationKind generationKind,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(request.Config);
+        ArgumentNullException.ThrowIfNull(configuration);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.OutputDirectory);
 
-        var configuration = request.Config;
         var fullOutputDirectory = Path.GetFullPath(request.OutputDirectory);
         using var loadedProvider = ExperienceDatabaseProviderLoader.Load(
             request.ExperienceDatabasePath);
         var providerResult = loadedProvider.Result;
-        var searchConfiguration = configuration.BuildSearch(
+        var searchConfiguration = selectionConfiguration?.BuildSearch(
             providerResult.TagsDatabase);
         var templatePath = ResolveTemplatePath(request.TemplatePath);
         var latexExecutables = LatexBinaryDirectoryResolver.Resolve(
@@ -117,10 +147,13 @@ public static class CvGenerationPipeline
             ? ClonePersonalInfo(providedPersonalInfo)
             : serviceProvider.GetRequiredService<IOptions<PersonalInfoOptions>>().Value;
         var profession = ResolveProfession(configuration, personalInfo);
+        var artifactNameSuffix = generationKind == CvGenerationKind.Master
+            ? "MasterResume"
+            : string.Empty;
         var artifactPlan = CvArtifactPlan.Create(
             request.OutputFormat,
             request.Debug,
-            $"{personalInfo.LastName}{personalInfo.FirstName}");
+            $"{personalInfo.LastName}{personalInfo.FirstName}{artifactNameSuffix}");
         if (request.Debug)
         {
             personalInfo.Phone = Miscellanious.BlurPhone(new()
@@ -140,7 +173,6 @@ public static class CvGenerationPipeline
                 Last = personalInfo.LastName,
             },
             CategorizedInfoLists = CreateMetadataLists(
-                searchConfiguration,
                 configuration,
                 personalInfo),
             CategorizedInfos =
@@ -153,11 +185,20 @@ public static class CvGenerationPipeline
             Languages = CreateDefaultLanguages(),
             Location = location,
             Summary = null,
-            SectionOrder = searchConfiguration.SectionOrder,
+            SectionOrder = configuration.SectionOrder,
+            DocumentTitle = generationKind == CvGenerationKind.Master
+                ? new("Master Resume")
+                : new("Resume"),
         };
 
-        var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
-        var progressPlan = CreateProgressPlan(artifactPlan);
+        if (generationKind == CvGenerationKind.Master)
+        {
+            ApplyMasterExperiences(providerResult.ExperienceDatabase, currentModel);
+        }
+
+        var progressPlan = CreateProgressPlan(
+            artifactPlan,
+            includeSelection: generationKind == CvGenerationKind.Standard);
         var progressDisplay = request.ProgressDisplay
             ?? NullCvGenerationProgressDisplay.Instance;
         CvFailurePresentation? failurePresentation = null;
@@ -165,34 +206,52 @@ public static class CvGenerationPipeline
             progressPlan,
             async progress =>
             {
-                progress.BeginModule(CvGenerationModule.ComputingHeights);
-                var measurementResult = await measurementService.MeasureAsync(
-                    providerResult.ExperienceDatabase,
-                    currentModel,
-                    templatePath,
-                    progress.Reporter(CvGenerationModule.ComputingHeights),
-                    fontConfiguration.Options,
-                    latexExecutionOptions,
-                    cancellationToken);
-                if (measurementResult is not CvMeasurementSnapshot measurementSnapshot)
+                CvPageCount pageCount;
+                CvPageLayout? pageLayout;
+                CvLatexLayoutMode layoutMode;
+                if (searchConfiguration is not null)
                 {
-                    failurePresentation = CvFailurePresenter.Present(measurementResult);
-                    return ImmutableDictionary<CvArtifactKind, string>.Empty;
-                }
-                progress.BeginModule(CvGenerationModule.MatchingExperiences);
-                var searchResult = searchConfiguration.Run(
-                    providerResult.ExperienceDatabase,
-                    measurementSnapshot,
-                    progress.Reporter(CvGenerationModule.MatchingExperiences));
+                    var measurementService = serviceProvider.GetRequiredService<LatexMeasurementService>();
+                    progress.BeginModule(CvGenerationModule.ComputingHeights);
+                    var measurementResult = await measurementService.MeasureAsync(
+                        providerResult.ExperienceDatabase,
+                        currentModel,
+                        templatePath,
+                        progress.Reporter(CvGenerationModule.ComputingHeights),
+                        fontConfiguration.Options,
+                        latexExecutionOptions,
+                        cancellationToken);
+                    if (measurementResult is not CvMeasurementSnapshot measurementSnapshot)
+                    {
+                        failurePresentation = CvFailurePresenter.Present(measurementResult);
+                        return ImmutableDictionary<CvArtifactKind, string>.Empty;
+                    }
+                    progress.BeginModule(CvGenerationModule.MatchingExperiences);
+                    var searchResult = searchConfiguration.Run(
+                        providerResult.ExperienceDatabase,
+                        measurementSnapshot,
+                        progress.Reporter(CvGenerationModule.MatchingExperiences));
 
-                searchConfiguration.Sections.Apply(searchResult, currentModel);
+                    searchConfiguration.Sections.Apply(searchResult, currentModel);
+                    pageCount = searchConfiguration.PageCount;
+                    pageLayout = searchConfiguration.PageLayout;
+                    layoutMode = CvLatexLayoutMode.AtomicSections;
+                }
+                else
+                {
+                    pageCount = CvPageCount.Unrestricted;
+                    pageLayout = null;
+                    layoutMode = CvLatexLayoutMode.FlowingItems;
+                }
+
                 var artifactResult = await GenerateAndPublishArtifactsAsync(
                     artifactPlan,
                     currentModel,
                     templatePath,
                     fullOutputDirectory,
-                    searchConfiguration.PageCount,
-                    searchConfiguration.PageLayout,
+                    pageCount,
+                    pageLayout,
+                    layoutMode,
                     latexExecutables.Paths,
                     fontConfiguration.Options,
                     latexExecutionOptions,
@@ -219,6 +278,12 @@ public static class CvGenerationPipeline
             PublishedPaths = publishedArtifactPaths,
             Failure = failurePresentation,
         };
+    }
+
+    private enum CvGenerationKind
+    {
+        Standard,
+        Master,
     }
 
     private static string ResolveTemplatePath(string? requestedTemplatePath)
@@ -311,8 +376,28 @@ public static class CvGenerationPipeline
         Portfolio = source.Portfolio,
     };
 
+    private static void ApplyMasterExperiences(
+        ExperienceDatabase database,
+        CvDataModel model)
+    {
+        var ordered = database.Experiences
+            .OrderByDescending(
+                static experience => experience.DateRange,
+                DateRangeComparer.ByEnd)
+            .ToArray();
+        model.WorkExperiences = ordered
+            .Where(static experience => experience.Type == ExperienceType.Job)
+            .AllEvents();
+        model.Educations = ordered
+            .Where(static experience => experience.Type.IsDegree())
+            .AllEvents();
+        model.PersonalProjects = ordered
+            .Where(static experience => experience.Type == ExperienceType.Project)
+            .AllEvents();
+    }
+
     private static string ResolveProfession(
-        CvSelectionConfiguration configuration,
+        ICvDocumentConfiguration configuration,
         PersonalInfoOptions personalInfo)
     {
         var profession = configuration.Profession ?? personalInfo.Profession;
@@ -349,14 +434,19 @@ public static class CvGenerationPipeline
     ];
 
     private static ImmutableArray<CategorizedInfoList> CreateMetadataLists(
-        ConfiguredCvSearch searchConfiguration,
-        CvSelectionConfiguration configuration,
+        ICvDocumentConfiguration configuration,
         PersonalInfoOptions personalInfo)
     {
+        var skills = configuration.Skills
+            .Select(static skill => new RegularString(skill))
+            .ToImmutableArray();
+        var technologies = configuration.Technologies
+            .Select(static technology => new RegularString(technology))
+            .ToImmutableArray();
         var lists = new List<CategorizedInfoList>
         {
-            new(Category.Skills, searchConfiguration.Skills),
-            new(Category.Technologies, searchConfiguration.Technologies),
+            new(Category.Skills, skills),
+            new(Category.Technologies, technologies),
         };
         var usesDefaultOrder = configuration.HeaderLinkOrder.IsDefault;
         var linkOrder = usesDefaultOrder
@@ -442,17 +532,19 @@ public static class CvGenerationPipeline
     ];
 
     private static CvGenerationProgressPlan CreateProgressPlan(
-        CvArtifactPlan artifactPlan)
+        CvArtifactPlan artifactPlan,
+        bool includeSelection)
     {
-        var modules = new List<CvGenerationProgressModule>
+        var modules = new List<CvGenerationProgressModule>();
+        if (includeSelection)
         {
-            new(
+            modules.Add(new(
                 CvGenerationModule.ComputingHeights,
-                "Computing heights"),
-            new(
+                "Computing heights"));
+            modules.Add(new(
                 CvGenerationModule.MatchingExperiences,
-                "Matching experiences"),
-        };
+                "Matching experiences"));
+        }
 
         if (artifactPlan.Artifacts.Any(
                 static artifact => artifact.Kind == CvArtifactKind.Pdf))
@@ -511,6 +603,7 @@ public static class CvGenerationPipeline
             string outputDirectory,
             CvPageCount pageCount,
             CvPageLayout? pageLayout,
+            CvLatexLayoutMode layoutMode,
             LatexExecutablePaths latexExecutables,
             LatexFontOptions fontOptions,
             LatexExecutionOptions latexExecutionOptions,
@@ -553,6 +646,7 @@ public static class CvGenerationPipeline
                                 OutputDirectory = stagingDirectory,
                                 PageCount = pageCount,
                                 PageLayout = pageLayout,
+                                LayoutMode = layoutMode,
                                 LatexExecutables = latexExecutables,
                                 FontOptions = fontOptions,
                                 ExecutionOptions = latexExecutionOptions,

@@ -65,6 +65,24 @@ internal static class CvLatexFragmentRenderer
                 progress));
     }
 
+    public static FormattableString RenderFlowingSection(
+        Section section,
+        CvDataModel model,
+        LatexRenderProgressBuilder? progress = null)
+    {
+        return model.DispatchSection(
+            section,
+            renderLanguages: languages =>
+            {
+                var inner = RenderLanguagesSectionInner(languages);
+                return RenderProductionSection(section, inner);
+            },
+            renderEvents: events => RenderFlowingEventsSection(
+                section,
+                events,
+                progress));
+    }
+
     private static FormattableString RenderProductionSection(
         string sectionLabel,
         FormattableString innerLatex)
@@ -171,6 +189,39 @@ internal static class CvLatexFragmentRenderer
         return $"{Join(units, Environment.NewLine + Environment.NewLine)}";
     }
 
+    private static FormattableString RenderFlowingEventsSection(
+        Section section,
+        ImmutableArray<Event> events,
+        LatexRenderProgressBuilder? progress)
+    {
+        if (events.IsEmpty)
+        {
+            return Empty;
+        }
+
+        var renderedEvents = new List<FormattableString>(events.Length);
+        for (var index = 0; index < events.Length; index++)
+        {
+            var currentPrefix = index == 0
+                ? $@"\cvflowblockfitskip{RenderSectionChrome(section)}"
+                : Empty;
+            var freshPrefix = index == 0
+                ? $@"\cvflowblocknewpageskip\cvflowblockfitskip{RenderSectionChrome(section)}"
+                : Literal(@"\cvflowblocknewpageskip");
+            renderedEvents.Add(RenderFlowingEvent(
+                events[index],
+                section.ToDisplayString(),
+                currentPrefix,
+                freshPrefix,
+                progress));
+        }
+
+        return $$"""
+            {{Join(renderedEvents, Environment.NewLine + Environment.NewLine)}}
+            \cvflowblocktrailingglue
+            """;
+    }
+
     private static FormattableString RenderExplicitUnit(
         Section section,
         string? eventDiagnostic,
@@ -194,7 +245,56 @@ internal static class CvLatexFragmentRenderer
         string? sectionName = null,
         LatexRenderProgressBuilder? progress = null)
     {
-        var itemFragments = new List<FormattableString>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
+        var itemFragments = RenderEventItems(@event, sectionName, progress);
+
+        FormattableString place = @event.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
+        return RenderEventCore(
+            $"{@event.DateRange}",
+            $"{LatexConverter.ToLatexString(@event.Title)}",
+            place,
+            $"{Join(itemFragments, Environment.NewLine)}",
+            RenderRichText(@event.Text));
+    }
+
+    private static FormattableString RenderFlowingEvent(
+        Event @event,
+        string sectionName,
+        FormattableString currentPrefix,
+        FormattableString freshPrefix,
+        LatexRenderProgressBuilder? progress)
+    {
+        var items = RenderEventItems(@event, sectionName, progress);
+        var firstItem = items.Count == 0 ? Empty : items[0];
+        var remainingItems = items.Skip(1);
+        FormattableString place = @event.Place.IsPersonal
+            ? Empty
+            : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
+        var start = $$"""
+            \begin{cvflowingopening}
+            { {{currentPrefix}} }
+            { {{freshPrefix}} }
+            \cvflowingeventstart
+            { {{@event.DateRange}} }
+            { {{LatexConverter.ToLatexString(@event.Title)}} }
+            { {{place}} }
+            { {{RenderRichText(@event.Text)}} }
+            {{firstItem}}
+            \end{cvflowingopening}
+            """;
+        return $$"""
+            {{start}}
+            {{Join(remainingItems, Environment.NewLine)}}
+            \cvflowingeventend
+            """;
+    }
+
+    private static List<FormattableString> RenderEventItems(
+        Event @event,
+        string? sectionName,
+        LatexRenderProgressBuilder? progress)
+    {
+        var itemFragments = new List<FormattableString>(
+            @event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
         for (var index = 0; index < @event.SubItems.Length; index++)
         {
             var renderedItem = RenderEventItem(
@@ -220,13 +320,7 @@ internal static class CvLatexFragmentRenderer
             itemFragments.Add(RenderEventItem($@"\textbf{{Links:}} {urls}"));
         }
 
-        FormattableString place = @event.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
-        return RenderEventCore(
-            $"{@event.DateRange}",
-            $"{LatexConverter.ToLatexString(@event.Title)}",
-            place,
-            $"{Join(itemFragments, Environment.NewLine)}",
-            RenderRichText(@event.Text));
+        return itemFragments;
     }
 
     public static FormattableString RenderExperienceChrome(ExperienceList list)
@@ -279,7 +373,7 @@ internal static class CvLatexFragmentRenderer
         return $$$"""
             \vspace{-8pt}
             \begin{center}
-            \HUGE \textsc{ {{{LatexConverter.ToLatexString(model.Name.Last)}}} {{{LatexConverter.ToLatexString(model.Name.First)}}} } \textsc{Resume}\\[2pt]
+            \HUGE \textsc{ {{{LatexConverter.ToLatexString(model.Name.Last)}}} {{{LatexConverter.ToLatexString(model.Name.First)}}} } \textsc{ {{{LatexConverter.ToLatexString(model.DocumentTitle)}}} }\\[2pt]
             \small {{{LatexConverter.ToLatexString(model.Profession.Value)}}}
             \end{center}
             \vspace{6pt}

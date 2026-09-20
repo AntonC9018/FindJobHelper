@@ -42,7 +42,43 @@ public sealed class ExperienceSearchTests
     }
 
     [Fact]
-    public void Search_ThrowsWhenDependencyClosureContainsMutuallyExclusiveItems()
+    public void Search_MutuallyExclusiveAlwaysItemsKeepFirstCandidate()
+    {
+        var tag = new Tag("a");
+        var first = RequiredItem(
+            "first",
+            ItemRequirement.Always,
+            (tag, 1));
+        var excluded = RequiredItem(
+            "excluded",
+            ItemRequirement.Always,
+            (tag, 1));
+        var list = Experience("work", ExperienceType.Job, 2025, first, excluded);
+        list = new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Type = list.Type,
+            Items = list.Items,
+            ItemExclusionSets =
+            [
+                new ExperienceItemExclusionSet
+                {
+                    Items = [first, excluded],
+                },
+            ],
+        };
+        var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
+        builder.Configure(WorkKey, _ => true, options => options.ItemBudget = 1);
+
+        var result = builder.Build().Run([list], NoOpProgressReporter.Instance);
+
+        Assert.Equal(new[] { "first" }, Texts(result.Get(WorkKey)));
+    }
+
+    [Fact]
+    public void Search_RejectsCandidateWhenDependencyClosureContainsMutuallyExclusiveItems()
     {
         var tag = new Tag("a");
         var dependency = Item("dependency", (tag, 1));
@@ -60,11 +96,9 @@ public sealed class ExperienceSearchTests
         var builder = NewBuilder(WeightedTags.Create([(tag, 1)]));
         builder.Configure(WorkKey, _ => true, options => options.ItemBudget = 2);
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            builder.Build().Run([list], NoOpProgressReporter.Instance));
+        var result = builder.Build().Run([list], NoOpProgressReporter.Instance);
 
-        Assert.Contains("closure", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("mutually exclusive", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new[] { "dependency" }, Texts(result.Get(WorkKey)));
     }
 
     [Fact]

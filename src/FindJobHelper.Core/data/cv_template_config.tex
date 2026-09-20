@@ -306,6 +306,34 @@
 }%
 }
 
+% Breakable event rendering used by master CVs. The opening unit is boxed so
+% the heading cannot be orphaned from its first bullet; subsequent bullets use
+% the ordinary intrinsic bullet boxes and may flow onto later pages.
+\newcommand{\cvflowingeventstart}[4]{%
+  \par
+  \nointerlineskip
+  \begin{tabular*}{1\textwidth}{p{13.6cm} x{3.9cm}}
+    \textbf{#2}%
+    \if\relax\detokenize{#3}\relax
+    \else
+      \ - \textcolor{bgcol}{#3}%
+    \fi
+    &
+    \vspace{2.5pt}\textcolor{sectcol}{#1}
+  \end{tabular*}
+
+  \vspace{-8pt}
+  \textcolor{softcol}{\hrule}
+  \vspace{6pt}
+
+  \maybeindent{#4}%
+}
+
+\newcommand{\cvflowingeventend}{%
+  \par
+  \vspace{6pt}%
+}
+
 % creates a stretched box as
 \newcommand{\cveventmeta}[2]
 {
@@ -563,6 +591,29 @@
                 \global\cvexplicitlastunitpage=\value{page}
                 \nointerlineskip\box\flowcurrentbox
             \fi
+        \fi
+    \fi
+}
+
+% #1 and #2 are the current-page and fresh-page prefixes. Unlike explicit
+% units, an oversized opening is intentionally allowed to overflow: master CV
+% generation does not run the sizing engine, and individual bullets remain the
+% atomic layout unit.
+\NewEnviron{cvflowingopening}[2]{%
+    \par
+    \cvsetflowcontentbox{\flowcurrentbox}{#1\BODY}%
+    \cvsetflowcontentbox{\flowfreshbox}{#2\BODY}%
+
+    \ifdim\pagetotal=0pt
+        \nointerlineskip\box\flowfreshbox
+    \else
+        \dimen0=\dimexpr\ht\flowcurrentbox+\dp\flowcurrentbox\relax
+        \dimen2=\dimexpr\pagegoal-\pagetotal\relax
+        \ifdim\dimen0>\dimen2
+            \newpage
+            \nointerlineskip\box\flowfreshbox
+        \else
+            \nointerlineskip\box\flowcurrentbox
         \fi
     \fi
 }

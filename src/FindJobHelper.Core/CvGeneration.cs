@@ -24,6 +24,13 @@ public record struct GenerateParams()
     public LatexExecutablePaths? LatexExecutables;
     public LatexExecutionOptions ExecutionOptions = LatexExecutionOptions.Empty;
     public LatexFontOptions FontOptions = LatexFontOptions.Default;
+    public CvLatexLayoutMode LayoutMode;
+}
+
+public enum CvLatexLayoutMode
+{
+    AtomicSections,
+    FlowingItems,
 }
 
 public sealed record GeneratedCvArtifacts(string PdfPath) : ICvRenderResult;
@@ -282,6 +289,19 @@ public static class CvTemplate
         ArgumentNullException.ThrowIfNull(p.FontOptions);
         ArgumentNullException.ThrowIfNull(progress.Tex);
         ArgumentNullException.ThrowIfNull(progress.Pdf);
+        if (!Enum.IsDefined(p.LayoutMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(p.LayoutMode),
+                p.LayoutMode,
+                "Unsupported LaTeX layout mode.");
+        }
+        if (p.LayoutMode == CvLatexLayoutMode.FlowingItems && p.PageLayout is not null)
+        {
+            throw new ArgumentException(
+                "Flowing-item layout cannot be combined with an explicit page layout.",
+                nameof(p));
+        }
         var outputDirectory = new DirectoryInfo(p.OutputDirectory);
         outputDirectory.Create();
 
@@ -316,16 +336,21 @@ public static class CvTemplate
         var documentHeader =
             CvLatexFragmentRenderer.RenderDocumentHeader(p.Model);
         ReportTexProgress("Creating TeX file — document header");
-        var sections = p.PageLayout is null
-            ? RenderLegacySections(
-                p.Model,
-                ReportSection,
-                renderProgress)
-            : RenderExplicitLayout(
+        var sections = p.PageLayout is not null
+            ? RenderExplicitLayout(
                 p.Model,
                 p.PageLayout,
                 ReportSection,
-                renderProgress);
+                renderProgress)
+            : p.LayoutMode == CvLatexLayoutMode.FlowingItems
+                ? RenderFlowingSections(
+                    p.Model,
+                    ReportSection,
+                    renderProgress)
+                : RenderLegacySections(
+                    p.Model,
+                    ReportSection,
+                    renderProgress);
         var documentFooter = CvLatexFragmentRenderer.RenderDocumentFooter(p.Model);
         FormattableString footerMarker = p.PageLayout is null
             ? FormattableStringFactory.Create(string.Empty)
@@ -594,6 +619,22 @@ public static class CvTemplate
         }
     }
 
+    private static IEnumerable<FormattableString> RenderFlowingSections(
+        CvDataModel model,
+        Action sectionRendered,
+        LatexRenderProgressBuilder progress)
+    {
+        foreach (var section in model.SectionOrder)
+        {
+            var rendered = CvLatexFragmentRenderer.RenderFlowingSection(
+                section,
+                model,
+                progress);
+            sectionRendered();
+            yield return rendered;
+        }
+    }
+
     private static IEnumerable<FormattableString> RenderExplicitLayout(
         CvDataModel model,
         CvPageLayout layout,
@@ -727,6 +768,7 @@ public sealed class CvDataModel
     public NullableLocation Location = NullableLocation.Null;
     public required ImmutableArray<CategorizedInfoList> CategorizedInfoLists;
     public required ImmutableArray<CategorizedInfo> CategorizedInfos;
+    public RegularString DocumentTitle = new("Resume");
     public IRichTextNode? Summary;
     public ImmutableArray<LanguageProficiencyInfo> Languages = ImmutableArray<LanguageProficiencyInfo>.Empty;
     public ImmutableArray<Event> WorkExperiences = ImmutableArray<Event>.Empty;

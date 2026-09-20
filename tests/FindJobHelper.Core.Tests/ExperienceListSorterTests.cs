@@ -165,6 +165,72 @@ public sealed class ExperienceListSorterTests
     }
 
     [Fact]
+    public void AllEvents_MutuallyExclusiveItemsKeepFirstDeclaration()
+    {
+        var first = Item(Text("first"));
+        var excluded = Item(Text("excluded"));
+        var unrelated = Item(Text("unrelated"));
+        var list = List(first, excluded, unrelated);
+        list = new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Items = list.Items,
+            Type = list.Type,
+            ItemExclusionSets =
+            [
+                new ExperienceItemExclusionSet
+                {
+                    Items = [first, excluded],
+                },
+            ],
+        };
+
+        var texts = Assert.Single(new[] { list }.AllEvents())
+            .SubItems
+            .Select(static item => item.Text.ToString())
+            .ToArray();
+
+        Assert.Equal(new[] { "first", "unrelated" }, texts);
+    }
+
+    [Fact]
+    public void AllEvents_OmitsItemWhoseDependencyWasExcluded()
+    {
+        var winner = Item(Text("winner"));
+        var excludedDependency = Item(Text("excluded dependency"));
+        var dependent = new ExperienceListItem
+        {
+            Text = RichText.Create($"{Text("dependent")}"),
+            DependsOn = [excludedDependency],
+        };
+        var list = List(winner, dependent, excludedDependency);
+        list = new ExperienceList
+        {
+            Title = list.Title,
+            Place = list.Place,
+            DateRange = list.DateRange,
+            Items = list.Items,
+            Type = list.Type,
+            ItemExclusionSets =
+            [
+                new ExperienceItemExclusionSet
+                {
+                    Items = [winner, excludedDependency],
+                },
+            ],
+        };
+
+        var texts = Assert.Single(new[] { list }.AllEvents())
+            .SubItems
+            .Select(static item => item.Text.ToString())
+            .ToArray();
+
+        Assert.Equal(new[] { "winner" }, texts);
+    }
+
+    [Fact]
     public void Search_UnmatchedFrontItemRemainsUnselected()
     {
         var tag = new Tag("match");

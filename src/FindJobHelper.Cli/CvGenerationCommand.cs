@@ -8,9 +8,11 @@ using FindJobHelper.Generation;
 public sealed class CvGenerationCommand
 {
     [Command("example-config", Description = "Print an example JSON CV selection configuration.")]
-    public void PrintExampleConfig()
+    public void PrintExampleConfig(
+        [Option("master", Description = "Print the master CV configuration example.")]
+        bool master = false)
     {
-        Console.Write(File.ReadAllText(ExampleConfigPath));
+        Console.Write(File.ReadAllText(ConfigExamplePath(master)));
     }
 
     [Command("new-config", Description = "Write an example configuration to config.json.")]
@@ -18,7 +20,9 @@ public sealed class CvGenerationCommand
         [Option(
             "output-directory",
             Description = "Destination directory for config.json.")]
-        string outputDirectory = ".")
+        string outputDirectory = ".",
+        [Option("master", Description = "Create the master CV configuration example.")]
+        bool master = false)
     {
         var fullOutputDirectory = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(fullOutputDirectory);
@@ -30,7 +34,7 @@ public sealed class CvGenerationCommand
             return ExitCodes.Error;
         }
 
-        File.Copy(ExampleConfigPath, outputPath);
+        File.Copy(ConfigExamplePath(master), outputPath);
         Console.WriteLine($"Created '{outputPath}'.");
         return ExitCodes.Success;
     }
@@ -73,26 +77,25 @@ public sealed class CvGenerationCommand
     [DefaultCommand]
     public async Task<int> Generate(
         CvGenerationArguments arguments,
+        CancellationToken cancellationToken) =>
+        await GenerateAsync(arguments, master: false, cancellationToken);
+
+    [Command("master-cv", Description = "Generate a master CV containing every configured experience section.")]
+    public async Task<int> MasterCv(
+        CvGenerationArguments arguments,
+        CancellationToken cancellationToken) =>
+        await GenerateAsync(arguments, master: true, cancellationToken);
+
+    private static async Task<int> GenerateAsync(
+        CvGenerationArguments arguments,
+        bool master,
         CancellationToken cancellationToken)
     {
         try
         {
-            var configuration = await CvSelectionConfigurationLoader.LoadAsync(
-                arguments.Config,
-                cancellationToken);
-            var result = await CvGenerationPipeline.RunAsync(
-                new CvGenerationPipelineRequest
-                {
-                    Config = configuration,
-                    ExperienceDatabasePath = arguments.ExperienceDatabase,
-                    OutputDirectory = arguments.OutputDirectory,
-                    OutputFormat = arguments.OutputFormat,
-                    Debug = arguments.Debug,
-                    LatexBinDirectory = arguments.LatexBinDirectory,
-                    Fonts = arguments.FontValues,
-                    ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
-                },
-                cancellationToken);
+            var result = master
+                ? await GenerateMasterAsync(arguments, cancellationToken)
+                : await GenerateStandardAsync(arguments, cancellationToken);
             if (!result.Success)
             {
                 Console.Error.WriteLine(result.Failure!.Message);
@@ -142,10 +145,62 @@ public sealed class CvGenerationCommand
         }
     }
 
+    private static async Task<CvGenerationPipelineResult> GenerateStandardAsync(
+        CvGenerationArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
+            arguments.Config,
+            cancellationToken);
+        return await CvGenerationPipeline.RunAsync(
+            new CvGenerationPipelineRequest
+            {
+                Config = configuration,
+                ExperienceDatabasePath = arguments.ExperienceDatabase,
+                OutputDirectory = arguments.OutputDirectory,
+                OutputFormat = arguments.OutputFormat,
+                Debug = arguments.Debug,
+                LatexBinDirectory = arguments.LatexBinDirectory,
+                Fonts = arguments.FontValues,
+                ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
+            },
+            cancellationToken);
+    }
+
+    private static async Task<CvGenerationPipelineResult> GenerateMasterAsync(
+        CvGenerationArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var configuration = await MasterCvConfigurationLoader.LoadAsync(
+            arguments.Config,
+            cancellationToken);
+        return await CvGenerationPipeline.RunMasterAsync(
+            new MasterCvGenerationPipelineRequest
+            {
+                Config = configuration,
+                ExperienceDatabasePath = arguments.ExperienceDatabase,
+                OutputDirectory = arguments.OutputDirectory,
+                OutputFormat = arguments.OutputFormat,
+                Debug = arguments.Debug,
+                LatexBinDirectory = arguments.LatexBinDirectory,
+                Fonts = arguments.FontValues,
+                ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
+            },
+            cancellationToken);
+    }
+
     internal static string ExampleConfigPath => Path.Combine(
         AppContext.BaseDirectory,
         "data",
         "cv-selection.example.json");
+
+    internal static string MasterExampleConfigPath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "master-cv.example.json");
+
+    private static string ConfigExamplePath(bool master) =>
+        master ? MasterExampleConfigPath : ExampleConfigPath;
 }
 
 public class ExperienceDatabaseArguments : IArgumentModel

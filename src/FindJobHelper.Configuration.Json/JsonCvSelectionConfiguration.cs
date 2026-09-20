@@ -1,10 +1,9 @@
-using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using FindJobHelper.Configuration;
 
 namespace FindJobHelper.Configuration.Json;
 
-public sealed class JsonCvSelectionConfiguration
+public sealed class JsonCvSelectionConfiguration : JsonCvDocumentConfiguration
 {
     private bool _limitToOnePage = true;
     private int? _pageCount;
@@ -36,24 +35,22 @@ public sealed class JsonCvSelectionConfiguration
     internal bool IsPageCountSpecified { get; private set; }
 
     public required List<RequiredTagConfiguration> RequiredTags { get; init; }
-    public required List<string> Skills { get; init; }
-    public required List<string> Technologies { get; init; }
     public MmrConfiguration? Mmr { get; init; }
     public required SelectionConfiguration Selection { get; init; }
-    public required SectionOrderCollection SectionOrder { get; init; }
-    public string? Profession { get; init; }
-    public JsonHeaderConfiguration? Header { get; init; }
 
     internal CvSelectionConfiguration ToDomain()
     {
         var errors = new List<string>();
-        errors.AddRange(SectionOrder.ValidationErrors);
-        var pageLayout = SectionOrder.PageLayout;
-        var headerLinkOrder = MapHeaderLinkOrder(errors);
+        var headerLinkOrder = CollectDocumentValidationErrors(errors);
+        var pageLayout = SectionOrder?.PageLayout;
         CollectPageConfigurationErrors();
 
         void CollectPageConfigurationErrors()
         {
+            if (SectionOrder is null)
+            {
+                return;
+            }
             if (!SectionOrder.IsExplicit)
             {
                 CollectNonExplicitPageConfigurationErrors();
@@ -119,24 +116,6 @@ public sealed class JsonCvSelectionConfiguration
             }
         }
 
-        if (Skills is not { Count: > 0 })
-        {
-            errors.Add("'skills' must contain at least one item.");
-        }
-        else if (Skills.Any(string.IsNullOrWhiteSpace))
-        {
-            errors.Add("'skills' cannot contain blank items.");
-        }
-
-        if (Technologies is not { Count: > 0 })
-        {
-            errors.Add("'technologies' must contain at least one item.");
-        }
-        else if (Technologies.Any(string.IsNullOrWhiteSpace))
-        {
-            errors.Add("'technologies' cannot contain blank items.");
-        }
-
         Mmr?.CollectValidationErrors(errors);
 
         if (Selection is null)
@@ -163,7 +142,7 @@ public sealed class JsonCvSelectionConfiguration
             technologies: [.. Technologies!],
             mmr: Mmr?.ToDomain() ?? MmrOptions.Default,
             selection: Selection!,
-            sectionOrder: SectionOrder.Sections,
+            sectionOrder: SectionOrder!.Sections,
             profession: Profession,
             headerLinkOrder: headerLinkOrder,
             pageLayout: pageLayout);
@@ -215,71 +194,6 @@ public sealed class JsonCvSelectionConfiguration
 
             return PageCount is null or <= 0;
         }
-    }
-
-    private ImmutableArray<HeaderLinkName> MapHeaderLinkOrder(List<string> errors)
-    {
-        var configuredOrder = Header?.Links?.Order;
-        if (configuredOrder is null)
-        {
-            return default;
-        }
-
-        var hasBlank = false;
-        var validEntries = new List<string>();
-        foreach (var entry in configuredOrder)
-        {
-            if (string.IsNullOrWhiteSpace(entry))
-            {
-                hasBlank = true;
-                continue;
-            }
-
-            validEntries.Add(entry);
-        }
-
-        if (hasBlank)
-        {
-            errors.Add("'header.links.order' cannot contain blank items.");
-        }
-
-        var mappedOrder = validEntries
-            .Select(MapHeaderLinkName)
-            .ToImmutableArray();
-        var uniqueNames = new HashSet<HeaderLinkName>();
-        foreach (var name in mappedOrder)
-        {
-            if (uniqueNames.Add(name))
-            {
-                continue;
-            }
-
-            errors.Add($"Header link '{name}' is configured more than once in 'header.links.order'.");
-        }
-
-        return mappedOrder;
-    }
-
-    private static HeaderLinkName MapHeaderLinkName(string name)
-    {
-        if (string.Equals(name, HeaderLinkName.GitHub.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            return HeaderLinkName.GitHub;
-        }
-        if (string.Equals(name, HeaderLinkName.LinkedIn.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            return HeaderLinkName.LinkedIn;
-        }
-        if (string.Equals(name, HeaderLinkName.YouTube.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            return HeaderLinkName.YouTube;
-        }
-        if (string.Equals(name, HeaderLinkName.Portfolio.Value, StringComparison.OrdinalIgnoreCase))
-        {
-            return HeaderLinkName.Portfolio;
-        }
-
-        return new(name);
     }
 
     private CvPageCount ResolvePageCount()

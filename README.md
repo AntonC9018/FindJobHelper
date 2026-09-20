@@ -77,6 +77,51 @@ In this case, the .NET bullet is going to appear in the output, while the C++ on
 This is because we set `itemBudget` to `1`.
 In principle, without that setting, it takes as many items as fit the page, ensuring the best matches are selected.
 
+### Master CV
+
+`master-cv` generates an unrestricted-length resume containing every experience
+from each section named in the configuration. Mutually exclusive bullets use
+database declaration order: the first compatible bullet wins. Experience and
+bullet ordering constraints are still applied, but tag matching and height
+measurement are skipped.
+
+Create the smaller master configuration with:
+
+```bash
+dotnet find-job-helper new-config --master
+```
+
+Its JSON contains only the displayed skills and technologies, optional
+`profession` and `header` settings, and the legacy string-array section order:
+
+```json
+{
+  "skills": ["Backend Development", "Software Architecture"],
+  "technologies": [".NET", "PostgreSQL"],
+  "sectionOrder": [
+    "WorkExperience",
+    "PersonalProjects",
+    "Education",
+    "Languages"
+  ]
+}
+```
+
+Page-layout objects, tags, selection settings, MMR settings, and page-count
+settings are not accepted by the master configuration. Omit a section name to
+omit that complete section. Generate the document with:
+
+```bash
+dotnet find-job-helper master-cv \
+  --config config.json \
+  --experience-database compiled_database.dll
+```
+
+PDF output is named `LastNameFirstNameMasterResume.pdf` and uses “Master
+Resume” in the document heading. Experiences are newest-first, individual
+bullets stay intact across automatic page breaks, and an experience may
+continue onto later pages without repeating its heading.
+
 ### Setting up the workspace
 
 1. Install and instantiate the [templates package](https://www.nuget.org/packages/Anton.FindJobHelper.Templates/): 
