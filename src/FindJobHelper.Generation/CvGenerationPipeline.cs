@@ -140,7 +140,7 @@ public static class CvGenerationPipeline
         var latexExecutionOptions = CreateLatexExecutionOptions(fontConfiguration);
 
         await using var serviceProvider = await CvGenerationAppConfiguration.CreateApp(
-            loadedProvider.Assembly,
+            loadedProvider.UserSecretsId,
             latexExecutables.Paths,
             cancellationToken);
         var personalInfo = request.PersonalInfo is { } providedPersonalInfo

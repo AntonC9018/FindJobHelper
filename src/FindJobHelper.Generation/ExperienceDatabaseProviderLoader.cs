@@ -203,7 +203,8 @@ public static class ExperienceDatabaseProviderLoader
             var result = provider.Create()
                 ?? throw new ExperienceDatabaseProviderLoadException(
                     $"Experience database provider '{providerType.FullName}' returned a null result.");
-            return new(result, assembly, loadContext);
+            var userSecretsId = (provider as IUserSecretsIdProvider)?.UserSecretsId;
+            return new(result, assembly, loadContext, userSecretsId);
         }
         catch (ExperienceDatabaseProviderLoadException)
         {
@@ -239,15 +240,25 @@ public sealed class LoadedExperienceDatabaseProvider : IDisposable
     internal LoadedExperienceDatabaseProvider(
         ExperienceDatabaseProviderResult result,
         Assembly assembly,
-        AssemblyLoadContext loadContext)
+        AssemblyLoadContext loadContext,
+        string? userSecretsId)
         : this(result, assembly)
     {
         _loadContext = loadContext;
+        UserSecretsId = userSecretsId;
     }
 
     public ExperienceDatabaseProviderResult Result { get; }
 
     public Assembly Assembly { get; }
+
+    /// <summary>
+    /// The MSBuild <c>UserSecretsId</c> reported by the provider itself via
+    /// <see cref="IUserSecretsIdProvider"/>, or <see langword="null"/> when
+    /// the provider does not implement it. Read per load so a rebuilt
+    /// provider is picked up on the next generation without host caching.
+    /// </summary>
+    public string? UserSecretsId { get; }
 
     public void Dispose()
     {

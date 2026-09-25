@@ -409,14 +409,7 @@
           "Anton.FindJobHelper.Configuration.Json": "[1.0.0, )",
           "Anton.FindJobHelper.Core": "[1.0.0, )",
           "Anton.FindJobHelper.Generation": "[1.0.0, )",
-          "CodegenCS.Core": "[3.5.0, )",
           "CommandDotNet": "[8.1.1, )",
-          "Microsoft.Extensions.Configuration.Binder": "[10.0.10, )",
-          "Microsoft.Extensions.Configuration.EnvironmentVariables": "[10.0.10, )",
-          "Microsoft.Extensions.Configuration.UserSecrets": "[10.0.10, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.0.10, )",
-          "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
-          "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )",
           "Spectre.Console": "[0.57.2, )"
         }
       },
@@ -454,40 +447,18 @@
           "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )"
         }
       },
-      "constructorthrows": {
+      "Anton.FindJobHelper.UserSecrets": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
-        }
-      },
-      "createthrows": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
-        }
-      },
-      "multipleproviders": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
-        }
-      },
-      "noconstructor": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
-        }
-      },
-      "nullresult": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "Microsoft.Extensions.Configuration.UserSecrets": "[10.0.10, )"
         }
       },
       "syntheticprovider": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "Anton.FindJobHelper.UserSecrets": "[1.0.0, )"
         }
       }
     }

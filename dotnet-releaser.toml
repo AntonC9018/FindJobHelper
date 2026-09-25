@@ -1,5 +1,6 @@
 # Lockstep family for the 1.0.0-test local-feed release (fjw-w4u.2, fjw-w4u.8):
-# Configuration, Configuration.Json, Core, Generation, Cli, Templates, WebUi.
+# Configuration, Configuration.Json, Core, UserSecrets, Generation, Cli,
+# Templates, WebUi.
 # The WebUi sources live here as src/FindJobHelper.WebUi (canonical copy for
 # packaging, moved from the workspace repo); the workspace branch keeps its
 # own copy until cutover.
@@ -10,6 +11,7 @@ project = [
   "src/FindJobHelper.Configuration/FindJobHelper.Configuration.csproj",
   "src/FindJobHelper.Configuration.Json/FindJobHelper.Configuration.Json.csproj",
   "src/FindJobHelper.Core/FindJobHelper.Core.csproj",
+  "src/FindJobHelper.UserSecrets/FindJobHelper.UserSecrets.csproj",
   "src/FindJobHelper.Generation/FindJobHelper.Generation.csproj",
   "templates/FindJobWorkspace/Anton.FindJobHelper.Templates.csproj",
   "src/FindJobHelper.Cli/FindJobHelper.Cli.csproj",

@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
-using System.Reflection;
 using FindJobHelper.CVGeneration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,16 +10,16 @@ namespace FindJobHelper.Generation;
 public static class CvGenerationAppConfiguration
 {
     public static ValueTask<ServiceProvider> CreateApp(
-        Assembly experienceDatabaseAssembly,
+        string? userSecretsId,
         LatexExecutablePaths latexExecutables,
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
         var configBuilder = new ConfigurationBuilder();
-        configBuilder.AddUserSecrets(
-            experienceDatabaseAssembly,
-            optional: true,
-            reloadOnChange: false);
+        if (!string.IsNullOrWhiteSpace(userSecretsId))
+        {
+            configBuilder.AddUserSecrets(userSecretsId, reloadOnChange: false);
+        }
         configBuilder.AddEnvironmentVariables();
 
         var config = configBuilder.Build();

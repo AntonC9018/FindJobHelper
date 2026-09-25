@@ -21,6 +21,7 @@ public sealed class ExperienceDatabaseProviderLoaderTests
         Assert.NotEmpty(result.Result.ExperienceDatabase.Experiences);
         Assert.NotSame(typeof(ExperienceDatabaseProvider).Assembly, result.Assembly);
         Assert.Equal(SyntheticProviderDllPath, result.Assembly.Location);
+        Assert.Equal("11111111-1111-1111-1111-111111111111", result.UserSecretsId);
     }
 
     [Fact]
@@ -54,6 +55,8 @@ public sealed class ExperienceDatabaseProviderLoaderTests
         Assert.True(firstContext.IsCollectible);
         Assert.True(secondContext.IsCollectible);
         Assert.NotSame(firstContext, secondContext);
+        Assert.Null(first.UserSecretsId);
+        Assert.Null(second.UserSecretsId);
     }
 
     [Fact]

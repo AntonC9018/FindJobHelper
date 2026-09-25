@@ -48,7 +48,7 @@
           DestinationFiles="$(_StagedToolManifest)" />
     <XmlPoke XmlInputPath="$(_StagedProviderProject)"
              Query="/Project/ItemGroup[@Label='FindJobHelperCoreReference']"
-             Value="&lt;PackageReference Include=&quot;Anton.FindJobHelper.Core&quot; Version=&quot;[$(PackageVersion)]&quot; /&gt;" />
+             Value="&lt;PackageReference Include=&quot;Anton.FindJobHelper.Core&quot; Version=&quot;[$(PackageVersion)]&quot; /&gt;&lt;PackageReference Include=&quot;Anton.FindJobHelper.UserSecrets&quot; Version=&quot;[$(PackageVersion)]&quot; /&gt;" />
     <JsonPoke ContentPath="$(_StagedToolManifest)"
               Query="$.tools['anton.findjobhelper.cli'].version"
               Value="$(PackageVersion)" />

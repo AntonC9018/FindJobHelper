@@ -17,6 +17,12 @@
         "resolved": "7.0.0",
         "contentHash": "2lMTCQl5bGP4iv0JNkockPnyllC6eHLz+CoK2ICvalvHod+exXSxueu9hq+zNkU7bZBJf8wMfeRC/Edn8AGmEg=="
       },
+      "Packaging.Targets": {
+        "type": "Direct",
+        "requested": "[0.1.232, )",
+        "resolved": "0.1.232",
+        "contentHash": "4FqQN8mn4BzmiGIGYuPQWWMGOkozZoXz5bfbR1yabn3Q7iThb5PLSRynIBliJ/9vVxnRkv9ph43uh5myisev/g=="
+      },
       "Spectre.Console": {
         "type": "Direct",
         "requested": "[0.57.2, )",

@@ -395,6 +395,13 @@
           "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )"
         }
       },
+      "Anton.FindJobHelper.UserSecrets": {
+        "type": "Project",
+        "dependencies": {
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "Microsoft.Extensions.Configuration.UserSecrets": "[10.0.10, )"
+        }
+      },
       "constructorthrows": {
         "type": "Project",
         "dependencies": {
@@ -425,16 +432,11 @@
           "Anton.FindJobHelper.Core": "[1.0.0, )"
         }
       },
-      "reloadableprovider": {
-        "type": "Project",
-        "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
-        }
-      },
       "syntheticprovider": {
         "type": "Project",
         "dependencies": {
-          "Anton.FindJobHelper.Core": "[1.0.0, )"
+          "Anton.FindJobHelper.Core": "[1.0.0, )",
+          "Anton.FindJobHelper.UserSecrets": "[1.0.0, )"
         }
       }
     }

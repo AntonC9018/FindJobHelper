@@ -1,8 +1,9 @@
 using FindJobHelper.Core;
+using FindJobHelper.UserSecrets;
 
 namespace ProviderFixtures.SyntheticProvider;
 
-public sealed class ExperienceDatabaseProvider : IExperienceDatabaseProvider
+public sealed class ExperienceDatabaseProvider : UserSecretsIdProviderBase, IExperienceDatabaseProvider
 {
     public ExperienceDatabaseProviderResult Create()
     {
