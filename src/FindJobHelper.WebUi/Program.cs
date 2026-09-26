@@ -15,6 +15,7 @@ builder.Services.AddSingleton<ApplicationCatalog>();
 builder.Services.AddSingleton<GenerationJobManager>();
 builder.Services.AddSingleton<DatabaseManager>();
 builder.Services.AddSingleton<ConfigEditor>();
+builder.Services.AddSingleton<FolderOpener>(FolderOpener.Detect());
 
 var app = builder.Build();
 
@@ -103,6 +104,7 @@ app.MapPut("/api/applications/state", async (
 app.MapPost("/api/applications/open", async (
     ApplicationKeyRequest request,
     ApplicationCatalog catalog,
+    FolderOpener folders,
     CancellationToken cancellationToken) =>
 {
     var folder = await catalog.ResolveFolderAsync(request.Key, cancellationToken);
@@ -113,7 +115,7 @@ app.MapPost("/api/applications/open", async (
 
     try
     {
-        OpenFolderCrossPlatform(folder);
+        folders.OpenFolder(folder);
         return Results.Ok(new { opened = folder });
     }
     catch (Exception ex)
@@ -406,103 +408,6 @@ bool IsUnsafeFileName(string name)
     }
 
     return name.Contains("..", StringComparison.Ordinal);
-}
-
-/// <summary>Opens a folder in the OS file manager, whatever the OS.</summary>
-void OpenFolderCrossPlatform(string folder)
-{
-    if (OperatingSystem.IsWindows())
-    {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "explorer.exe",
-            ArgumentList = { folder },
-            UseShellExecute = true,
-        });
-        return;
-    }
-
-    if (OperatingSystem.IsMacOS())
-    {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "open",
-            ArgumentList = { folder },
-            UseShellExecute = false,
-        });
-        return;
-    }
-
-    // Linux: under WSL, prefer the Windows Explorer via interop so the folder
-    // opens on the Windows side; otherwise fall back to xdg-open.
-    var windowsPath = TryWslWindowsPath(folder);
-    if (windowsPath is not null)
-    {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "explorer.exe",
-            ArgumentList = { windowsPath },
-            UseShellExecute = false,
-        });
-        return;
-    }
-
-    Process.Start(new ProcessStartInfo
-    {
-        FileName = "xdg-open",
-        ArgumentList = { folder },
-        UseShellExecute = false,
-    });
-}
-
-string? TryWslWindowsPath(string folder)
-{
-    if (Environment.GetEnvironmentVariable("WSL_DISTRO_NAME") is null)
-    {
-        return null;
-    }
-
-    try
-    {
-        using var conversion = Process.Start(new ProcessStartInfo
-        {
-            FileName = "wslpath",
-            ArgumentList = { "-w", folder },
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-        });
-        if (conversion is null)
-        {
-            return null;
-        }
-
-        if (!conversion.WaitForExit(5000))
-        {
-            try
-            {
-                conversion.Kill();
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        if (conversion.ExitCode != 0)
-        {
-            return null;
-        }
-
-        // Empty conversion output must fall back to xdg-open, never reach
-        // explorer.exe as an empty argument.
-        var line = conversion.StandardOutput.ReadLine()?.Trim();
-        return string.IsNullOrWhiteSpace(line) ? null : line;
-    }
-    catch
-    {
-        return null;
-    }
 }
 
 WebApplicationOptions CreateWebApplicationOptions(string[] arguments)
