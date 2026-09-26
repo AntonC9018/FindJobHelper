@@ -116,14 +116,27 @@ public static class ApplicationStateExtensions
 
         static string? ExtractNote(string raw)
         {
-            var open = raw.IndexOf('(');
-            var close = raw.LastIndexOf(')');
-            if (open < 0 || close <= open)
+            var rawSpan = raw.AsSpan();
+            var open = rawSpan.IndexOf('(');
+            if (open < 0)
             {
                 return null;
             }
 
-            return raw[(open + 1)..close].Trim() is { Length: > 0 } note ? note : null;
+            var close = rawSpan.LastIndexOf(')');
+            if (close <= open)
+            {
+                return null;
+            }
+
+            var note = rawSpan[(open + 1)..close];
+            var trimmedNote = note.Trim();
+            if (trimmedNote.IsEmpty)
+            {
+                return null;
+            }
+
+            return trimmedNote.ToString();
         }
     }
 }

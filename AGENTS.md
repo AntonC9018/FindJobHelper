@@ -32,9 +32,33 @@
   and value selectors.
 - Apply these rules to all hand-written code, including tests and code generators.
   Generated files are exempt.
-- If a function does a guard chain, with the same return in each indicating 
-  a successful early check, continue the guard chain all the way through,
-  explicitly returning the "good" value at the end. 
+
+### Explicit return decisions
+
+- After a conditional early return, express later return decisions with `if` or
+  `switch` statements and explicit returns. Do not end the function with a
+  boolean predicate, nullable result, ternary, or switch expression that can
+  represent multiple outcomes. This applies to every return type. A direct
+  return of a value already known to represent one outcome is fine. A lone
+  conditional return with no earlier conditional return may remain a ternary.
+- When a final lookup result can be absent, check it and return the found value
+  from a branch, then explicitly return the fallback. Match the direction of
+  earlier branches that return found values.
+
+### Sentinel return values
+
+- For application-owned functions beyond private helpers, represent absence or
+  failure in the return type instead of using a primitive sentinel such as
+  `-1`. A private helper may use a sentinel. Before forwarding its result
+  through another primitive-returning function, check it and explicitly
+  return that function's own sentinel. Signatures imposed by dependencies are
+  exempt.
+
+### Span-based text handling
+
+- Prefer spans for text inspection, slicing, and trimming. Use spans for
+  parameters and return values when string ownership is unnecessary and the
+  span's lifetime permits it. Create a string when one is needed.
 
 ## CV generation entry point
 

@@ -777,7 +777,22 @@ function findJob(key) {
 }
 
 async function startGeneration(key, debug) {
+    const buttons = findGenerationButtons(key);
+    if (buttons.pdfButton) buttons.pdfButton.disabled = true;
+    if (buttons.mdButton) buttons.mdButton.disabled = true;
     try {
+        // The config editor keeps dirty text in the browser while generation
+        // reads config.json from disk: auto-save first so Generate PDF uses
+        // the edits the user sees. An invalid config aborts the generation
+        // and leaves the editor errors on screen.
+        const editor = window.ConfigEditor;
+        if (editor && typeof editor.saveIfDirty === "function") {
+            const result = await editor.saveIfDirty(key);
+            if (!result.saved) {
+                toast("Config could not be saved — generation cancelled.", "error");
+                return;
+            }
+        }
         const job = await api("/api/generations", {
             method: "POST",
             body: JSON.stringify({ key, debug }),
@@ -790,7 +805,20 @@ async function startGeneration(key, debug) {
         pollJobs();
     } catch (error) {
         toast(error.message, "error");
+    } finally {
+        if (buttons.pdfButton) buttons.pdfButton.disabled = false;
+        if (buttons.mdButton) buttons.mdButton.disabled = false;
     }
+}
+
+function findGenerationButtons(key) {
+    const { detailRow } = findDetailRow(key);
+    if (!detailRow) return {};
+    return {
+        detailRow,
+        pdfButton: detailRow.querySelector("[data-role=generate-pdf]"),
+        mdButton: detailRow.querySelector("[data-role=generate-md]"),
+    };
 }
 
 let polling = false;

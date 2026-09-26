@@ -340,9 +340,10 @@
             try {
                 // The editor works in LF; restore the file's original line
                 // endings on the way out so saves don't reformat whole files.
+                const doc = getDoc();
                 const content = newLine === "\r\n"
-                    ? getDoc().replace(/\r?\n/g, "\r\n")
-                    : getDoc();
+                    ? doc.replace(/\r?\n/g, "\r\n")
+                    : doc;
                 const { ok, body } = await putJson("/api/applications/config", {
                     key: application.key,
                     content,
@@ -350,20 +351,22 @@
                 if (!ok) {
                     renderErrorBox(errorBox, body.errors || [body.error || "Save rejected."]);
                     setStatus("save rejected — not written", "bad");
-                } else {
-                    savedContent = getDoc();
-                    // Cache what was actually written (original endings
-                    // restored), not the LF-normalized editor text, so the
-                    // cache agrees with disk; savedContent stays normalized
-                    // for the dirty comparison above.
-                    app.fileCache[cacheKeyOf(application.key, fileName)] = content;
-                    renderErrorBox(errorBox, []);
-                    setStatus("saved", "ok");
-                    toast("Config saved.", "success");
+                    return false;
                 }
+                savedContent = doc;
+                // Cache what was actually written (original endings
+                // restored), not the LF-normalized editor text, so the
+                // cache agrees with disk; savedContent stays normalized
+                // for the dirty comparison above.
+                app.fileCache[cacheKeyOf(application.key, fileName)] = content;
+                renderErrorBox(errorBox, []);
+                setStatus("saved", "ok");
+                toast("Config saved.", "success");
+                return true;
             } catch (error) {
                 renderErrorBox(errorBox, [`Save request failed: ${error.message}`]);
                 setStatus("save failed", "bad");
+                return false;
             } finally {
                 validate.disabled = false;
                 refreshDirty();
@@ -398,6 +401,21 @@
             refreshDirty();
         });
         vscode.addEventListener("click", onOpenInVscode);
+
+        // Generate buttons auto-save through this hook: dirty editor text
+        // lives only in the browser, while generation reads config.json from
+        // disk, so unsaved edits would otherwise be silently ignored.
+        host._cmSaveIfDirty = async () => {
+            const dirty = getDoc() !== savedContent;
+            if (!dirty) {
+                return { saved: true, skipped: true };
+            }
+            const ok = await onSave();
+            if (ok) {
+                return { saved: true, autosaved: true };
+            }
+            return { saved: false };
+        };
 
         const poll = setInterval(() => {
             if (!view.dom.isConnected) {
@@ -443,5 +461,23 @@
         return true;
     }
 
-    window.ConfigEditor = { takeover };
+    // Called by Generate PDF / Debug MD before starting the job. Finds the
+    // mounted editor for this application (if the Config tab is open) and
+    // saves dirty text first. No mounted editor means nothing to save.
+    async function saveIfDirty(applicationKey) {
+        const row = document.querySelector(`tr.app-row[data-key="${CSS.escape(applicationKey)}"]`);
+        const detail = row && row.nextElementSibling;
+        const isDetail = detail && detail.classList.contains("detail-row");
+        if (!isDetail) {
+            return { saved: true, skipped: true };
+        }
+        const host = detail.querySelector(".config-editor-host");
+        const saveHook = host && host._cmSaveIfDirty;
+        if (!host || !host._cmView || typeof saveHook !== "function") {
+            return { saved: true, skipped: true };
+        }
+        return await saveHook();
+    }
+
+    window.ConfigEditor = { takeover, saveIfDirty };
 })();
