@@ -9,6 +9,7 @@
     <Project Path="src/FindJobHelper.Configuration/FindJobHelper.Configuration.csproj" />
     <Project Path="src/FindJobHelper.Configuration.Json/FindJobHelper.Configuration.Json.csproj" />
     <Project Path="src/FindJobHelper.Core/FindJobHelper.Core.csproj" />
+    <Project Path="src/FindJobHelper.ExperienceProject/FindJobHelper.ExperienceProject.csproj" />
     <Project Path="src/FindJobHelper.Generation/FindJobHelper.Generation.csproj" />
     <Project Path="src/FindJobHelper.UserSecrets/FindJobHelper.UserSecrets.csproj" />
     <Project Path="src/FindJobHelper.WebUi/FindJobHelper.WebUi.csproj" />
@@ -27,6 +28,7 @@
     <Project Path="tests/FindJobHelper.Cli.Tests/FindJobHelper.Cli.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Configuration.Tests/FindJobHelper.Configuration.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Core.Tests/FindJobHelper.Core.Tests.csproj" />
+    <Project Path="tests/FindJobHelper.ExperienceProject.Tests/FindJobHelper.ExperienceProject.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Generation.Tests/FindJobHelper.Generation.Tests.csproj" />
     <Project Path="tests/FindJobHelper.WebUi.Tests/FindJobHelper.WebUi.Tests.csproj" />
   </Folder>

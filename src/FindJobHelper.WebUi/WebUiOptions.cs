@@ -26,6 +26,22 @@ public sealed class WebUiOptions
     /// </summary>
     public string ApplicationsRoot { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Experience project csproj override; wins over 'experienceProject' in
+    /// the workspace config. Resolved to the effective project path during
+    /// startup when either source provides one.
+    /// </summary>
+    public string ExperienceProjectPath { get; set; } = string.Empty;
+
+    /// <summary>Skip the startup build; an existing database DLL is required.</summary>
+    public bool NoBuild { get; set; }
+
+    /// <summary>
+    /// Absolute path of the discovered workspace config file, set during
+    /// startup; feeds the PersonalInfo resolution (ADR 0003).
+    /// </summary>
+    public string WorkspaceConfigFilePath { get; set; } = string.Empty;
+
     public string DatabasePathOrDefault => string.IsNullOrWhiteSpace(DatabasePath)
         ? Path.Combine(WorkspaceRoot, "build", "ExperienceDatabase.dll")
         : DatabasePath;

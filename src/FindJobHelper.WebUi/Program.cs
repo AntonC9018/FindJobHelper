@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FindJobHelper.ExperienceProject;
 using FindJobHelper.WebUi;
 
 var builder = WebApplication.CreateBuilder(CreateWebApplicationOptions(args));
@@ -27,6 +28,22 @@ catch (Exception ex)
 {
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("JobStore");
     startupLogger.LogWarning(ex, "SQLite job store was not initialized; Refresh will retry on demand.");
+}
+
+var databaseLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("ExperienceProject");
+try
+{
+    await ResolveStartupDatabaseAsync(options, databaseLogger);
+}
+catch (ExperienceProjectBuildException ex)
+{
+    // A failed startup build is retriable through the Rebuild button; keep
+    // the server up so the UI can surface the failure and trigger it.
+    databaseLogger.LogError(ex, "Experience project build failed on startup.");
+}
+catch (InvalidOperationException ex)
+{
+    databaseLogger.LogError(ex, "Experience database startup resolution failed.");
 }
 
 app.UseDefaultFiles();
@@ -312,6 +329,10 @@ app.MapPost("/api/database/rebuild", async (
     {
         return Results.Conflict(new { error = ex.Message });
     }
+    catch (ExperienceProjectBuildException ex)
+    {
+        return Results.Conflict(new { error = ex.Message });
+    }
 });
 
 app.MapFallbackToFile("index.html");
@@ -444,6 +465,12 @@ WebUiOptions ParseOptions(string[] arguments)
             case "--experience-database-project":
                 parsed.ExperienceDatabaseProjectDir = Path.GetFullPath(arguments[i + 1]);
                 break;
+            case "--experience-project":
+                parsed.ExperienceProjectPath = arguments[i + 1];
+                break;
+            case "--no-build":
+                parsed.NoBuild = true;
+                break;
             case "--jobs-db":
                 parsed.JobsDbPath = Path.GetFullPath(arguments[i + 1]);
                 break;
@@ -455,6 +482,70 @@ WebUiOptions ParseOptions(string[] arguments)
 
     return parsed;
 }
+
+/// <summary>
+/// Resolves the experience database for this server run (ADR 0001): an
+/// explicit --database wins and skips the build; otherwise the project comes
+/// from --experience-project or the workspace config's 'experienceProject'
+/// and is built into the build output directory when the DLL is missing.
+/// --no-build skips the build and requires an existing DLL. The workspace
+/// config file path is recorded for PersonalInfo resolution (ADR 0003)
+/// regardless of how the database is resolved.
+/// </summary>
+static async Task ResolveStartupDatabaseAsync(
+    WebUiOptions options,
+    ILogger logger)
+{
+    var workspaceConfigFilePath = Path.Combine(options.WorkspaceRoot, WorkspaceConfig.FileName);
+    var workspaceConfig = File.Exists(workspaceConfigFilePath)
+        ? WorkspaceConfig.Load(workspaceConfigFilePath)
+        : null;
+    options.WorkspaceConfigFilePath = workspaceConfig?.ConfigFilePath ?? string.Empty;
+
+    if (!string.IsNullOrWhiteSpace(options.DatabasePath))
+    {
+        return;
+    }
+
+    var explicitProject = NullIfEmpty(options.ExperienceProjectPath);
+    var effectiveProject = explicitProject is null
+        ? workspaceConfig?.ExperienceProjectPath
+        : Path.GetFullPath(explicitProject, options.WorkspaceRoot);
+    if (effectiveProject is null)
+    {
+        return;
+    }
+
+    var buildOutputDirectory = options.DatabaseBuildOutputDirOrDefault;
+    var dllPath = ExperienceProjectBuilder.GetOutputDllPath(effectiveProject, buildOutputDirectory);
+    if (File.Exists(dllPath))
+    {
+        options.DatabasePath = dllPath;
+        return;
+    }
+
+    if (options.NoBuild)
+    {
+        throw new InvalidOperationException(
+            $"--no-build skips the experience project build, but the experience "
+            + $"database DLL was not found at '{dllPath}'. Build the project first "
+            + "or drop --no-build.");
+    }
+
+    logger.LogInformation(
+        "Building the experience project '{Project}' into '{OutputDir}'.",
+        effectiveProject,
+        buildOutputDirectory);
+    await ExperienceProjectBuilder.BuildAsync(
+        effectiveProject,
+        buildOutputDirectory,
+        CancellationToken.None);
+    options.DatabasePath = dllPath;
+    logger.LogInformation("Experience database DLL resolved at '{DllPath}'.", dllPath);
+}
+
+static string? NullIfEmpty(string value) =>
+    string.IsNullOrWhiteSpace(value) ? null : value;
 
 public sealed record UpdateStateRequest(string Key, string State, string? Note);
 

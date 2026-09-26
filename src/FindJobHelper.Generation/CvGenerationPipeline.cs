@@ -35,6 +35,14 @@ public abstract record CvGenerationPipelineRequestBase
     /// </summary>
     public PersonalInfoOptions? PersonalInfo { get; init; }
 
+    /// <summary>
+    /// Path of the workspace <c>findjobhelper.config.json</c> feeding the
+    /// personal info resolution between user secrets and environment
+    /// variables (ADR 0003), or <see langword="null"/> when no workspace
+    /// config was found.
+    /// </summary>
+    public string? WorkspaceConfigPath { get; init; }
+
     public string? TemplatePath { get; init; }
 
     public ICvGenerationProgressDisplay? ProgressDisplay { get; init; }
@@ -141,6 +149,7 @@ public static class CvGenerationPipeline
 
         await using var serviceProvider = await CvGenerationAppConfiguration.CreateApp(
             loadedProvider.UserSecretsId,
+            request.WorkspaceConfigPath,
             latexExecutables.Paths,
             cancellationToken);
         var personalInfo = request.PersonalInfo is { } providedPersonalInfo

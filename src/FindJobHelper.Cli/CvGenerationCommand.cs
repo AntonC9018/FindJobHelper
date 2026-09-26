@@ -3,6 +3,7 @@ using FindJobHelper.Configuration;
 using FindJobHelper.Configuration.Json;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
+using FindJobHelper.ExperienceProject;
 using FindJobHelper.Generation;
 
 public sealed class CvGenerationCommand
@@ -40,13 +41,25 @@ public sealed class CvGenerationCommand
     }
 
     [Command("list-tags", Description = "List all tags available for CV selection.")]
-    public int ListTags(ExperienceDatabaseArguments arguments)
+    public async Task<int> ListTags(
+        ExperienceDatabaseArguments arguments,
+        CancellationToken cancellationToken)
     {
         LoadedExperienceDatabaseProvider loadedProvider;
         try
         {
-            loadedProvider = ExperienceDatabaseProviderLoader.Load(
-                arguments.ExperienceDatabase);
+            var database = await ResolveExperienceDatabaseAsync(arguments, cancellationToken);
+            loadedProvider = ExperienceDatabaseProviderLoader.Load(database.DllPath);
+        }
+        catch (ExperienceDatabaseSourceException ex)
+        {
+            Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
+        catch (ExperienceProjectBuildException ex)
+        {
+            Console.Error.WriteLine($"Experience project build failed: {ex.Message}");
+            return ExitCodes.Error;
         }
         catch (ExperienceDatabaseProviderLoadException ex)
         {
@@ -123,6 +136,16 @@ public sealed class CvGenerationCommand
             Console.Error.WriteLine($"Configuration error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
+        catch (ExperienceDatabaseSourceException ex)
+        {
+            Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
+        catch (ExperienceProjectBuildException ex)
+        {
+            Console.Error.WriteLine($"Experience project build failed: {ex.Message}");
+            return ExitCodes.Error;
+        }
         catch (ExperienceDatabaseProviderLoadException ex)
         {
             Console.Error.WriteLine($"Experience database error: {ex.Message}");
@@ -149,6 +172,7 @@ public sealed class CvGenerationCommand
         CvGenerationArguments arguments,
         CancellationToken cancellationToken)
     {
+        var database = await ResolveExperienceDatabaseAsync(arguments, cancellationToken);
         var configuration = await CvSelectionConfigurationLoader.LoadAsync(
             arguments.Config,
             cancellationToken);
@@ -156,7 +180,8 @@ public sealed class CvGenerationCommand
             new CvGenerationPipelineRequest
             {
                 Config = configuration,
-                ExperienceDatabasePath = arguments.ExperienceDatabase,
+                ExperienceDatabasePath = database.DllPath,
+                WorkspaceConfigPath = database.WorkspaceConfigFilePath,
                 OutputDirectory = arguments.OutputDirectory,
                 OutputFormat = arguments.OutputFormat,
                 Debug = arguments.Debug,
@@ -171,6 +196,7 @@ public sealed class CvGenerationCommand
         CvGenerationArguments arguments,
         CancellationToken cancellationToken)
     {
+        var database = await ResolveExperienceDatabaseAsync(arguments, cancellationToken);
         var configuration = await MasterCvConfigurationLoader.LoadAsync(
             arguments.Config,
             cancellationToken);
@@ -178,7 +204,8 @@ public sealed class CvGenerationCommand
             new MasterCvGenerationPipelineRequest
             {
                 Config = configuration,
-                ExperienceDatabasePath = arguments.ExperienceDatabase,
+                ExperienceDatabasePath = database.DllPath,
+                WorkspaceConfigPath = database.WorkspaceConfigFilePath,
                 OutputDirectory = arguments.OutputDirectory,
                 OutputFormat = arguments.OutputFormat,
                 Debug = arguments.Debug,
@@ -188,6 +215,23 @@ public sealed class CvGenerationCommand
             },
             cancellationToken);
     }
+
+    private static async Task<ResolvedExperienceDatabase> ResolveExperienceDatabaseAsync(
+        ExperienceDatabaseArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var request = new ExperienceDatabaseRequest
+        {
+            ExplicitDllPath = NullIfEmpty(arguments.ExperienceDatabase),
+            ExplicitProjectPath = NullIfEmpty(arguments.ExperienceProject),
+            NoBuild = arguments.NoBuild,
+            ConfigFilePath = WorkspaceConfig.Find(Environment.CurrentDirectory),
+        };
+        return await ExperienceDatabaseSource.ResolveAsync(request, cancellationToken);
+    }
+
+    private static string? NullIfEmpty(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
 
     internal static string ExampleConfigPath => Path.Combine(
         AppContext.BaseDirectory,
@@ -207,8 +251,21 @@ public class ExperienceDatabaseArguments : IArgumentModel
 {
     [Option(
         "experience-database",
-        Description = "Path to a DLL containing exactly one public experience database provider.")]
-    public string ExperienceDatabase { get; set; } = null!;
+        Description = "Path to a DLL containing exactly one public experience database provider. "
+            + "Skips the experience project build; when empty, the project comes from "
+            + "--experience-project or findjobhelper.config.json.")]
+    public string ExperienceDatabase { get; set; } = string.Empty;
+
+    [Option(
+        "experience-project",
+        Description = "Path to the experience project csproj; overrides 'experienceProject' "
+            + "in findjobhelper.config.json.")]
+    public string ExperienceProject { get; set; } = string.Empty;
+
+    [Option(
+        "no-build",
+        Description = "Skip building the experience project; an existing database DLL is required.")]
+    public bool NoBuild { get; set; }
 }
 
 public sealed class CvGenerationArguments : ExperienceDatabaseArguments

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
+using FindJobHelper.ExperienceProject;
 using ProviderFixtures.SyntheticProvider;
 
 namespace MainCli.Tests;
@@ -26,7 +27,10 @@ public sealed class CvGenerationCliEndToEndTests
             "--debug");
 
         Assert.Equal(2, result.ExitCode);
-        Assert.Contains("experience-database is required", result.StandardError);
+        Assert.Contains("No experience database was specified", result.StandardError);
+        Assert.Contains("--experience-database", result.StandardError);
+        Assert.Contains("--experience-project", result.StandardError);
+        Assert.Contains(WorkspaceConfig.FileName, result.StandardError);
     }
 
     [Fact]

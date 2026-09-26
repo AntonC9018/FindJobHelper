@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using FindJobHelper.ExperienceProject;
 
 namespace FindJobHelper.WebUi;
 
@@ -9,9 +9,9 @@ public sealed record DatabaseStatus(
     long SizeBytes);
 
 /// <summary>
-/// Publishes ExperienceDatabase.dll for CV generation, mirroring what
-/// `run.ps1` does, so the UI can rebuild the database after experience or tag
-/// changes.
+/// Builds ExperienceDatabase.dll for CV generation through the shared
+/// experience project builder (ADR 0001), so the UI can rebuild the database
+/// after experience or tag changes.
 /// </summary>
 public sealed class DatabaseManager : IDisposable
 {
@@ -47,21 +47,13 @@ public sealed class DatabaseManager : IDisposable
         await _publishGate.WaitAsync(cancellationToken);
         try
         {
-            var projectDir = _options.ExperienceDatabaseProjectDirOrDefault;
-            var projectFile = Path.Combine(projectDir, "ExperienceDatabase.csproj");
-            if (!File.Exists(projectFile))
-            {
-                throw new InvalidOperationException(
-                    $"ExperienceDatabase project was not found at '{projectFile}'.");
-            }
-
+            var projectFile = ResolveProjectFile();
             var outputDir = _options.DatabaseBuildOutputDirOrDefault;
-            Directory.CreateDirectory(outputDir);
-            var output = await RunDotnetPublishAsync(projectFile, outputDir, cancellationToken);
+            await ExperienceProjectBuilder.BuildAsync(projectFile, outputDir, cancellationToken);
             _logger.LogInformation(
                 "Experience database rebuilt into '{OutputDir}'.",
                 outputDir);
-            return output;
+            return outputDir;
         }
         finally
         {
@@ -69,118 +61,21 @@ public sealed class DatabaseManager : IDisposable
         }
     }
 
-    private async Task<string> RunDotnetPublishAsync(
-        string projectFile,
-        string outputDir,
-        CancellationToken cancellationToken)
+    private string ResolveProjectFile()
     {
-        var startInfo = new ProcessStartInfo
+        if (!string.IsNullOrWhiteSpace(_options.ExperienceProjectPath))
         {
-            FileName = "dotnet",
-            ArgumentList =
-            {
-                "publish",
-                projectFile,
-                "-c",
-                "Release",
-                "-o",
-                outputDir,
-            },
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Failed to start 'dotnet publish'.");
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        try
-        {
-            await process.WaitForExitAsync(cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            KillPublish(process);
-            try
-            {
-                await process.WaitForExitAsync(CancellationToken.None);
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                await stdoutTask;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                await stderrTask;
-            }
-            catch
-            {
-            }
-
-            throw;
+            return _options.ExperienceProjectPath;
         }
 
-        var stdout = await stdoutTask;
-        var stderr = await stderrTask;
-        if (process.ExitCode != 0)
+        var projectDir = _options.ExperienceDatabaseProjectDirOrDefault;
+        var projectFile = Path.Combine(projectDir, "ExperienceDatabase.csproj");
+        if (!File.Exists(projectFile))
         {
             throw new InvalidOperationException(
-                $"dotnet publish failed with exit code {process.ExitCode}: {stderr}");
+                $"ExperienceDatabase project was not found at '{projectFile}'.");
         }
 
-        return stdout;
-    }
-
-    private static void KillPublish(Process process)
-    {
-        try
-        {
-            if (process.HasExited)
-            {
-                return;
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            return;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return;
-        }
-        catch (NotSupportedException)
-        {
-            return;
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            return;
-        }
-
-        try
-        {
-            process.Kill(entireProcessTree: true);
-        }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (NotSupportedException)
-        {
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-        }
+        return projectFile;
     }
 }

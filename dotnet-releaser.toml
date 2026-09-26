@@ -12,6 +12,7 @@ project = [
   "src/FindJobHelper.Configuration.Json/FindJobHelper.Configuration.Json.csproj",
   "src/FindJobHelper.Core/FindJobHelper.Core.csproj",
   "src/FindJobHelper.UserSecrets/FindJobHelper.UserSecrets.csproj",
+  "src/FindJobHelper.ExperienceProject/FindJobHelper.ExperienceProject.csproj",
   "src/FindJobHelper.Generation/FindJobHelper.Generation.csproj",
   "templates/FindJobWorkspace/Anton.FindJobHelper.Templates.csproj",
   "src/FindJobHelper.Cli/FindJobHelper.Cli.csproj",

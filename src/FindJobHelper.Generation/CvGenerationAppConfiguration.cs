@@ -11,6 +11,7 @@ public static class CvGenerationAppConfiguration
 {
     public static ValueTask<ServiceProvider> CreateApp(
         string? userSecretsId,
+        string? workspaceConfigPath,
         LatexExecutablePaths latexExecutables,
         CancellationToken cancellationToken)
     {
@@ -20,6 +21,17 @@ public static class CvGenerationAppConfiguration
         {
             configBuilder.AddUserSecrets(userSecretsId, reloadOnChange: false);
         }
+
+        // Personal info resolves as environment variable, then the workspace
+        // config file, then user secrets (ADR 0003). Later sources win in the
+        // configuration chain, so the file lands between the secrets and the
+        // environment variables. The JSON configuration provider tolerates
+        // the file's comments and trailing commas (ADR 0002).
+        if (workspaceConfigPath is not null && File.Exists(workspaceConfigPath))
+        {
+            configBuilder.AddJsonFile(workspaceConfigPath, optional: false, reloadOnChange: false);
+        }
+
         configBuilder.AddEnvironmentVariables();
 
         var config = configBuilder.Build();
