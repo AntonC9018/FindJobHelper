@@ -3,11 +3,11 @@
   "isRoot": true,
   "tools": {
     "anton.findjobhelper.cli": {
-      "version": "0.1.0",
+      "version": "1.0.2-test",
       "commands": [ "find-job-helper" ]
     },
     "anton.findjobhelper.webui": {
-      "version": "0.1.0",
+      "version": "1.0.2-test",
       "commands": [ "find-job-webui" ]
     }
   }

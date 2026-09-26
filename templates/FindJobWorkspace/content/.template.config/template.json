@@ -8,6 +8,16 @@
   "sourceName": "FindJobWorkspace",
   "guids": [ "3d10e187-d43d-44b5-96ae-c78077e83d91" ],
   "preferNameDirectory": true,
+  "sources": [
+    {
+      "source": "./",
+      "modifiers": [
+        {
+          "exclude": [ "**/bin/**", "**/obj/**" ]
+        }
+      ]
+    }
+  ],
   "postActions": [
     {
       "condition": "(OS != \"Windows_NT\")",
