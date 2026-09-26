@@ -5,8 +5,10 @@ namespace FindJobHelper.ExperienceProject;
 
 /// <summary>
 /// Builds an experience project class library with
-/// <c>dotnet build -c Release -o</c> (ADR 0001) and reports the DLL path the
-/// existing experience database loader consumes.
+/// <c>dotnet publish -c Release -o</c> (ADR 0001) and reports the DLL path
+/// the existing experience database loader consumes. Publish (not a plain
+/// build) is required: the isolated load context resolves the database's
+/// dependencies next to the DLL, and only publish emits the full closure.
 /// </summary>
 public static class ExperienceProjectBuilder
 {
@@ -32,7 +34,7 @@ public static class ExperienceProjectBuilder
         var command = Cli.Wrap("dotnet")
             .WithArguments(new[]
             {
-                "build",
+                "publish",
                 fullProjectFile,
                 "-c",
                 "Release",
