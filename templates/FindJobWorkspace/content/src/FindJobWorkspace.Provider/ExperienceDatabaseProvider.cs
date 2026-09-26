@@ -1,6 +1,7 @@
 using FindJobHelper.Core;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
+using FindJobHelper.UserSecrets;
 
 namespace FindJobWorkspace.Provider;
 
@@ -12,7 +13,7 @@ public static class Tags
     public static Tag Microservices => new("microservices");
 }
 
-public sealed class ExperienceDatabaseProvider : IExperienceDatabaseProvider
+public sealed class ExperienceDatabaseProvider : UserSecretsIdProviderBase, IExperienceDatabaseProvider
 {
     public ExperienceDatabaseProviderResult Create()
     {

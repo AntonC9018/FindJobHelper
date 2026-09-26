@@ -6,11 +6,25 @@ namespace FindJobHelper.Configuration.Json;
 
 public static class CvSelectionConfigurationLoader
 {
-    public static async Task<CvSelectionConfiguration> LoadAsync(
+    public static Task<CvSelectionConfiguration> LoadAsync(
         string filePath,
+        CancellationToken cancellationToken) =>
+        CvConfigurationJsonLoader.LoadAsync<JsonCvSelectionConfiguration, CvSelectionConfiguration>(
+            filePath,
+            static json => json.ToDomain(),
+            cancellationToken);
+}
+
+internal static class CvConfigurationJsonLoader
+{
+    public static async Task<TDomain> LoadAsync<TJson, TDomain>(
+        string filePath,
+        Func<TJson, TDomain> map,
         CancellationToken cancellationToken)
+        where TJson : class
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentNullException.ThrowIfNull(map);
         var fullPath = Path.GetFullPath(filePath);
         if (!File.Exists(fullPath))
         {
@@ -20,7 +34,7 @@ public static class CvSelectionConfigurationLoader
         try
         {
             await using var input = File.OpenRead(fullPath);
-            var json = await JsonSerializer.DeserializeAsync<JsonCvSelectionConfiguration>(
+            var json = await JsonSerializer.DeserializeAsync<TJson>(
                 input,
                 JsonOptions,
                 cancellationToken);
@@ -29,7 +43,7 @@ public static class CvSelectionConfigurationLoader
                 throw new CvConfigurationException("The configuration file must contain a JSON object.");
             }
 
-            return json.ToDomain();
+            return map(json);
         }
         catch (JsonException ex)
         {

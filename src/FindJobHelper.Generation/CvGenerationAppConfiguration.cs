@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
-using System.Reflection;
 using FindJobHelper.CVGeneration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,16 +10,28 @@ namespace FindJobHelper.Generation;
 public static class CvGenerationAppConfiguration
 {
     public static ValueTask<ServiceProvider> CreateApp(
-        Assembly experienceDatabaseAssembly,
+        string? userSecretsId,
+        string? workspaceConfigPath,
         LatexExecutablePaths latexExecutables,
         CancellationToken cancellationToken)
     {
         _ = cancellationToken;
         var configBuilder = new ConfigurationBuilder();
-        configBuilder.AddUserSecrets(
-            experienceDatabaseAssembly,
-            optional: true,
-            reloadOnChange: false);
+        if (!string.IsNullOrWhiteSpace(userSecretsId))
+        {
+            configBuilder.AddUserSecrets(userSecretsId, reloadOnChange: false);
+        }
+
+        // Personal info resolves as environment variable, then the workspace
+        // config file, then user secrets (ADR 0003). Later sources win in the
+        // configuration chain, so the file lands between the secrets and the
+        // environment variables. The JSON configuration provider tolerates
+        // the file's comments and trailing commas (ADR 0002).
+        if (workspaceConfigPath is not null && File.Exists(workspaceConfigPath))
+        {
+            configBuilder.AddJsonFile(workspaceConfigPath, optional: false, reloadOnChange: false);
+        }
+
         configBuilder.AddEnvironmentVariables();
 
         var config = configBuilder.Build();

@@ -173,41 +173,48 @@
     \vskip6pt
 }
 
-% Metadata is a two-column table. The left column gets three quarters of the
-% available width; the right column is kept compact and left-aligned for
-% labelled contact details. Keep these dimensions shared by rendering and
-% validation.
-\newlength{\cvmetasectionleftwidth}
-\newlength{\cvmetasectionrightwidth}
-
-\newsavebox{\cvmetasectionleftbox}
-\newcommand{\cvmetasectioncheckleft}[1]{%
-    \sbox{\cvmetasectionleftbox}{\footnotesize #1}%
-    \ifdim\wd\cvmetasectionleftbox>\cvmetasectionleftwidth
-        \PackageError{FindJobHelper}{FJH_METADATA_LEFT_OVERFLOW: Left-side metadata must fit within its column}{Shorten the left-side metadata list until it fits on one line.}%
-    \fi
-}
-
-\newenvironment{cvmetasectiontable}{%
+% Contact metadata is a left-aligned three-column table with automatic column
+% widths. Intrinsic widths keep fully spelled-out GitHub and LinkedIn URLs on
+% one line. Rows are filled left to right; the final row is padded with empty
+% cells.
+\newenvironment{cvcontactmetadatatable}{%
     \par
     \noindent
     \begingroup
     \footnotesize
-    \setlength{\cvmetasectionleftwidth}{0.75\linewidth}%
-    \setlength{\cvmetasectionrightwidth}{%
-        \dimexpr\linewidth-\cvmetasectionleftwidth-2\tabcolsep\relax}%
-    \begin{tabular}{@{}>{\raggedright\arraybackslash}p{\cvmetasectionleftwidth}>{\raggedright\arraybackslash}p{\cvmetasectionrightwidth}@{}}%
+    \begin{tabular}{@{}l@{\hspace{14pt}}l@{\hspace{14pt}}l@{}}%
 }{%
     \end{tabular}%
     \endgroup
     \par
 }
 
-% param 1: right-hand meta value
-% param 2: left-hand meta value
-\newcommand{\metasection}[2]{%
-    \cvmetasectioncheckleft{#2}%
-    #2 & #1\\[1pt]
+% Expertise lists get the full text width below the contact header. Labels are
+% right-aligned in a fixed 25mm column; values wrap in the remaining width.
+% A plain tabular is used instead of tabularx because tabularx scans its body
+% and cannot be wrapped in a custom environment.
+\newlength{\cvexpertiselabelwidth}
+\setlength{\cvexpertiselabelwidth}{25mm}
+\newlength{\cvexpertisevaluewidth}
+
+\newenvironment{cvexpertisetable}{%
+    \par
+    \noindent
+    \begingroup
+    \footnotesize
+    \setlength{\cvexpertisevaluewidth}{%
+        \dimexpr\linewidth-\cvexpertiselabelwidth-7pt\relax}%
+    \begin{tabular}{@{}>{\raggedleft\arraybackslash}p{\cvexpertiselabelwidth}@{\hspace{7pt}}>{\raggedright\arraybackslash}p{\cvexpertisevaluewidth}@{}}%
+}{%
+    \end{tabular}%
+    \endgroup
+    \par
+}
+
+% param 1: expertise label without colon (e.g. Skills)
+% param 2: comma-joined expertise values, allowed to wrap
+\newcommand{\expertiserow}[2]{%
+    \textbf{#1:} & #2\\[2pt]
 }
 
 %----------------------------------------------------------------------------------------
@@ -297,6 +304,34 @@
 
 \vspace{6pt}
 }%
+}
+
+% Breakable event rendering used by master CVs. The opening unit is boxed so
+% the heading cannot be orphaned from its first bullet; subsequent bullets use
+% the ordinary intrinsic bullet boxes and may flow onto later pages.
+\newcommand{\cvflowingeventstart}[4]{%
+  \par
+  \nointerlineskip
+  \begin{tabular*}{1\textwidth}{p{13.6cm} x{3.9cm}}
+    \textbf{#2}%
+    \if\relax\detokenize{#3}\relax
+    \else
+      \ - \textcolor{bgcol}{#3}%
+    \fi
+    &
+    \vspace{2.5pt}\textcolor{sectcol}{#1}
+  \end{tabular*}
+
+  \vspace{-8pt}
+  \textcolor{softcol}{\hrule}
+  \vspace{6pt}
+
+  \maybeindent{#4}%
+}
+
+\newcommand{\cvflowingeventend}{%
+  \par
+  \vspace{6pt}%
 }
 
 % creates a stretched box as
@@ -556,6 +591,29 @@
                 \global\cvexplicitlastunitpage=\value{page}
                 \nointerlineskip\box\flowcurrentbox
             \fi
+        \fi
+    \fi
+}
+
+% #1 and #2 are the current-page and fresh-page prefixes. Unlike explicit
+% units, an oversized opening is intentionally allowed to overflow: master CV
+% generation does not run the sizing engine, and individual bullets remain the
+% atomic layout unit.
+\NewEnviron{cvflowingopening}[2]{%
+    \par
+    \cvsetflowcontentbox{\flowcurrentbox}{#1\BODY}%
+    \cvsetflowcontentbox{\flowfreshbox}{#2\BODY}%
+
+    \ifdim\pagetotal=0pt
+        \nointerlineskip\box\flowfreshbox
+    \else
+        \dimen0=\dimexpr\ht\flowcurrentbox+\dp\flowcurrentbox\relax
+        \dimen2=\dimexpr\pagegoal-\pagetotal\relax
+        \ifdim\dimen0>\dimen2
+            \newpage
+            \nointerlineskip\box\flowfreshbox
+        \else
+            \nointerlineskip\box\flowcurrentbox
         \fi
     \fi
 }

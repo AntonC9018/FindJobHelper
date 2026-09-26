@@ -3,14 +3,17 @@ using FindJobHelper.Configuration;
 using FindJobHelper.Configuration.Json;
 using FindJobHelper.Core.Helper;
 using FindJobHelper.CVGeneration;
+using FindJobHelper.ExperienceProject;
 using FindJobHelper.Generation;
 
 public sealed class CvGenerationCommand
 {
     [Command("example-config", Description = "Print an example JSON CV selection configuration.")]
-    public void PrintExampleConfig()
+    public void PrintExampleConfig(
+        [Option("master", Description = "Print the master CV configuration example.")]
+        bool master = false)
     {
-        Console.Write(File.ReadAllText(ExampleConfigPath));
+        Console.Write(File.ReadAllText(ConfigExamplePath(master)));
     }
 
     [Command("new-config", Description = "Write an example configuration to config.json.")]
@@ -18,7 +21,9 @@ public sealed class CvGenerationCommand
         [Option(
             "output-directory",
             Description = "Destination directory for config.json.")]
-        string outputDirectory = ".")
+        string outputDirectory = ".",
+        [Option("master", Description = "Create the master CV configuration example.")]
+        bool master = false)
     {
         var fullOutputDirectory = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(fullOutputDirectory);
@@ -30,19 +35,31 @@ public sealed class CvGenerationCommand
             return ExitCodes.Error;
         }
 
-        File.Copy(ExampleConfigPath, outputPath);
+        File.Copy(ConfigExamplePath(master), outputPath);
         Console.WriteLine($"Created '{outputPath}'.");
         return ExitCodes.Success;
     }
 
     [Command("list-tags", Description = "List all tags available for CV selection.")]
-    public int ListTags(ExperienceDatabaseArguments arguments)
+    public async Task<int> ListTags(
+        ExperienceDatabaseArguments arguments,
+        CancellationToken cancellationToken)
     {
         LoadedExperienceDatabaseProvider loadedProvider;
         try
         {
-            loadedProvider = ExperienceDatabaseProviderLoader.Load(
-                arguments.ExperienceDatabase);
+            var database = await ResolveExperienceDatabaseAsync(arguments, cancellationToken);
+            loadedProvider = ExperienceDatabaseProviderLoader.Load(database.DllPath);
+        }
+        catch (ExperienceDatabaseSourceException ex)
+        {
+            Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
+        catch (ExperienceProjectBuildException ex)
+        {
+            Console.Error.WriteLine($"Experience project build failed: {ex.Message}");
+            return ExitCodes.Error;
         }
         catch (ExperienceDatabaseProviderLoadException ex)
         {
@@ -55,13 +72,16 @@ public sealed class CvGenerationCommand
             return ExitCodes.ValidationError;
         }
 
-        var tagsDatabase = loadedProvider.Result.TagsDatabase;
-        foreach (var tag in tagsDatabase.TagsGraph.Keys
-                     .Select(static tag => tag.Name)
-                     .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(static name => name, StringComparer.Ordinal))
+        using (loadedProvider)
         {
-            Console.WriteLine(tag);
+            var tagsDatabase = loadedProvider.Result.TagsDatabase;
+            foreach (var tag in tagsDatabase.TagsGraph.Keys
+                         .Select(static tag => tag.Name)
+                         .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                         .ThenBy(static name => name, StringComparer.Ordinal))
+            {
+                Console.WriteLine(tag);
+            }
         }
 
         return ExitCodes.Success;
@@ -70,26 +90,25 @@ public sealed class CvGenerationCommand
     [DefaultCommand]
     public async Task<int> Generate(
         CvGenerationArguments arguments,
+        CancellationToken cancellationToken) =>
+        await GenerateAsync(arguments, master: false, cancellationToken);
+
+    [Command("master-cv", Description = "Generate a master CV containing every configured experience section.")]
+    public async Task<int> MasterCv(
+        CvGenerationArguments arguments,
+        CancellationToken cancellationToken) =>
+        await GenerateAsync(arguments, master: true, cancellationToken);
+
+    private static async Task<int> GenerateAsync(
+        CvGenerationArguments arguments,
+        bool master,
         CancellationToken cancellationToken)
     {
         try
         {
-            var configuration = await CvSelectionConfigurationLoader.LoadAsync(
-                arguments.Config,
-                cancellationToken);
-            var result = await CvGenerationPipeline.RunAsync(
-                new CvGenerationPipelineRequest
-                {
-                    Config = configuration,
-                    ExperienceDatabasePath = arguments.ExperienceDatabase,
-                    OutputDirectory = arguments.OutputDirectory,
-                    OutputFormat = arguments.OutputFormat,
-                    Debug = arguments.Debug,
-                    LatexBinDirectory = arguments.LatexBinDirectory,
-                    Fonts = arguments.FontValues,
-                    ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
-                },
-                cancellationToken);
+            var result = master
+                ? await GenerateMasterAsync(arguments, cancellationToken)
+                : await GenerateStandardAsync(arguments, cancellationToken);
             if (!result.Success)
             {
                 Console.Error.WriteLine(result.Failure!.Message);
@@ -117,6 +136,16 @@ public sealed class CvGenerationCommand
             Console.Error.WriteLine($"Configuration error: {ex.Message}");
             return ExitCodes.ValidationError;
         }
+        catch (ExperienceDatabaseSourceException ex)
+        {
+            Console.Error.WriteLine($"Experience database error: {ex.Message}");
+            return ExitCodes.ValidationError;
+        }
+        catch (ExperienceProjectBuildException ex)
+        {
+            Console.Error.WriteLine($"Experience project build failed: {ex.Message}");
+            return ExitCodes.Error;
+        }
         catch (ExperienceDatabaseProviderLoadException ex)
         {
             Console.Error.WriteLine($"Experience database error: {ex.Message}");
@@ -139,18 +168,104 @@ public sealed class CvGenerationCommand
         }
     }
 
+    private static async Task<CvGenerationPipelineResult> GenerateStandardAsync(
+        CvGenerationArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var database = await ResolveExperienceDatabaseAsync(arguments, cancellationToken);
+        var configuration = await CvSelectionConfigurationLoader.LoadAsync(
+            arguments.Config,
+            cancellationToken);
+        return await CvGenerationPipeline.RunAsync(
+            new CvGenerationPipelineRequest
+            {
+                Config = configuration,
+                ExperienceDatabasePath = database.DllPath,
+                WorkspaceConfigPath = database.WorkspaceConfigFilePath,
+                OutputDirectory = arguments.OutputDirectory,
+                OutputFormat = arguments.OutputFormat,
+                Debug = arguments.Debug,
+                LatexBinDirectory = arguments.LatexBinDirectory,
+                Fonts = arguments.FontValues,
+                ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
+            },
+            cancellationToken);
+    }
+
+    private static async Task<CvGenerationPipelineResult> GenerateMasterAsync(
+        CvGenerationArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var database = await ResolveExperienceDatabaseAsync(arguments, cancellationToken);
+        var configuration = await MasterCvConfigurationLoader.LoadAsync(
+            arguments.Config,
+            cancellationToken);
+        return await CvGenerationPipeline.RunMasterAsync(
+            new MasterCvGenerationPipelineRequest
+            {
+                Config = configuration,
+                ExperienceDatabasePath = database.DllPath,
+                WorkspaceConfigPath = database.WorkspaceConfigFilePath,
+                OutputDirectory = arguments.OutputDirectory,
+                OutputFormat = arguments.OutputFormat,
+                Debug = arguments.Debug,
+                LatexBinDirectory = arguments.LatexBinDirectory,
+                Fonts = arguments.FontValues,
+                ProgressDisplay = CvGenerationProgressDisplay.CreateDefault(),
+            },
+            cancellationToken);
+    }
+
+    private static async Task<ResolvedExperienceDatabase> ResolveExperienceDatabaseAsync(
+        ExperienceDatabaseArguments arguments,
+        CancellationToken cancellationToken)
+    {
+        var request = new ExperienceDatabaseRequest
+        {
+            ExplicitDllPath = NullIfEmpty(arguments.ExperienceDatabase),
+            ExplicitProjectPath = NullIfEmpty(arguments.ExperienceProject),
+            NoBuild = arguments.NoBuild,
+            ConfigFilePath = WorkspaceConfig.Find(Environment.CurrentDirectory),
+        };
+        return await ExperienceDatabaseSource.ResolveAsync(request, cancellationToken);
+    }
+
+    private static string? NullIfEmpty(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value;
+
     internal static string ExampleConfigPath => Path.Combine(
         AppContext.BaseDirectory,
         "data",
         "cv-selection.example.json");
+
+    internal static string MasterExampleConfigPath => Path.Combine(
+        AppContext.BaseDirectory,
+        "data",
+        "master-cv.example.json");
+
+    private static string ConfigExamplePath(bool master) =>
+        master ? MasterExampleConfigPath : ExampleConfigPath;
 }
 
 public class ExperienceDatabaseArguments : IArgumentModel
 {
     [Option(
         "experience-database",
-        Description = "Path to a DLL containing exactly one public experience database provider.")]
-    public string ExperienceDatabase { get; set; } = null!;
+        Description = "Path to a DLL containing exactly one public experience database provider. "
+            + "Skips the experience project build; when empty, the project comes from "
+            + "--experience-project or findjobhelper.config.json.")]
+    public string ExperienceDatabase { get; set; } = string.Empty;
+
+    [Option(
+        "experience-project",
+        Description = "Path to the experience project csproj; overrides 'experienceProject' "
+            + "in findjobhelper.config.json.")]
+    public string ExperienceProject { get; set; } = string.Empty;
+
+    [Option(
+        "no-build",
+        Description = "Skip building the experience project; an existing database DLL is required.")]
+    public bool NoBuild { get; set; }
 }
 
 public sealed class CvGenerationArguments : ExperienceDatabaseArguments

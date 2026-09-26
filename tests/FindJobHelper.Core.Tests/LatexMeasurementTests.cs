@@ -1196,6 +1196,72 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
+    public async Task FlowingItemsLayout_SplitsExperienceBetweenBulletsWithoutRepeatingHeading()
+    {
+        var outputDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"fjh-flowing-items-{Guid.NewGuid():N}");
+        try
+        {
+            var model = CreateEmptyModel();
+            model.DocumentTitle = new("Master Resume");
+            model.SectionOrder = [Section.WorkExperience];
+            model.WorkExperiences =
+            [
+                new Event
+                {
+                    Title = "Long flowing job",
+                    Place = Place.Personal,
+                    DateRange = DateRange.Completed(new(2020), new(2025)),
+                    SubItems = Enumerable.Range(1, 60)
+                        .Select(position => CreateSubEvent(new PlainText
+                        {
+                            Text = $"Flowing bullet {position} remains an indivisible rendered item.",
+                        }))
+                        .ToImmutableArray(),
+                },
+            ];
+
+            var result = await CvTemplate.Generate(new()
+            {
+                TemplatePath = ProductionTemplatePath,
+                OutputDirectory = outputDirectory,
+                Model = model,
+                LayoutMode = CvLatexLayoutMode.FlowingItems,
+                PageCount = CvPageCount.Unrestricted,
+                CancellationToken = CancellationToken.None,
+            }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
+
+            var artifacts = Assert.IsType<GeneratedCvArtifacts>(result);
+            Assert.True((await ReadPdfFooters(outputDirectory)).Count > 1);
+            var extractedTextPath = Path.Combine(outputDirectory, "main.txt");
+            await Cli.Wrap("pdftotext")
+                .WithArguments([artifacts.PdfPath, extractedTextPath])
+                .ExecuteAsync();
+            var extractedText = await File.ReadAllTextAsync(extractedTextPath);
+            Assert.Equal(1, CountOccurrences(extractedText, "Long flowing job"));
+            Assert.Contains("Flowing bullet 1", extractedText, StringComparison.Ordinal);
+            Assert.Contains("Flowing bullet 60", extractedText, StringComparison.Ordinal);
+            Assert.Contains("Master Resume", extractedText, StringComparison.Ordinal);
+
+            var source = await File.ReadAllTextAsync(
+                Path.Combine(outputDirectory, "main.tex"));
+            Assert.Contains(@"\begin{cvflowingopening}", source, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                @"\begin{flowblock}{ WorkExperience }",
+                source,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(outputDirectory))
+            {
+                Directory.Delete(outputDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ExplicitOversizedEventReportsItsSectionAndTitle()
     {
         var outputDirectory = Path.Combine(
@@ -1380,7 +1446,7 @@ public sealed class LatexMeasurementTests
     }
 
     [Fact]
-    public async Task ProductionGeneration_FailsWhenLeftMetadataExceedsItsColumn()
+    public async Task ProductionGeneration_SupportsLongSkillListsWithWrapping()
     {
         var outputDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -1404,11 +1470,14 @@ public sealed class LatexMeasurementTests
                     Model = model,
                     CancellationToken = CancellationToken.None,
                 }, new(NoOpProgressReporter.Instance, NoOpProgressReporter.Instance));
-            var exception = Assert.IsType<MetadataOverflowFailure>(result);
+            var generated = Assert.IsType<GeneratedCvArtifacts>(result);
 
-            Assert.Equal(
-                CvLatexErrors.MetadataLeftOverflowMessage,
-                CvFailurePresenter.Present(result).Message);
+            Assert.True(File.Exists(generated.PdfPath), "Expected the wrapped expertise layout to produce a PDF.");
+            var header = CvLatexFragmentRenderer.Materialize(
+                CvLatexFragmentRenderer.RenderDocumentHeader(model));
+            Assert.Contains(@"\begin{cvexpertisetable}", header, StringComparison.Ordinal);
+            Assert.Contains(@"\expertiserow{Skills}", header, StringComparison.Ordinal);
+            Assert.Contains(@"\begin{cvcontactmetadatatable}", header, StringComparison.Ordinal);
         }
         finally
         {

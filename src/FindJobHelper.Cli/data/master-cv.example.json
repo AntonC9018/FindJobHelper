@@ -1,0 +1,16 @@
+{
+  "skills": [
+    "Backend Development",
+    "Software Architecture"
+  ],
+  "technologies": [
+    ".NET",
+    "PostgreSQL"
+  ],
+  "sectionOrder": [
+    "WorkExperience",
+    "PersonalProjects",
+    "Education",
+    "Languages"
+  ]
+}

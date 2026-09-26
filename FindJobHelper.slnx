@@ -9,7 +9,9 @@
     <Project Path="src/FindJobHelper.Configuration/FindJobHelper.Configuration.csproj" />
     <Project Path="src/FindJobHelper.Configuration.Json/FindJobHelper.Configuration.Json.csproj" />
     <Project Path="src/FindJobHelper.Core/FindJobHelper.Core.csproj" />
+    <Project Path="src/FindJobHelper.ExperienceProject/FindJobHelper.ExperienceProject.csproj" />
     <Project Path="src/FindJobHelper.Generation/FindJobHelper.Generation.csproj" />
+    <Project Path="src/FindJobHelper.UserSecrets/FindJobHelper.UserSecrets.csproj" />
     <Project Path="src/FindJobHelper.WebUi/FindJobHelper.WebUi.csproj" />
     <Project Path="src/TheirStack.Client/TheirStack.Client.csproj" />
     <Project Path="src/TheirStack.ClientGenerator/TheirStack.ClientGenerator.csproj" />
@@ -26,7 +28,9 @@
     <Project Path="tests/FindJobHelper.Cli.Tests/FindJobHelper.Cli.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Configuration.Tests/FindJobHelper.Configuration.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Core.Tests/FindJobHelper.Core.Tests.csproj" />
+    <Project Path="tests/FindJobHelper.ExperienceProject.Tests/FindJobHelper.ExperienceProject.Tests.csproj" />
     <Project Path="tests/FindJobHelper.Generation.Tests/FindJobHelper.Generation.Tests.csproj" />
+    <Project Path="tests/FindJobHelper.WebUi.Tests/FindJobHelper.WebUi.Tests.csproj" />
   </Folder>
   <Folder Name="/tests/ProviderFixtures/">
     <Project Path="tests/ProviderFixtures/ConstructorThrows/ConstructorThrows.csproj" />
@@ -34,6 +38,8 @@
     <Project Path="tests/ProviderFixtures/MultipleProviders/MultipleProviders.csproj" />
     <Project Path="tests/ProviderFixtures/NoConstructor/NoConstructor.csproj" />
     <Project Path="tests/ProviderFixtures/NullResult/NullResult.csproj" />
+    <Project Path="tests/ProviderFixtures/ReloadableProviderV1/ReloadableProviderV1.csproj" />
+    <Project Path="tests/ProviderFixtures/ReloadableProviderV2/ReloadableProviderV2.csproj" />
     <Project Path="tests/ProviderFixtures/SyntheticProvider/SyntheticProvider.csproj" />
   </Folder>
 </Solution>

@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 
 namespace FindJobHelper.Configuration;
 
-public sealed class CvSelectionConfiguration
+public sealed class CvSelectionConfiguration : ICvDocumentConfiguration
 {
     internal CvSelectionConfiguration(
         CvPageCount pageCount,

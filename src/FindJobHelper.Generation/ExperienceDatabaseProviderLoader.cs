@@ -42,42 +42,65 @@ public static class ExperienceDatabaseProviderLoader
                 $"Experience database DLL was not found: '{fullPath}'.");
         }
 
+        ExperienceDatabaseAssemblyLoadContext? loadContext = null;
         Assembly assembly;
         try
         {
-            assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
+            loadContext = new(fullPath);
+            assembly = loadContext.LoadFromAssemblyPath(fullPath);
         }
         catch (BadImageFormatException ex)
         {
+            loadContext?.Unload();
             throw new ExperienceDatabaseProviderLoadException(
                 $"Experience database DLL is not a valid .NET assembly: '{fullPath}'.",
                 ex);
         }
         catch (FileNotFoundException ex)
         {
+            loadContext?.Unload();
             throw new ExperienceDatabaseProviderLoadException(
                 $"A dependency required by experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
                 ex);
         }
         catch (FileLoadException ex)
         {
+            loadContext?.Unload();
             throw new ExperienceDatabaseProviderLoadException(
                 $"Experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
                 ex);
         }
         catch (Exception ex) when (ex is NotSupportedException or SecurityException)
         {
+            loadContext?.Unload();
             throw new ExperienceDatabaseProviderLoadException(
                 $"Experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
                 ex);
         }
         catch (Exception ex)
         {
+            loadContext?.Unload();
             throw new ExperienceDatabaseProviderLoadException(
                 $"Experience database DLL '{fullPath}' could not be loaded: {ex.Message}",
                 ex);
         }
 
+        try
+        {
+            return CreateLoadedProvider(fullPath, assembly, loadContext);
+        }
+        catch
+        {
+            loadContext.Unload();
+            throw;
+        }
+    }
+
+    private static LoadedExperienceDatabaseProvider CreateLoadedProvider(
+        string fullPath,
+        Assembly assembly,
+        AssemblyLoadContext loadContext)
+    {
         Type[] exportedTypes;
         try
         {
@@ -180,7 +203,8 @@ public static class ExperienceDatabaseProviderLoader
             var result = provider.Create()
                 ?? throw new ExperienceDatabaseProviderLoadException(
                     $"Experience database provider '{providerType.FullName}' returned a null result.");
-            return new(result, assembly);
+            var userSecretsId = (provider as IUserSecretsIdProvider)?.UserSecretsId;
+            return new(result, assembly, loadContext, userSecretsId);
         }
         catch (ExperienceDatabaseProviderLoadException)
         {
@@ -201,9 +225,47 @@ public static class ExperienceDatabaseProviderLoader
             : exception;
 }
 
-public sealed record LoadedExperienceDatabaseProvider(
-    ExperienceDatabaseProviderResult Result,
-    Assembly Assembly);
+public sealed class LoadedExperienceDatabaseProvider : IDisposable
+{
+    private AssemblyLoadContext? _loadContext;
+
+    public LoadedExperienceDatabaseProvider(
+        ExperienceDatabaseProviderResult result,
+        Assembly assembly)
+    {
+        Result = result;
+        Assembly = assembly;
+    }
+
+    internal LoadedExperienceDatabaseProvider(
+        ExperienceDatabaseProviderResult result,
+        Assembly assembly,
+        AssemblyLoadContext loadContext,
+        string? userSecretsId)
+        : this(result, assembly)
+    {
+        _loadContext = loadContext;
+        UserSecretsId = userSecretsId;
+    }
+
+    public ExperienceDatabaseProviderResult Result { get; }
+
+    public Assembly Assembly { get; }
+
+    /// <summary>
+    /// The MSBuild <c>UserSecretsId</c> reported by the provider itself via
+    /// <see cref="IUserSecretsIdProvider"/>, or <see langword="null"/> when
+    /// the provider does not implement it. Read per load so a rebuilt
+    /// provider is picked up on the next generation without host caching.
+    /// </summary>
+    public string? UserSecretsId { get; }
+
+    public void Dispose()
+    {
+        var loadContext = Interlocked.Exchange(ref _loadContext, null);
+        loadContext?.Unload();
+    }
+}
 
 public sealed class ExperienceDatabaseProviderLoadException : Exception
 {

@@ -33,7 +33,6 @@
 - Assume the generated CV is the right number of pages and includes 
   the best fitting candidates according to the configuration.
 - Include all the keywords you can, even if there is no proof of them in the experience database.
-- Comment out keywords with least evidence in the JSON, if they take up too much space.
 - When generating a cover letter, don't go over 120 characters per line.
 - Pull down information on each of the companies and put it in a file next to the generated CV:
   * domain

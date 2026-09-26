@@ -99,6 +99,12 @@
           "Anton.FindJobHelper.Core": "[1.0.0, )",
           "CodegenCS.Core": "[3.5.0, )"
         }
+      },
+      "findjobhelper.experienceproject": {
+        "type": "Project",
+        "dependencies": {
+          "CliWrap": "[3.9.0, )"
+        }
       }
     }
   }

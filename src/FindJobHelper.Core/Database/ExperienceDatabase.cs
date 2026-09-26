@@ -250,12 +250,50 @@ public static class ExperienceListSorter
     {
         var r = lists.Select(list =>
         {
+            var itemsInDeclarationOrder = SelectCompatibleItems(list);
             var items = list
-                .OrderItems(list.Items)
+                .OrderItems(itemsInDeclarationOrder)
                 .Select(it => (it, 0.0f));
             return new OutputEvent(list, TotalScore: 0, items);
         });
         return ToOutput(r);
+    }
+
+    private static IReadOnlyCollection<ExperienceListItem> SelectCompatibleItems(
+        ExperienceList list)
+    {
+        list.ValidateItemConfiguration();
+        var selected = new HashSet<ExperienceListItem>(
+            System.Collections.Generic.ReferenceEqualityComparer.Instance);
+        foreach (var item in list.Items)
+        {
+            if (ExperienceItemExclusionResolver.CanAdd(list, [item], selected))
+            {
+                selected.Add(item);
+            }
+        }
+
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var item in list.Items)
+            {
+                if (!selected.Contains(item))
+                {
+                    continue;
+                }
+                if (item.DependsOn.All(selected.Contains))
+                {
+                    continue;
+                }
+
+                selected.Remove(item);
+                changed = true;
+            }
+        }
+
+        return list.Items.Where(selected.Contains).ToArray();
     }
 
     internal static List<ExperienceListItem> OrderItems(
@@ -479,6 +517,36 @@ public static class ExperienceListSorter
         return builder.DrainToImmutable();
     }
 
+}
+
+internal static class ExperienceItemExclusionResolver
+{
+    public static bool CanAdd(
+        ExperienceList list,
+        IEnumerable<ExperienceListItem> candidates,
+        IReadOnlySet<ExperienceListItem> selected)
+    {
+        var candidateSet = candidates.ToHashSet(
+            System.Collections.Generic.ReferenceEqualityComparer.Instance);
+        foreach (var exclusionSet in list.ItemExclusionSets)
+        {
+            var candidateCount = exclusionSet.Items.Count(candidateSet.Contains);
+            if (candidateCount > 1)
+            {
+                return false;
+            }
+            if (candidateCount == 0)
+            {
+                continue;
+            }
+            if (exclusionSet.Items.Any(selected.Contains))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 public enum ExperienceType

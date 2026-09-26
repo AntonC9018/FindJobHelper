@@ -1,11 +1,12 @@
+using System.Runtime.Loader;
 using FindJobHelper.Core;
 using FindJobHelper.Generation;
-using ProviderFixtures.SyntheticProvider;
 using ProviderFixtures.ConstructorThrows;
 using ProviderFixtures.CreateThrows;
 using ProviderFixtures.MultipleProviders;
 using ProviderFixtures.NoConstructor;
 using ProviderFixtures.NullResult;
+using ProviderFixtures.SyntheticProvider;
 
 namespace FindJobHelper.Generation.Tests;
 
@@ -14,11 +15,13 @@ public sealed class ExperienceDatabaseProviderLoaderTests
     [Fact]
     public void Load_AcceptsAbsoluteSyntheticProviderDllPath()
     {
-        var result = ExperienceDatabaseProviderLoader.Load(SyntheticProviderDllPath);
+        using var result = ExperienceDatabaseProviderLoader.Load(SyntheticProviderDllPath);
 
         Assert.NotEmpty(result.Result.TagsDatabase.TagsGraph);
         Assert.NotEmpty(result.Result.ExperienceDatabase.Experiences);
-        Assert.Equal(typeof(ExperienceDatabaseProvider).Assembly, result.Assembly);
+        Assert.NotSame(typeof(ExperienceDatabaseProvider).Assembly, result.Assembly);
+        Assert.Equal(SyntheticProviderDllPath, result.Assembly.Location);
+        Assert.Equal("11111111-1111-1111-1111-111111111111", result.UserSecretsId);
     }
 
     [Fact]
@@ -26,9 +29,34 @@ public sealed class ExperienceDatabaseProviderLoaderTests
     {
         var relativePath = Path.GetRelativePath(Environment.CurrentDirectory, SyntheticProviderDllPath);
 
-        var result = ExperienceDatabaseProviderLoader.Load(relativePath);
+        using var result = ExperienceDatabaseProviderLoader.Load(relativePath);
 
         Assert.NotEmpty(result.Result.ExperienceDatabase.Experiences);
+    }
+
+    [Fact]
+    public void Load_AllowsSameAssemblyIdentityFromDifferentPaths()
+    {
+        using var first = ExperienceDatabaseProviderLoader.Load(
+            ReloadableProviderDllPath("first"));
+        using var second = ExperienceDatabaseProviderLoader.Load(
+            ReloadableProviderDllPath("second"));
+
+        var firstTag = Assert.Single(first.Result.TagsDatabase.TagsGraph.Keys);
+        var secondTag = Assert.Single(second.Result.TagsDatabase.TagsGraph.Keys);
+        Assert.Equal("first", firstTag.Name);
+        Assert.Equal("second", secondTag.Name);
+        Assert.Equal(first.Assembly.GetName().FullName, second.Assembly.GetName().FullName);
+        Assert.NotSame(first.Assembly, second.Assembly);
+        var firstContext = AssemblyLoadContext.GetLoadContext(first.Assembly);
+        var secondContext = AssemblyLoadContext.GetLoadContext(second.Assembly);
+        Assert.NotNull(firstContext);
+        Assert.NotNull(secondContext);
+        Assert.True(firstContext.IsCollectible);
+        Assert.True(secondContext.IsCollectible);
+        Assert.NotSame(firstContext, secondContext);
+        Assert.Null(first.UserSecretsId);
+        Assert.Null(second.UserSecretsId);
     }
 
     [Fact]
@@ -132,4 +160,11 @@ public sealed class ExperienceDatabaseProviderLoaderTests
 
     private static string SyntheticProviderDllPath =>
         typeof(ExperienceDatabaseProvider).Assembly.Location;
+
+    private static string ReloadableProviderDllPath(string variant) =>
+        Path.Combine(
+            AppContext.BaseDirectory,
+            "ProviderFixtures",
+            variant,
+            "ReloadableProvider.dll");
 }

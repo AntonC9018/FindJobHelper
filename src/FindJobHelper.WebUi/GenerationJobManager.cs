@@ -207,6 +207,9 @@ public sealed class GenerationJobManager : IDisposable
             {
                 Config = configuration,
                 ExperienceDatabasePath = shadowDatabasePath,
+                WorkspaceConfigPath = string.IsNullOrWhiteSpace(_options.WorkspaceConfigFilePath)
+                    ? null
+                    : _options.WorkspaceConfigFilePath,
                 OutputDirectory = outputDirectory ?? job.FolderPath,
                 OutputFormat = CvOutputFormat.Tex,
                 Debug = job.Debug,

@@ -1460,26 +1460,16 @@ internal static class ExperienceSelectionEngine
             }
 
 
-            var closure = new HashSet<ExperienceListItem>(
-                _temp.Select(static pending => pending.Item),
-                ItemReferenceComparer.Instance);
-            foreach (var exclusionSet in candidate.List.ItemExclusionSets)
+            var closure = _temp.Select(static pending => pending.Item).ToArray();
+            if (!ExperienceItemExclusionResolver.CanAdd(
+                    candidate.List,
+                    closure,
+                    Added))
             {
-                var closureMembers = exclusionSet.Items.Count(closure.Contains);
-                if (closureMembers > 1)
-                {
-                    throw new InvalidOperationException(
-                        $"Selection closure for experience '{candidate.List.Title.Value}' contains mutually exclusive items.");
-                }
-
-                if (ConflictsWithAddedItem(exclusionSet, closureMembers))
-                {
-                    return HandleExclusionConflict();
-                }
+                return false;
             }
 
-            var pendingItems = _temp.Select(static pending => pending.Item).ToArray();
-            var admission = new SelectionAdmission(candidate.Group, candidate.List, pendingItems);
+            var admission = new SelectionAdmission(candidate.Group, candidate.List, closure);
             var decision = _admissionPolicy.Evaluate(admission);
             if (!decision.IsAccepted)
             {
@@ -1529,17 +1519,6 @@ internal static class ExperienceSelectionEngine
                 return true;
             }
 
-            bool HandleExclusionConflict()
-            {
-                if (reason != SelectionItemReason.RequiredAlways)
-                {
-                    return false;
-                }
-
-                throw new InvalidOperationException(
-                    $"Experience '{candidate.List.Title.Value}' has mutually exclusive Required().Always() items that both require selection.");
-            }
-
             bool HandleRejectedAdmission(SelectionAdmissionDecision decision)
             {
                 if (reason != SelectionItemReason.RequiredAlways)
@@ -1568,17 +1547,6 @@ internal static class ExperienceSelectionEngine
                 return remainingBudget <= 0;
             }
 
-            bool ConflictsWithAddedItem(
-                ExperienceItemExclusionSet exclusionSet,
-                int closureMembers)
-            {
-                if (closureMembers != 1)
-                {
-                    return false;
-                }
-
-                return exclusionSet.Items.Any(item => Added.Contains(item));
-            }
         }
 
         public SearchResult Output()

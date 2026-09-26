@@ -1,2 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <UserSecretsId>11111111-1111-1111-1111-111111111111</UserSecretsId>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\FindJobHelper.UserSecrets\FindJobHelper.UserSecrets.csproj" />
+    </ItemGroup>
 </Project>

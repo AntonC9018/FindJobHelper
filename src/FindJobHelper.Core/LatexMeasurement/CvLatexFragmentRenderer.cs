@@ -65,6 +65,24 @@ internal static class CvLatexFragmentRenderer
                 progress));
     }
 
+    public static FormattableString RenderFlowingSection(
+        Section section,
+        CvDataModel model,
+        LatexRenderProgressBuilder? progress = null)
+    {
+        return model.DispatchSection(
+            section,
+            renderLanguages: languages =>
+            {
+                var inner = RenderLanguagesSectionInner(languages);
+                return RenderProductionSection(section, inner);
+            },
+            renderEvents: events => RenderFlowingEventsSection(
+                section,
+                events,
+                progress));
+    }
+
     private static FormattableString RenderProductionSection(
         string sectionLabel,
         FormattableString innerLatex)
@@ -171,6 +189,39 @@ internal static class CvLatexFragmentRenderer
         return $"{Join(units, Environment.NewLine + Environment.NewLine)}";
     }
 
+    private static FormattableString RenderFlowingEventsSection(
+        Section section,
+        ImmutableArray<Event> events,
+        LatexRenderProgressBuilder? progress)
+    {
+        if (events.IsEmpty)
+        {
+            return Empty;
+        }
+
+        var renderedEvents = new List<FormattableString>(events.Length);
+        for (var index = 0; index < events.Length; index++)
+        {
+            var currentPrefix = index == 0
+                ? $@"\cvflowblockfitskip{RenderSectionChrome(section)}"
+                : Empty;
+            var freshPrefix = index == 0
+                ? $@"\cvflowblocknewpageskip\cvflowblockfitskip{RenderSectionChrome(section)}"
+                : Literal(@"\cvflowblocknewpageskip");
+            renderedEvents.Add(RenderFlowingEvent(
+                events[index],
+                section.ToDisplayString(),
+                currentPrefix,
+                freshPrefix,
+                progress));
+        }
+
+        return $$"""
+            {{Join(renderedEvents, Environment.NewLine + Environment.NewLine)}}
+            \cvflowblocktrailingglue
+            """;
+    }
+
     private static FormattableString RenderExplicitUnit(
         Section section,
         string? eventDiagnostic,
@@ -194,7 +245,56 @@ internal static class CvLatexFragmentRenderer
         string? sectionName = null,
         LatexRenderProgressBuilder? progress = null)
     {
-        var itemFragments = new List<FormattableString>(@event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
+        var itemFragments = RenderEventItems(@event, sectionName, progress);
+
+        FormattableString place = @event.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
+        return RenderEventCore(
+            $"{@event.DateRange}",
+            $"{LatexConverter.ToLatexString(@event.Title)}",
+            place,
+            $"{Join(itemFragments, Environment.NewLine)}",
+            RenderRichText(@event.Text));
+    }
+
+    private static FormattableString RenderFlowingEvent(
+        Event @event,
+        string sectionName,
+        FormattableString currentPrefix,
+        FormattableString freshPrefix,
+        LatexRenderProgressBuilder? progress)
+    {
+        var items = RenderEventItems(@event, sectionName, progress);
+        var firstItem = items.Count == 0 ? Empty : items[0];
+        var remainingItems = items.Skip(1);
+        FormattableString place = @event.Place.IsPersonal
+            ? Empty
+            : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
+        var start = $$"""
+            \begin{cvflowingopening}
+            { {{currentPrefix}} }
+            { {{freshPrefix}} }
+            \cvflowingeventstart
+            { {{@event.DateRange}} }
+            { {{LatexConverter.ToLatexString(@event.Title)}} }
+            { {{place}} }
+            { {{RenderRichText(@event.Text)}} }
+            {{firstItem}}
+            \end{cvflowingopening}
+            """;
+        return $$"""
+            {{start}}
+            {{Join(remainingItems, Environment.NewLine)}}
+            \cvflowingeventend
+            """;
+    }
+
+    private static List<FormattableString> RenderEventItems(
+        Event @event,
+        string? sectionName,
+        LatexRenderProgressBuilder? progress)
+    {
+        var itemFragments = new List<FormattableString>(
+            @event.SubItems.Length + (@event.Urls.IsEmpty ? 0 : 1));
         for (var index = 0; index < @event.SubItems.Length; index++)
         {
             var renderedItem = RenderEventItem(
@@ -220,13 +320,7 @@ internal static class CvLatexFragmentRenderer
             itemFragments.Add(RenderEventItem($@"\textbf{{Links:}} {urls}"));
         }
 
-        FormattableString place = @event.Place.IsPersonal ? Empty : $"{LatexConverter.ToLatexString(@event.Place.Name)}";
-        return RenderEventCore(
-            $"{@event.DateRange}",
-            $"{LatexConverter.ToLatexString(@event.Title)}",
-            place,
-            $"{Join(itemFragments, Environment.NewLine)}",
-            RenderRichText(@event.Text));
+        return itemFragments;
     }
 
     public static FormattableString RenderExperienceChrome(ExperienceList list)
@@ -279,7 +373,7 @@ internal static class CvLatexFragmentRenderer
         return $$$"""
             \vspace{-8pt}
             \begin{center}
-            \HUGE \textsc{ {{{LatexConverter.ToLatexString(model.Name.Last)}}} {{{LatexConverter.ToLatexString(model.Name.First)}}} } \textsc{Resume}\\[2pt]
+            \HUGE \textsc{ {{{LatexConverter.ToLatexString(model.Name.Last)}}} {{{LatexConverter.ToLatexString(model.Name.First)}}} } \textsc{ {{{LatexConverter.ToLatexString(model.DocumentTitle)}}} }\\[2pt]
             \small {{{LatexConverter.ToLatexString(model.Profession.Value)}}}
             \end{center}
             \vspace{6pt}
@@ -303,64 +397,224 @@ internal static class CvLatexFragmentRenderer
 
     private static FormattableString RenderMetadata(CvDataModel model)
     {
-        var count = Math.Max(model.CategorizedInfos.Length, model.CategorizedInfoLists.Length);
-        var rows = new List<FormattableString>(count);
-        for (var i = 0; i < count; i++)
-        {
-            var info = i < model.CategorizedInfos.Length ? model.CategorizedInfos[i] : default;
-            var list = i < model.CategorizedInfoLists.Length ? model.CategorizedInfoLists[i] : default;
-            var infoText = RenderMetadataInfo(info);
-            var listText = RenderMetadataList(list);
-            FormattableString row =
-                $@"\metasection{{{infoText}}}{{{listText}}}";
-            rows.Add(row);
-        }
-
-        FormattableString table = rows.Count == 0
-            ? Empty
-            : $$"""
-                \begin{cvmetasectiontable}
-                {{Join(rows, Environment.NewLine)}}
-                \end{cvmetasectiontable}
-                """;
-
+        var contactCells = CollectContactCells(model);
+        var expertiseRows = CollectExpertiseRows(model);
+        var contactTable = RenderContactTable(contactCells);
+        var expertiseTable = RenderExpertiseTable(expertiseRows);
         return $$"""
-            {{table}}
+            {{contactTable}}
             \vspace{-2pt}
             \textcolor{softcol}{\hrule}
             \vspace{6pt}
+            {{expertiseTable}}
             \normalsize
             % Match the final event padding and trailing flow-block line that
             % precede every later section.
             \vspace{6pt}
             \vspace{\cvsectionspacing}
             """;
+    }
 
-        static FormattableString RenderMetadataInfo(CategorizedInfo info)
+    private static List<FormattableString> CollectContactCells(CvDataModel model)
+    {
+        var cells = new List<FormattableString>();
+        foreach (var info in model.CategorizedInfos)
         {
-            if (info == default)
+            var isEmpty = info == default;
+            if (isEmpty)
             {
-                return Empty;
+                continue;
             }
 
-            var category = LatexConverter.ToLatexString(info.Category.DisplayName);
-            var value = FormatCategoryValue(info.Category, info.Value);
-            return $@"\textbf{{{category}:}} {value}";
+            var cell = RenderMetadataInfo(info);
+            cells.Add(cell);
         }
 
-        static FormattableString RenderMetadataList(CategorizedInfoList list)
+        foreach (var list in model.CategorizedInfoLists)
         {
-            if (list == default)
+            var isEmpty = list == default;
+            if (isEmpty)
             {
-                return Empty;
+                continue;
             }
 
-            var category = LatexConverter.ToLatexString(list.Category.DisplayName);
-            var renderedValues = list.Values.Select(value =>
-                FormatCategoryValue(list.Category, value));
-            var values = Join(renderedValues, ", ");
-            return $@"\textbf{{{category}:}} {values}";
+            var isExpertise = IsExpertiseCategory(list.Category);
+            if (isExpertise)
+            {
+                continue;
+            }
+
+            var hasValues = !list.Values.IsEmpty;
+            if (!hasValues)
+            {
+                continue;
+            }
+
+            var cell = RenderMetadataList(list);
+            cells.Add(cell);
         }
+
+        return cells;
+    }
+
+    private static List<FormattableString> CollectExpertiseRows(CvDataModel model)
+    {
+        var rows = new List<FormattableString>();
+        foreach (var list in model.CategorizedInfoLists)
+        {
+            var isEmpty = list == default;
+            if (isEmpty)
+            {
+                continue;
+            }
+
+            var isExpertise = IsExpertiseCategory(list.Category);
+            if (!isExpertise)
+            {
+                continue;
+            }
+
+            var hasValues = !list.Values.IsEmpty;
+            if (!hasValues)
+            {
+                continue;
+            }
+
+            var row = RenderExpertiseRow(list);
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
+    private static bool IsExpertiseCategory(Category category)
+    {
+        var isSkills = category.Equals(Category.Skills);
+        if (isSkills)
+        {
+            return true;
+        }
+
+        var isTechnologies = category.Equals(Category.Technologies);
+        if (isTechnologies)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static FormattableString RenderContactTable(List<FormattableString> cells)
+    {
+        var hasCells = cells.Count > 0;
+        if (!hasCells)
+        {
+            return Empty;
+        }
+
+        var rows = BuildContactRows(cells);
+        var joinedRows = Join(rows, Environment.NewLine);
+        return $$"""
+            \begin{cvcontactmetadatatable}
+            {{joinedRows}}
+            \end{cvcontactmetadatatable}
+            """;
+    }
+
+    private static List<FormattableString> BuildContactRows(List<FormattableString> cells)
+    {
+        const int columns = 3;
+        var paddedCount = cells.Count + columns;
+        var adjustedCount = paddedCount - 1;
+        var rowCount = adjustedCount / columns;
+        var rows = new List<FormattableString>(rowCount);
+        for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+        {
+            var row = BuildContactRow(cells, rowIndex, columns);
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
+    private static FormattableString BuildContactRow(
+        List<FormattableString> cells,
+        int rowIndex,
+        int columns)
+    {
+        var start = rowIndex * columns;
+        var first = GetCellOrEmpty(cells, start);
+        var secondIndex = start + 1;
+        var second = GetCellOrEmpty(cells, secondIndex);
+        var thirdIndex = start + 2;
+        var third = GetCellOrEmpty(cells, thirdIndex);
+        return $@"{first} & {second} & {third}\\[1pt]";
+    }
+
+    private static FormattableString GetCellOrEmpty(List<FormattableString> cells, int index)
+    {
+        var inRange = index < cells.Count;
+        if (!inRange)
+        {
+            return Empty;
+        }
+
+        var cell = cells[index];
+        return cell;
+    }
+
+    private static FormattableString RenderExpertiseTable(List<FormattableString> rows)
+    {
+        var hasRows = rows.Count > 0;
+        if (!hasRows)
+        {
+            return Empty;
+        }
+
+        var joinedRows = Join(rows, Environment.NewLine);
+        return $$"""
+            \begin{cvexpertisetable}
+            {{joinedRows}}
+            \end{cvexpertisetable}
+            """;
+    }
+
+    private static FormattableString RenderExpertiseRow(CategorizedInfoList list)
+    {
+        var label = LatexConverter.ToLatexString(list.Category.DisplayName);
+        var category = list.Category;
+        var renderedValues = list.Values.Select(value => FormatCategoryValue(category, value));
+        var values = Join(renderedValues, ", ");
+        return $@"\expertiserow{{{label}}}{{{values}}}";
+    }
+
+    private static FormattableString RenderMetadataInfo(CategorizedInfo info)
+    {
+        var isEmpty = info == default;
+        if (isEmpty)
+        {
+            return Empty;
+        }
+
+        var category = LatexConverter.ToLatexString(info.Category.DisplayName);
+        var value = FormatCategoryValue(info.Category, info.Value);
+        return $@"\textbf{{{category}:}} {value}";
+    }
+
+    private static FormattableString RenderMetadataList(CategorizedInfoList list)
+    {
+        var isEmpty = list == default;
+        if (isEmpty)
+        {
+            return Empty;
+        }
+
+        var category = LatexConverter.ToLatexString(list.Category.DisplayName);
+        var listCategory = list.Category;
+        var renderedValues = list.Values.Select(value =>
+            FormatCategoryValue(listCategory, value));
+        var values = Join(renderedValues, ", ");
+        return $@"\textbf{{{category}:}} {values}";
     }
 
     private static FormattableString FormatCategoryValue(Category category, RegularString value)

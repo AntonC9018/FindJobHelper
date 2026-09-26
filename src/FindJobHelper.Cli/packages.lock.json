@@ -272,6 +272,12 @@
           "Microsoft.Extensions.Options.ConfigurationExtensions": "[10.0.10, )",
           "Microsoft.Extensions.Options.DataAnnotations": "[10.0.10, )"
         }
+      },
+      "findjobhelper.experienceproject": {
+        "type": "Project",
+        "dependencies": {
+          "CliWrap": "[3.9.0, )"
+        }
       }
     }
   }
