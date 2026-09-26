@@ -13,7 +13,9 @@ namespace FindJobHelper.WebUi;
 /// copied alongside the main assembly so
 /// <c>ExperienceDatabaseAssemblyLoadContext</c> can resolve them through
 /// <c>AssemblyDependencyResolver</c>; only the engine assemblies shared with
-/// the host are loaded from the WebUi itself.
+/// the host are loaded from the WebUi itself. The completion marker is only
+/// written after a re-hash confirms the source still matches the directory
+/// name, so a rebuild racing the copy never marks mixed content as complete.
 /// Shared by generation (<see cref="GenerationJobManager"/>) and tag-name
 /// completion (<see cref="ConfigEditor"/>).
 /// </summary>
@@ -24,31 +26,47 @@ internal static class ExperienceDatabaseShadow
     public static string Copy(string databasePath)
     {
         var fullPath = Path.GetFullPath(databasePath);
+        var mainFileName = Path.GetFileName(fullPath);
         var sourceDirectory = Path.GetDirectoryName(fullPath)
             ?? throw new IOException($"Experience database path '{databasePath}' has no directory.");
-        var hashPrefix = HashDirectory(sourceDirectory)[..16];
-        var shadowDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "find-job-webui",
-            "experience-database",
-            hashPrefix);
-        var shadowPath = Path.Combine(shadowDirectory, Path.GetFileName(fullPath));
-        if (ShadowIsComplete(shadowDirectory, hashPrefix))
-        {
-            return shadowPath;
-        }
 
         for (var attempt = 1; ; attempt++)
         {
+            var hashPrefix = HashDirectory(sourceDirectory)[..16];
+            var shadowDirectory = Path.Combine(
+                Path.GetTempPath(),
+                "find-job-webui",
+                "experience-database",
+                hashPrefix);
+            var shadowPath = Path.Combine(shadowDirectory, mainFileName);
+            if (ShadowIsComplete(shadowDirectory, hashPrefix))
+            {
+                return shadowPath;
+            }
+
             try
             {
                 CopyDirectoryContents(sourceDirectory, shadowDirectory);
-                WriteCompleteMarker(shadowDirectory, hashPrefix);
-                return shadowPath;
             }
             catch (IOException) when (attempt < 5)
             {
                 Thread.Sleep(200);
+                continue;
+            }
+
+            var hashAfterCopy = HashDirectory(sourceDirectory)[..16];
+            if (hashAfterCopy == hashPrefix)
+            {
+                WriteCompleteMarker(shadowDirectory, hashPrefix);
+                return shadowPath;
+            }
+
+            // The source changed mid-copy, so the directory may hold mixed
+            // content. Leave it unmarked, which keeps it from ever being
+            // reused as complete, and retry against the new content.
+            if (attempt >= 5)
+            {
+                return shadowPath;
             }
         }
     }
@@ -68,18 +86,29 @@ internal static class ExperienceDatabaseShadow
             return false;
         }
 
+        string markerContent;
         try
         {
-            return File.ReadAllText(markerPath) == hashPrefix;
+            markerContent = File.ReadAllText(markerPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+
+        if (markerContent == hashPrefix)
+        {
+            return true;
+        }
+
+        return false;
     }
 
-    private static void WriteCompleteMarker(string shadowDirectory, string hashPrefix) =>
-        File.WriteAllText(Path.Combine(shadowDirectory, CompleteMarkerName), hashPrefix);
+    private static void WriteCompleteMarker(string shadowDirectory, string hashPrefix)
+    {
+        var markerPath = Path.Combine(shadowDirectory, CompleteMarkerName);
+        File.WriteAllText(markerPath, hashPrefix);
+    }
 
     /// <summary>
     /// Hashes every file in the directory; the sorted relative path and the
@@ -89,15 +118,13 @@ internal static class ExperienceDatabaseShadow
     private static string HashDirectory(string directory)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var files = Directory
-            .EnumerateFiles(directory, "*", SearchOption.AllDirectories)
-            .Select(path => (RelativePath: Path.GetRelativePath(directory, path), Path: path))
-            .OrderBy(entry => entry.RelativePath, StringComparer.Ordinal)
-            .ToArray();
-        foreach (var (relativePath, path) in files)
+        var files = ListFilesOrdered(directory);
+        foreach (var (relativePath, fullPath) in files)
         {
-            AppendWithLength(hash, Encoding.UTF8.GetBytes(relativePath));
-            AppendWithLength(hash, File.ReadAllBytes(path));
+            var relativePathBytes = Encoding.UTF8.GetBytes(relativePath);
+            AppendWithLength(hash, relativePathBytes);
+            var contentBytes = File.ReadAllBytes(fullPath);
+            AppendWithLength(hash, contentBytes);
         }
 
         return Convert.ToHexString(hash.GetHashAndReset());
@@ -105,22 +132,30 @@ internal static class ExperienceDatabaseShadow
 
     private static void AppendWithLength(IncrementalHash hash, byte[] data)
     {
-        hash.AppendData(BitConverter.GetBytes(data.Length));
+        var lengthBytes = BitConverter.GetBytes(data.Length);
+        hash.AppendData(lengthBytes);
         hash.AppendData(data);
+    }
+
+    private static List<(string RelativePath, string FullPath)> ListFilesOrdered(string directory)
+    {
+        return Directory
+            .EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+            .Select(fullPath => (RelativePath: Path.GetRelativePath(directory, fullPath), FullPath: fullPath))
+            .OrderBy(entry => entry.RelativePath, StringComparer.Ordinal)
+            .ToList();
     }
 
     private static void CopyDirectoryContents(string sourceDirectory, string shadowDirectory)
     {
-        var files = Directory
-            .EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories)
-            .OrderBy(path => Path.GetRelativePath(sourceDirectory, path), StringComparer.Ordinal);
-        foreach (var sourceFile in files)
+        var files = ListFilesOrdered(sourceDirectory);
+        foreach (var (relativePath, sourceFile) in files)
         {
-            var destinationFile = Path.Combine(
-                shadowDirectory,
-                Path.GetRelativePath(sourceDirectory, sourceFile));
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
-            if (FilesHaveSameContent(sourceFile, destinationFile))
+            var destinationFile = Path.Combine(shadowDirectory, relativePath);
+            var destinationDirectory = Path.GetDirectoryName(destinationFile)!;
+            Directory.CreateDirectory(destinationDirectory);
+            var filesMatch = FilesHaveSameContent(sourceFile, destinationFile);
+            if (filesMatch)
             {
                 continue;
             }
@@ -151,16 +186,22 @@ internal static class ExperienceDatabaseShadow
 
         var sourceBuffer = new byte[bufferSize];
         var destinationBuffer = new byte[bufferSize];
-        int read;
-        while ((read = source.ReadAtLeast(sourceBuffer, bufferSize, throwOnEndOfStream: false)) > 0)
+        while (true)
         {
-            destination.ReadExactly(destinationBuffer.AsSpan(0, read));
-            if (!sourceBuffer.AsSpan(0, read).SequenceEqual(destinationBuffer.AsSpan(0, read)))
+            var bytesRead = source.ReadAtLeast(sourceBuffer, bufferSize, throwOnEndOfStream: false);
+            if (bytesRead == 0)
+            {
+                return true;
+            }
+
+            destination.ReadExactly(destinationBuffer.AsSpan(0, bytesRead));
+            var sourceChunk = sourceBuffer.AsSpan(0, bytesRead);
+            var destinationChunk = destinationBuffer.AsSpan(0, bytesRead);
+            var chunksMatch = sourceChunk.SequenceEqual(destinationChunk);
+            if (!chunksMatch)
             {
                 return false;
             }
         }
-
-        return true;
     }
 }
